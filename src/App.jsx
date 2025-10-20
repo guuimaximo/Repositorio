@@ -19,9 +19,15 @@ function Private({ children }) {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      setUser(data?.user || null)
-      setLoading(false)
+      try {
+        const { data, error } = await supabase.auth.getUser()
+        if (error) console.error('⚠️ Erro ao obter usuário:', error.message)
+        setUser(data?.user || null)
+      } catch (err) {
+        console.error('💥 Erro inesperado em getUser:', err)
+      } finally {
+        setLoading(false)
+      }
     }
     getUser()
   }, [])
@@ -35,6 +41,18 @@ function Private({ children }) {
 // Aplicação principal
 // ===================================================================
 export default function App() {
+  // === BLOCO DE DEPURAÇÃO ===
+  useEffect(() => {
+    window.onerror = (msg, src, line, col, err) => {
+      console.error("💥 Erro global detectado:", msg, err)
+    }
+    window.onunhandledrejection = (e) => {
+      console.error("🚨 Promessa rejeitada:", e.reason)
+    }
+    console.log("🚀 INOVEQUATAI iniciado em modo debug")
+  }, [])
+  // ===========================
+
   return (
     <Router>
       <Routes>
@@ -52,7 +70,7 @@ export default function App() {
           }
         />
 
-        {/* Tratativas (antiga aba principal de controle geral, se existir) */}
+        {/* Tratativas (mantida para compatibilidade) */}
         <Route
           path="/tratativas"
           element={
@@ -74,7 +92,7 @@ export default function App() {
           }
         />
 
-        {/* Central de Resolução (Setor que trata) */}
+        {/* Central de Resolução */}
         <Route
           path="/resolucao"
           element={
@@ -85,7 +103,7 @@ export default function App() {
           }
         />
 
-        {/* Rota padrão (caso não encontre) */}
+        {/* Rota padrão */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
