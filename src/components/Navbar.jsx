@@ -14,8 +14,10 @@ export default function Navbar() {
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="text-xl font-bold text-sky-600">INOVEQUATAI</span>
-          <Link className={active('/')} to="/">Dashboard</Link>
-          <Link className={active('/tratativas')} to="/tratativas">Tratativas</Link>
+          // dentro do container com os <Link> ...
+            <Link className={active('/solicitacao')} to="/solicitacao">Solicitação</Link>
+            <Link className={active('/resolucao')} to="/resolucao">Central de Resolução</Link>
+
         </div>
         <button onClick={logout} className="px-3 py-1.5 rounded-md bg-sky-600 text-white hover:opacity-90">
           Sair
