@@ -10,7 +10,7 @@ import SolicitacaoTratativa from './pages/SolicitacaoTratativa'
 import CentralResolucao from './pages/CentralResolucao'
 
 // ===================================================================
-// Componente para proteger rotas (só acessa se estiver logado)
+// 🔐 Componente para proteger rotas internas (apenas usuários logados)
 // ===================================================================
 function Private({ children }) {
   const [user, setUser] = useState(null)
@@ -20,10 +20,12 @@ function Private({ children }) {
     async function fetchUser() {
       try {
         const { data, error } = await supabase.auth.getUser()
-        if (error) console.error('⚠️ Erro Supabase Auth:', error.message)
+        if (error) {
+          console.error('⚠️ Erro ao obter usuário:', error.message)
+        }
         setUser(data?.user || null)
       } catch (err) {
-        console.error('💥 Erro inesperado:', err)
+        console.error('💥 Erro inesperado em Private:', err)
       } finally {
         setLoading(false)
       }
@@ -31,33 +33,40 @@ function Private({ children }) {
     fetchUser()
   }, [])
 
-  if (loading) return <div className="p-8 text-center text-slate-500">Carregando...</div>
-  if (!user) return <Navigate to="/login" replace />
+  if (loading) {
+    return <div className="p-8 text-center text-slate-500">Carregando...</div>
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
   return children
 }
 
 // ===================================================================
-// App principal
+// 🧠 Aplicação principal INOVEQUATAI
 // ===================================================================
 export default function App() {
-  // 🔍 Depuração de erros globais
   useEffect(() => {
+    // Depuração global (erros do React ou Supabase)
     window.onerror = (msg, src, line, col, err) => {
       console.error("💥 Erro global detectado:", msg, err)
     }
     window.onunhandledrejection = (e) => {
       console.error("🚨 Promessa rejeitada:", e.reason)
     }
-    console.log("🚀 INOVEQUATAI iniciado com Supabase:", supabase)
+
+    console.log("🚀 INOVEQUATAI iniciado com Supabase", supabase)
   }, [])
 
   return (
     <Router>
       <Routes>
-        {/* Login */}
+        {/* 🔐 Login */}
         <Route path="/login" element={<Login />} />
 
-        {/* Dashboard */}
+        {/* 🏠 Dashboard */}
         <Route
           path="/"
           element={
@@ -68,7 +77,7 @@ export default function App() {
           }
         />
 
-        {/* Solicitação de Tratativas */}
+        {/* 🧾 Solicitação de Tratativas (setores abrem solicitações) */}
         <Route
           path="/solicitacao"
           element={
@@ -79,7 +88,7 @@ export default function App() {
           }
         />
 
-        {/* Central de Resolução */}
+        {/* 🛠️ Central de Resolução (setor que trata as solicitações) */}
         <Route
           path="/resolucao"
           element={
@@ -90,7 +99,7 @@ export default function App() {
           }
         />
 
-        {/* Rota padrão */}
+        {/* 🚧 Caso não encontre rota */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
