@@ -1,40 +1,78 @@
-import { NavLink } from 'react-router-dom'
-import { supabase } from '../supabase'
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../supabase";
 
 export default function Navbar() {
-  async function logout() {
-    await supabase.auth.signOut()
-    window.location.href = '/login'
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    navigate("/login");
   }
 
-  const Item = ({ to, children }) => (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `px-1 ${isActive ? 'text-sky-600 font-semibold' : 'text-slate-600 hover:text-sky-600'}`
-      }
-    >
-      {children}
-    </NavLink>
-  )
-
   return (
-    <header className="w-full bg-white border-b">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="text-xl font-bold text-sky-600">INOVEQUATAI</span>
-          <Item to="/">Dashboard</Item>
-          <Item to="/solicitacao">Solicitação</Item>
-          <Item to="/resolucao">Central de Resolução</Item>
-          <Item to="/tratativas">Tratativas</Item>
-        </div>
+    <nav
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "1rem 2rem",
+        backgroundColor: "#007bff",
+        color: "white",
+        fontFamily: "sans-serif",
+      }}
+    >
+      <div>
+        <strong style={{ fontSize: "20px" }}>INOVEQUATAI</strong>
+      </div>
+
+      <div style={{ display: "flex", gap: "1.5rem" }}>
+        <Link
+          to="/"
+          style={{
+            color: "white",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          Dashboard
+        </Link>
+
+        <Link
+          to="/solicitacao"
+          style={{
+            color: "white",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          Solicitação de Tratativas
+        </Link>
+
+        <Link
+          to="/resolucao"
+          style={{
+            color: "white",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          Central de Resolução
+        </Link>
+
         <button
-          onClick={logout}
-          className="px-3 py-1.5 rounded-md bg-sky-600 text-white hover:opacity-90"
+          onClick={handleLogout}
+          style={{
+            backgroundColor: "#ff4d4f",
+            border: "none",
+            padding: "6px 14px",
+            borderRadius: "5px",
+            color: "white",
+            cursor: "pointer",
+          }}
         >
           Sair
         </button>
       </div>
-    </header>
-  )
+    </nav>
+  );
 }
