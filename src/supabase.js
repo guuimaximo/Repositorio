@@ -1,7 +1,20 @@
+// src/supabase.js
 import { createClient } from '@supabase/supabase-js'
 
-// === CONFIGURAÇÃO INOVEQUATAI ===
-const supabaseUrl = "https://wboelthngddvkgvrwkbuu.supabase.co"
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indib2VsdGhuZ2RkdmtncnZ3a2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5ODQxMzcsImV4cCI6MjA3NjU2MDEzN30.A3ylU8Tkx20VOD3EjOr3K7ir0J_jZrCfBNlzAOtODXg"
+// Pegando variáveis de ambiente Vite (Render usa import.meta.env)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+// Verificação — útil para debugar (não expõe chave)
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("❌ Erro: Variáveis do Supabase não foram carregadas corretamente.")
+  console.log("VITE_SUPABASE_URL:", supabaseUrl)
+  console.log("VITE_SUPABASE_ANON_KEY:", supabaseAnonKey ? "✅ Presente" : "❌ Ausente")
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Teste de conexão
+supabase.from('tratativas').select('*').limit(1)
+  .then(() => console.log("✅ Conectado ao Supabase com sucesso"))
+  .catch((err) => console.error("❌ Erro ao conectar ao Supabase:", err.message))
