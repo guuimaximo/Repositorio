@@ -1,78 +1,39 @@
-import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "../supabase";
+import React from 'react'
+import { Link, useLocation } from 'react-router-dom'
 
 export default function Navbar() {
-  const navigate = useNavigate();
+  const location = useLocation()
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    navigate("/login");
-  }
+  const isActive = (path) =>
+    location.pathname === path
+      ? 'text-quataiBlue font-semibold border-b-2 border-quataiBlue'
+      : 'text-gray-600 hover:text-quataiBlue'
 
   return (
-    <nav
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "1rem 2rem",
-        backgroundColor: "#007bff",
-        color: "white",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <div>
-        <strong style={{ fontSize: "20px" }}>INOVEQUATAI</strong>
-      </div>
-
-      <div style={{ display: "flex", gap: "1.5rem" }}>
+    <nav className="bg-white shadow-md fixed top-0 left-0 w-full z-50">
+      <div className="max-w-7xl mx-auto flex items-center justify-between p-4">
         <Link
           to="/"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontWeight: 500,
-          }}
+          className="text-xl font-bold text-quataiBlue tracking-wide hover:opacity-80"
         >
-          Dashboard
+          🚌 InoveQuatai
         </Link>
 
-        <Link
-          to="/solicitacao"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontWeight: 500,
-          }}
-        >
-          Solicitação de Tratativas
-        </Link>
-
-        <Link
-          to="/resolucao"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontWeight: 500,
-          }}
-        >
-          Central de Resolução
-        </Link>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            backgroundColor: "#ff4d4f",
-            border: "none",
-            padding: "6px 14px",
-            borderRadius: "5px",
-            color: "white",
-            cursor: "pointer",
-          }}
-        >
-          Sair
-        </button>
+        <div className="flex space-x-6 text-sm">
+          <Link to="/" className={isActive('/')}>
+            Início
+          </Link>
+          <Link to="/solicitacao" className={isActive('/solicitacao')}>
+            Solicitar Tratativa
+          </Link>
+          <Link to="/central" className={isActive('/central')}>
+            Central de Tratativas
+          </Link>
+          <Link to="/tratativas" className={isActive('/tratativas')}>
+            Todas as Tratativas
+          </Link>
+        </div>
       </div>
     </nav>
-  );
+  )
 }
