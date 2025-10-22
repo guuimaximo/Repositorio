@@ -7,7 +7,7 @@ export default function Tratar() {
   const navigate = useNavigate()
   const [tratativa, setTratativa] = useState(null)
   const [tipoAcao, setTipoAcao] = useState('Orientação')
-  const [descricaoAcao, setDescricaoAcao] = useState('')
+  const [descricao, setDescricao] = useState('')
   const [ranking, setRanking] = useState('')
   const [fotoEvidencia, setFotoEvidencia] = useState(null)
   const [fotoAssinatura, setFotoAssinatura] = useState(null)
@@ -17,19 +17,19 @@ export default function Tratar() {
   }, [])
 
   async function buscarTratativa() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tratativas')
       .select('*')
       .eq('id', id)
       .single()
-    setTratativa(data)
+    if (error) console.error(error)
+    else setTratativa(data)
   }
 
   async function salvarTratamento() {
     let evidenciaUrl = null
     let assinaturaUrl = null
 
-    // Upload das imagens
     if (fotoEvidencia) {
       const { data } = await supabase.storage
         .from('tratativas')
@@ -44,15 +44,14 @@ export default function Tratar() {
       assinaturaUrl = supabase.storage.from('tratativas').getPublicUrl(data.path).data.publicUrl
     }
 
-    // Inserção no detalhe
     const { error } = await supabase.from('tratativas_detalhes').insert([
       {
         id_tratativa: id,
         tipo_acao: tipoAcao,
-        descricao_acao: descricaoAcao,
+        descricao_acao: descricao,
         ranking_numero: ranking,
-        imagem_assinatura_url: assinaturaUrl,
         imagem_evidencia_url: evidenciaUrl,
+        imagem_assinatura_url: assinaturaUrl,
         criado_por: 'Guilherme Máximo',
       },
     ])
@@ -62,11 +61,10 @@ export default function Tratar() {
         .from('tratativas')
         .update({ status: 'Resolvido' })
         .eq('id', id)
-      alert('Tratativa registrada com sucesso!')
+      alert('Tratativa resolvida com sucesso!')
       navigate('/central')
     } else {
-      console.error(error)
-      alert('Erro ao salvar tratativa.')
+      alert('Erro ao salvar: ' + error.message)
     }
   }
 
@@ -83,11 +81,12 @@ export default function Tratar() {
 
       <h1 className="text-2xl font-bold mb-4 text-blue-700">Tratar Ocorrência</h1>
 
-      <div className="space-y-3 text-gray-700 mb-4">
+      <div className="space-y-2 text-gray-700 mb-6">
         <p><b>Motorista:</b> {tratativa.motorista_id}</p>
         <p><b>Ocorrência:</b> {tratativa.tipo_ocorrencia}</p>
         <p><b>Descrição:</b> {tratativa.descricao}</p>
         <p><b>Prioridade:</b> {tratativa.prioridade}</p>
+        <p><b>Setor:</b> {tratativa.setor_origem}</p>
       </div>
 
       <div className="mb-4">
@@ -106,8 +105,8 @@ export default function Tratar() {
       <div className="mb-4">
         <label className="block mb-1 font-medium">Descrição da Ação</label>
         <textarea
-          value={descricaoAcao}
-          onChange={(e) => setDescricaoAcao(e.target.value)}
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
           className="border rounded p-2 w-full"
           rows={4}
         />
