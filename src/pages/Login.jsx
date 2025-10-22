@@ -22,7 +22,7 @@ export default function Login() {
     if (error) {
       setMessage(`❌ Erro: ${error.message}`)
     } else {
-      setMessage('📩 Verifique seu e-mail para o link de acesso.')
+      setMessage('📩 Verifique seu e-mail corporativo para o link de acesso.')
     }
 
     setLoading(false)
