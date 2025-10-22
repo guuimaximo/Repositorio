@@ -20,9 +20,9 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithOtp({ email })
 
     if (error) {
-      setMessage(`❌ Erro ao enviar link: ${error.message}`)
+      setMessage(`❌ Erro: ${error.message}`)
     } else {
-      setMessage('📩 Verifique seu e-mail para acessar o sistema.')
+      setMessage('📩 Verifique seu e-mail para o link de acesso.')
     }
 
     setLoading(false)
@@ -31,8 +31,10 @@ export default function Login() {
   return (
     <div className="flex items-center justify-center h-screen bg-gray-100">
       <div className="bg-white p-8 rounded-xl shadow-lg w-96">
-        <h2 className="text-2xl font-bold text-center mb-4">INOVEQUATAI</h2>
-        <p className="text-center text-gray-500 mb-6">
+        <h2 className="text-2xl font-bold text-center mb-4 text-blue-600">
+          INOVEQUATAI
+        </h2>
+        <p className="text-center text-gray-600 mb-6">
           Faça login com seu e-mail corporativo
         </p>
 
