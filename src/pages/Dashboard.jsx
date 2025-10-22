@@ -28,19 +28,23 @@ export default function Dashboard() {
     else setTratativas(data)
   }
 
-  // Quantidade por status
   const statusCount = tratativas.reduce((acc, t) => {
-    acc[t.status] = (acc[t.status] || 0) + 1
+    const status = t.status?.toLowerCase()
+    if (status === 'resolvido' || status === 'concluída') {
+      acc['Concluída'] = (acc['Concluída'] || 0) + 1
+    } else if (status === 'pendente') {
+      acc['Pendente'] = (acc['Pendente'] || 0) + 1
+    } else if (status === 'atrasada') {
+      acc['Atrasada'] = (acc['Atrasada'] || 0) + 1
+    }
     return acc
   }, {})
 
-  // Quantidade por prioridade
   const prioridadeCount = tratativas.reduce((acc, t) => {
     acc[t.prioridade] = (acc[t.prioridade] || 0) + 1
     return acc
   }, {})
 
-  // Evolução por data (contagem de tratativas abertas por dia)
   const tratativasPorDia = tratativas.reduce((acc, t) => {
     const data = new Date(t.created_at).toLocaleDateString('pt-BR')
     acc[data] = (acc[data] || 0) + 1
@@ -57,7 +61,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-
       <div className="p-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Painel de Tratativas
@@ -67,7 +70,6 @@ export default function Dashboard() {
           registradas no sistema.
         </p>
 
-        {/* CARDS RESUMO */}
         <div className="grid grid-cols-4 gap-6 mb-10">
           <div className="bg-white p-5 rounded-lg shadow-sm border-l-4 border-blue-600">
             <h2 className="text-gray-500 text-sm">Total de Tratativas</h2>
@@ -98,9 +100,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* GRÁFICOS */}
         <div className="grid grid-cols-2 gap-8">
-          {/* Gráfico de Pizza - Prioridades */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold mb-4">
               Distribuição por Prioridade
@@ -134,7 +134,6 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
 
-          {/* Gráfico de Linha - Evolução */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold mb-4">
               Evolução das Aberturas de Tratativas
