@@ -1,6 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html","./src/**/*.{js,jsx}"],
-  theme: { extend: {} },
-  plugins: []
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        quataiBlue: '#0057b8',
+        quataiGray: '#f1f5f9',
+      },
+    },
+  },
+  plugins: [],
 }
