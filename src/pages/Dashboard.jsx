@@ -3,31 +3,23 @@ import Navbar from '../components/Navbar'
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white text-center">
       <Navbar />
 
-      <div className="flex flex-col items-center justify-center text-center pt-28 px-6">
-        <img
-          src="https://i.ibb.co/BCKR0M2/bus-terminal.png" // imagem ilustrativa (neutra e leve)
-          alt="Frota Quatai"
-          className="w-72 mb-8 drop-shadow-lg"
-        />
-
-        <h1 className="text-3xl font-bold text-quataiBlue mb-2">
-          Bem-vindo ao Sistema de Tratativas
+      <div className="flex flex-col items-center justify-center h-screen -mt-20">
+        <h1 className="text-3xl font-bold text-blue-700 mb-4">
+          🚀 InoveQuatai carregou corretamente!
         </h1>
 
-        <p className="text-gray-600 max-w-md mb-6">
-          Aqui você pode registrar solicitações de tratativas, acompanhar o
-          andamento e acessar a central de resolução de ocorrências entre
-          Manutenção e Operação.
+        <p className="text-gray-700 text-lg mb-6">
+          Se você está vendo esta mensagem, o React está funcionando.
         </p>
 
         <a
           href="/solicitacao"
-          className="bg-quataiBlue text-white px-6 py-2 rounded-lg shadow-md hover:bg-blue-700 transition"
+          className="bg-blue-700 text-white px-6 py-3 rounded-md shadow-md hover:bg-blue-800 transition"
         >
-          Nova Solicitação
+          Nova Solicitação de Tratativa
         </a>
       </div>
     </div>
