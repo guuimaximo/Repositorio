@@ -1,144 +1,192 @@
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 
-const corStatus = (s) => s === 'Concluído' ? 'bg-green-100 text-green-700'
-  : s === 'Em andamento' ? 'bg-amber-100 text-amber-700'
-  : 'bg-yellow-100 text-yellow-700'
-
 export default function CentralResolucao() {
-  const [lista, setLista] = useState([])
-  const [imgs, setImgs] = useState({})
-  const [filtroStatus, setFiltroStatus] = useState('Todos')
-  const [busca, setBusca] = useState('')
+  const [tratativas, setTratativas] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editando, setEditando] = useState(null)
+  const [observacao, setObservacao] = useState('')
+  const [novoStatus, setNovoStatus] = useState('Pendente')
+  const [responsavel, setResponsavel] = useState('')
 
-  async function carregar() {
+  // 🔄 Carrega todas as tratativas do banco
+  const carregarTratativas = async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('tratativas')
-      .select('id, motorista, tipo, prioridade, status, setor_origem, descricao, criado_em, created_by_email')
-      .order('criado_em', { ascending: false })
-    if (!error) setLista(data || [])
+      .select('*')
+      .order('created_at', { ascending: false })
 
-    // pega imagens por tratativa em lote
-    if (data?.length) {
-      const ids = data.map(d=>d.id)
-      const { data: imgsAll } = await supabase
-        .from('tratativa_imagens')
-        .select('tratativa_id, url')
-        .in('tratativa_id', ids)
-      const map = {}
-      imgsAll?.forEach(i => {
-        map[i.tratativa_id] = (map[i.tratativa_id] || []).concat(i.url)
-      })
-      setImgs(map)
+    if (error) {
+      console.error('❌ Erro ao buscar tratativas:', error)
+      alert('Erro ao carregar tratativas.')
     } else {
-      setImgs({})
+      setTratativas(data)
     }
     setLoading(false)
   }
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    carregarTratativas()
+  }, [])
 
-  const filtrados = useMemo(() => {
-    let arr = [...lista]
-    if (filtroStatus !== 'Todos') arr = arr.filter(x => x.status === filtroStatus)
-    if (busca.trim()) {
-      const t = busca.toLowerCase()
-      arr = arr.filter(x =>
-        (x.motorista||'').toLowerCase().includes(t) ||
-        (x.tipo||'').toLowerCase().includes(t) ||
-        (x.setor_origem||'').toLowerCase().includes(t)
-      )
-    }
-    return arr
-  }, [lista, filtroStatus, busca])
-
-  async function mudarStatus(id, atual, novo) {
-    if (atual === novo) return
-    const { error } = await supabase.from('tratativas').update({ status: novo }).eq('id', id)
-    if (!error) {
-      // registra histórico
-      const u = await supabase.auth.getUser()
-      await supabase.from('tratativa_historico').insert({
-        tratativa_id: id, status_de: atual, status_para: novo, user_email: u.data.user?.email || null
+  // 💾 Atualiza uma tratativa
+  const atualizarTratativa = async (id) => {
+    const { error } = await supabase
+      .from('tratativas')
+      .update({
+        status: novoStatus,
+        observacao_resolucao: observacao,
+        responsavel,
+        resolvido_em: novoStatus === 'Resolvido' ? new Date().toISOString() : null,
       })
-      // atualiza a lista local
-      setLista(prev => prev.map(r => r.id === id ? { ...r, status: novo } : r))
+      .eq('id', id)
+
+    if (error) {
+      console.error('❌ Erro ao atualizar tratativa:', error)
+      alert('Erro ao salvar atualização.')
+    } else {
+      alert('✅ Tratativa atualizada com sucesso!')
+      setEditando(null)
+      setObservacao('')
+      setResponsavel('')
+      await carregarTratativas()
     }
   }
 
+  // 🔍 Render
   return (
-    <div className="max-w-6xl mx-auto p-4 grid gap-4">
-      <div className="bg-white border rounded-xl p-4">
-        <div className="flex gap-3 items-center">
-          <input className="border rounded-md px-3 py-2 w-64" placeholder="Buscar motorista/tipo/setor" value={busca} onChange={e=>setBusca(e.target.value)} />
-          <select className="border rounded-md px-3 py-2" value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}>
-            <option>Todos</option>
-            <option>Pendente</option>
-            <option>Em andamento</option>
-            <option>Concluído</option>
-          </select>
-          <button onClick={carregar} className="ml-auto px-3 py-2 rounded-md border">Atualizar</button>
-        </div>
-      </div>
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">🛠️ Central de Resolução</h2>
 
-      <div className="bg-white border rounded-xl p-4 overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500">
-              <th className="py-2">Motorista</th>
-              <th>Tipo</th>
-              <th>Prioridade</th>
-              <th>Setor origem</th>
-              <th>Status</th>
-              <th>Imagens</th>
-              <th>Abertura</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="7" className="py-8 text-center text-slate-400">Carregando...</td></tr>
-            ) : filtrados.length ? (
-              filtrados.map(r=>(
-                <tr key={r.id} className="border-t align-top">
-                  <td className="py-2">{r.motorista}</td>
-                  <td>{r.tipo}</td>
-                  <td className="capitalize">{r.prioridade}</td>
-                  <td>{r.setor_origem}</td>
-                  <td>
-                    <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-md ${corStatus(r.status)}`}>
-                      <span>{r.status}</span>
-                      <select
-                        className="border rounded px-1 py-0.5 bg-white text-slate-700"
-                        value={r.status}
-                        onChange={e=>mudarStatus(r.id, r.status, e.target.value)}
+      {loading ? (
+        <p>Carregando tratativas...</p>
+      ) : tratativas.length === 0 ? (
+        <p>Nenhuma tratativa encontrada.</p>
+      ) : (
+        <div className="overflow-x-auto bg-white rounded-xl shadow-md">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="p-2">ID</th>
+                <th className="p-2">Motorista</th>
+                <th className="p-2">Tipo</th>
+                <th className="p-2">Prioridade</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Responsável</th>
+                <th className="p-2">Descrição</th>
+                <th className="p-2">Imagem</th>
+                <th className="p-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tratativas.map((t) => (
+                <tr key={t.id} className="border-b hover:bg-gray-100">
+                  <td className="p-2">{t.id}</td>
+                  <td className="p-2">{t.motorista}</td>
+                  <td className="p-2">{t.tipo}</td>
+                  <td className="p-2">{t.prioridade}</td>
+                  <td className="p-2">
+                    <span
+                      className={`px-2 py-1 rounded-lg text-sm ${
+                        t.status === 'Resolvido'
+                          ? 'bg-green-100 text-green-700'
+                          : t.status === 'Em andamento'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {t.status}
+                    </span>
+                  </td>
+                  <td className="p-2">{t.responsavel || '-'}</td>
+                  <td className="p-2">{t.descricao}</td>
+                  <td className="p-2">
+                    {t.imagem_url ? (
+                      <a
+                        href={t.imagem_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 underline"
                       >
-                        <option>Pendente</option>
-                        <option>Em andamento</option>
-                        <option>Concluído</option>
-                      </select>
-                    </div>
+                        Ver
+                      </a>
+                    ) : (
+                      '-'
+                    )}
                   </td>
-                  <td>
-                    <div className="flex gap-2 flex-wrap max-w-64">
-                      {(imgs[r.id] || []).map((u, i)=>(
-                        <a key={i} href={u} target="_blank" rel="noreferrer">
-                          <img src={u} alt="img" className="w-16 h-16 object-cover rounded-md border" />
-                        </a>
-                      ))}
-                      {(!imgs[r.id] || imgs[r.id].length===0) && <span className="text-slate-400">—</span>}
-                    </div>
+                  <td className="p-2">
+                    <button
+                      onClick={() => {
+                        setEditando(t.id)
+                        setNovoStatus(t.status)
+                        setResponsavel(t.responsavel || '')
+                        setObservacao(t.observacao_resolucao || '')
+                      }}
+                      className="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700"
+                    >
+                      Editar
+                    </button>
                   </td>
-                  <td title={r.descricao || ''}>{new Date(r.criado_em).toLocaleString('pt-BR')}</td>
                 </tr>
-              ))
-            ) : (
-              <tr><td colSpan="7" className="py-8 text-center text-slate-400">Nenhuma tratativa encontrada.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Modal de Edição */}
+      {editando && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg p-6 w-96 shadow-lg">
+            <h3 className="text-lg font-semibold mb-3">
+              ✏️ Atualizar Tratativa #{editando}
+            </h3>
+
+            <label className="block text-sm font-medium mb-1">Novo Status:</label>
+            <select
+              value={novoStatus}
+              onChange={(e) => setNovoStatus(e.target.value)}
+              className="border p-2 rounded w-full mb-2"
+            >
+              <option>Pendente</option>
+              <option>Em andamento</option>
+              <option>Resolvido</option>
+            </select>
+
+            <label className="block text-sm font-medium mb-1">Responsável:</label>
+            <input
+              type="text"
+              value={responsavel}
+              onChange={(e) => setResponsavel(e.target.value)}
+              className="border p-2 rounded w-full mb-2"
+            />
+
+            <label className="block text-sm font-medium mb-1">Observação:</label>
+            <textarea
+              rows="3"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              className="border p-2 rounded w-full mb-3"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditando(null)}
+                className="bg-gray-300 px-3 py-1 rounded-lg hover:bg-gray-400"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => atualizarTratativa(editando)}
+                className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
