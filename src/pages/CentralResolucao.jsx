@@ -1,97 +1,123 @@
-import React, { useEffect, useState } from 'react'
-import { supabase } from '../supabase'
-import Navbar from '../components/Navbar'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from "react";
+import { supabase } from "../supabase";
+import { useNavigate } from "react-router-dom";
 
-export default function CentralResolucao() {
-  const navigate = useNavigate()
-  const [tratativas, setTratativas] = useState([])
+export default function CentralTratativas() {
+  const [tratativas, setTratativas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    carregarTratativas()
-  }, [])
+    buscarTratativas();
+  }, []);
 
-  const carregarTratativas = async () => {
-    const { data, error } = await supabase.from('tratativas').select('*')
-    if (error) console.error('Erro ao carregar tratativas:', error)
-    else setTratativas(data)
-  }
+  const buscarTratativas = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("tratativas")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Erro ao carregar tratativas:", error.message);
+    } else {
+      setTratativas(data || []);
+    }
+    setLoading(false);
+  };
+
+  const atualizarStatus = async (id, novoStatus) => {
+    const { error } = await supabase
+      .from("tratativas")
+      .update({ status: novoStatus })
+      .eq("id", id);
+
+    if (error) {
+      alert("❌ Erro ao atualizar status: " + error.message);
+    } else {
+      alert("✅ Status atualizado para " + novoStatus);
+      buscarTratativas();
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="p-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md"
-        >
-          ⬅️ Voltar
-        </button>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-blue-700">
+            🧩 Central de Tratativas
+          </h1>
+          <button
+            onClick={() => navigate("/")}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md"
+          >
+            ⬅️ Voltar
+          </button>
+        </div>
 
-        <h1 className="text-2xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-          🧰 Central de Resolução
-        </h1>
-
-        <div className="bg-white p-4 rounded-xl shadow-sm">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-left">
-                <th className="p-2 border">ID</th>
-                <th className="p-2 border">Motorista</th>
-                <th className="p-2 border">Tipo</th>
-                <th className="p-2 border">Prioridade</th>
-                <th className="p-2 border">Status</th>
-                <th className="p-2 border">Responsável</th>
-                <th className="p-2 border">Descrição</th>
-                <th className="p-2 border">Imagem</th>
-                <th className="p-2 border">Ações</th>
+        {loading ? (
+          <p className="text-center text-gray-500">Carregando tratativas...</p>
+        ) : tratativas.length === 0 ? (
+          <p className="text-center text-gray-600">Nenhuma tratativa registrada.</p>
+        ) : (
+          <table className="w-full text-left border">
+            <thead className="bg-blue-700 text-white">
+              <tr>
+                <th className="p-2">Motorista</th>
+                <th className="p-2">Ocorrência</th>
+                <th className="p-2">Prioridade</th>
+                <th className="p-2">Setor</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Imagem</th>
+                <th className="p-2">Ações</th>
               </tr>
             </thead>
             <tbody>
               {tratativas.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="p-2 border text-gray-500">{t.id}</td>
-                  <td className="p-2 border">{t.motorista}</td>
-                  <td className="p-2 border">{t.tipo_ocorrencia}</td>
-                  <td className="p-2 border">{t.prioridade}</td>
-                  <td className="p-2 border">
-                    <span
-                      className={`px-2 py-1 rounded text-sm ${
-                        t.status?.toLowerCase() === 'resolvido'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-600'
-                      }`}
-                    >
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="p-2 border">{t.responsavel || '-'}</td>
-                  <td className="p-2 border">{t.descricao}</td>
-                  <td className="p-2 border">
+                <tr
+                  key={t.id}
+                  className={`border-b ${
+                    t.status === "Resolvido" ? "bg-green-50" : "bg-white"
+                  }`}
+                >
+                  <td className="p-2">{t.motorista_id}</td>
+                  <td className="p-2">{t.tipo_ocorrencia}</td>
+                  <td className="p-2">{t.prioridade}</td>
+                  <td className="p-2">{t.setor_origem}</td>
+                  <td className="p-2 font-semibold">{t.status}</td>
+                  <td className="p-2">
                     {t.imagem_url ? (
                       <a
                         href={t.imagem_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 underline"
                       >
-                        Ver imagem
+                        <img
+                          src={t.imagem_url}
+                          alt="Imagem da tratativa"
+                          className="w-16 h-16 object-cover rounded shadow"
+                        />
                       </a>
                     ) : (
-                      '-'
+                      <span className="text-gray-400 italic">Sem imagem</span>
                     )}
                   </td>
-                  <td className="p-2 border">
-                    <button className="bg-blue-600 text-white px-3 py-1 rounded">
-                      Editar
-                    </button>
+                  <td className="p-2">
+                    {t.status !== "Resolvido" && (
+                      <button
+                        onClick={() => atualizarStatus(t.id, "Resolvido")}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm"
+                      >
+                        Marcar Resolvido
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        )}
       </div>
     </div>
-  )
+  );
 }
