@@ -29,9 +29,6 @@ export default function Navbar() {
           <Link to="/central" className={isActive('/central')}>
             Central de Tratativas
           </Link>
-          <Link to="/tratativas" className={isActive('/tratativas')}>
-            Todas as Tratativas
-          </Link>
         </div>
       </div>
     </nav>
