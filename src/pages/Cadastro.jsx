@@ -20,13 +20,11 @@ export default function Cadastro() {
       return;
     }
 
-    // 🔄 Redirecionamento automático conforme ambiente
     const redirectUrl =
       window.location.hostname === "localhost"
         ? "http://localhost:3000"
         : "https://inovequatai.onrender.com";
 
-    // 🚀 Cadastro no Supabase Auth
     const { error } = await supabase.auth.signUp({
       email,
       password: senha,
@@ -37,7 +35,7 @@ export default function Cadastro() {
       setErro(error.message);
     } else {
       setMensagem(
-        "✅ Conta criada com sucesso! Verifique seu e-mail para confirmar o cadastro."
+        "✅ Conta criada com sucesso! Verifique seu e-mail para confirmar."
       );
       setTimeout(() => navigate("/login"), 4000);
     }
