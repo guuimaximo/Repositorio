@@ -6,7 +6,7 @@ import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa"; // ✅ Nome certo
-import Home from "./pages/Login"; // se o login for a página inicial
+//import Home from "./pages/Login"; // se o login for a página inicial
 
 export default function App() {
   return (
