@@ -26,8 +26,8 @@ export default function CentralTratativas() {
     }
     if (filtros.setor) query = query.eq('setor_origem', filtros.setor)
     if (filtros.status) query = query.eq('status', filtros.status)
-    if (filtros.dataInicio) query = query.gte('data_ocorrida', filtros.dataInicio)
-    if (filtros.dataFim) query = query.lte('data_ocorrida', filtros.dataFim)
+    if (filtros.dataInicio) query = query.gte('data_ocorrido', filtros.dataInicio)
+    if (filtros.dataFim) query = query.lte('data_ocorrido', filtros.dataFim)
 
     const { data, error } = await query.order('created_at', { ascending: false })
     if (!error) setTratativas(data || [])
@@ -205,14 +205,14 @@ export default function CentralTratativas() {
                       {t.status?.toLowerCase().includes('conclu') ||
                       t.status?.toLowerCase().includes('resolvido') ? (
                         <button
-                          onClick={() => navigate(`/consultar-tratativa/${t.id}`)}
+                          onClick={() => navigate(`/consultartratativa/${t.id}`)}
                           className="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400"
                         >
                           Consultar
                         </button>
                       ) : (
                         <button
-                          onClick={() => navigate(`/tratar-tratativa/${t.id}`)}
+                          onClick={() => navigate(`/tratartratativa/${t.id}`)}
                           className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
                         >
                           Tratar
