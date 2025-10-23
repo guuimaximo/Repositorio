@@ -1,7 +1,6 @@
 // src/pages/CentralTratativas.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import Navbar from "../components/Navbar";
 import { FaSyncAlt, FaFilter } from "react-icons/fa";
 
 export default function CentralTratativas() {
