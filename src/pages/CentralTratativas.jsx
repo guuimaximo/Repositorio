@@ -1,84 +1,115 @@
 // src/pages/CentralTratativas.jsx
-import React, { useEffect, useState } from 'react'
-import { supabase } from '../supabase'
-import Navbar from '../components/Navbar'
-import { FaSyncAlt, FaFilter } from 'react-icons/fa'
+import React, { useEffect, useState } from "react";
+import { supabase } from "../supabase";
+import Navbar from "../components/Navbar";
+import { FaSyncAlt, FaFilter } from "react-icons/fa";
 
 export default function CentralTratativas() {
-  const [tratativas, setTratativas] = useState([])
+  const [tratativas, setTratativas] = useState([]);
   const [filtros, setFiltros] = useState({
-    busca: '',
-    setor: '',
-    status: '',
-    dataInicio: '',
-    dataFim: ''
-  })
+    busca: "",
+    setor: "",
+    status: "",
+    dataInicio: "",
+    dataFim: "",
+  });
   const [contagem, setContagem] = useState({
     total: 0,
     pendentes: 0,
     concluidas: 0,
-    atrasadas: 0
-  })
-  const [carregando, setCarregando] = useState(false)
+    atrasadas: 0,
+  });
+  const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
-    buscarTratativas()
-  }, [filtros])
+    buscarTratativas();
+  }, [filtros]);
 
   async function buscarTratativas() {
-    setCarregando(true)
-    let query = supabase.from('tratativas').select('*').order('created_at', { ascending: false })
+    setCarregando(true);
+
+    // Busca com contagem total
+    let query = supabase
+      .from("tratativas")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
 
     if (filtros.busca)
       query = query.or(
         `motorista_nome.ilike.%${filtros.busca}%,motorista_chapa.ilike.%${filtros.busca}%,descricao.ilike.%${filtros.busca}%`
-      )
-    if (filtros.setor) query = query.eq('setor_origem', filtros.setor)
-    if (filtros.status) query = query.ilike('status', `%${filtros.status}%`)
+      );
+    if (filtros.setor) query = query.eq("setor_origem", filtros.setor);
+    if (filtros.status) query = query.ilike("status", `%${filtros.status}%`);
     if (filtros.dataInicio && filtros.dataFim)
-      query = query.gte('data_ocorrido', filtros.dataInicio).lte('data_ocorrido', filtros.dataFim)
+      query = query
+        .gte("data_ocorrido", filtros.dataInicio)
+        .lte("data_ocorrido", filtros.dataFim);
 
-    const { data, error } = await query
-    if (error) console.error(error)
-    else {
-      setTratativas(data)
-      calcularContagem(data)
-    }
-    setCarregando(false)
-  }
+    const { data, count, error } = await query;
 
-  const calcularContagem = data => {
-    const normalizarStatus = s => {
-      if (!s) return 'Pendente'
-      const txt = s.toLowerCase()
-      if (txt.includes('resol') || txt.includes('concl')) return 'Concluída'
-      if (txt.includes('atras')) return 'Atrasada'
-      return 'Pendente'
+    if (error) {
+      console.error("Erro ao buscar tratativas:", error);
+    } else {
+      setTratativas(data || []);
+      calcularContagem(data || []);
+      setContagem((prev) => ({ ...prev, total: count || data.length }));
     }
 
-    const total = data.length
-    const pendentes = data.filter(t => normalizarStatus(t.status) === 'Pendente').length
-    const concluidas = data.filter(t => normalizarStatus(t.status) === 'Concluída').length
-    const atrasadas = data.filter(t => normalizarStatus(t.status) === 'Atrasada').length
-
-    setContagem({ total, pendentes, concluidas, atrasadas })
+    setCarregando(false);
   }
+
+  const calcularContagem = (data) => {
+    const normalizarStatus = (s) => {
+      if (!s) return "Pendente";
+      const txt = s.toLowerCase();
+      if (txt.includes("resol") || txt.includes("concl")) return "Concluída";
+      if (txt.includes("atras")) return "Atrasada";
+      return "Pendente";
+    };
+
+    const pendentes = data.filter(
+      (t) => normalizarStatus(t.status) === "Pendente"
+    ).length;
+    const concluidas = data.filter(
+      (t) => normalizarStatus(t.status) === "Concluída"
+    ).length;
+    const atrasadas = data.filter(
+      (t) => normalizarStatus(t.status) === "Atrasada"
+    ).length;
+
+    setContagem((prev) => ({
+      ...prev,
+      pendentes,
+      concluidas,
+      atrasadas,
+    }));
+  };
 
   const limparFiltros = () => {
     setFiltros({
-      busca: '',
-      setor: '',
-      status: '',
-      dataInicio: '',
-      dataFim: ''
-    })
-  }
+      busca: "",
+      setor: "",
+      status: "",
+      dataInicio: "",
+      dataFim: "",
+    });
+  };
+
+  const abrirTratar = (id) => {
+    window.location.href = `/tratar/${id}`;
+  };
+
+  const abrirConsultar = (id) => {
+    window.location.href = `/consultar/${id}`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">Central de Tratativas</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">
+          Central de Tratativas
+        </h1>
 
         {/* Painel de Filtros */}
         <div className="bg-white p-4 rounded-lg shadow-md border mb-6">
@@ -92,25 +123,33 @@ export default function CentralTratativas() {
               placeholder="🔍 Buscar (nome, chapa, descrição...)"
               className="border rounded-lg p-2 col-span-2"
               value={filtros.busca}
-              onChange={e => setFiltros({ ...filtros, busca: e.target.value })}
+              onChange={(e) =>
+                setFiltros({ ...filtros, busca: e.target.value })
+              }
             />
             <input
               type="date"
               className="border rounded-lg p-2"
               value={filtros.dataInicio}
-              onChange={e => setFiltros({ ...filtros, dataInicio: e.target.value })}
+              onChange={(e) =>
+                setFiltros({ ...filtros, dataInicio: e.target.value })
+              }
             />
             <input
               type="date"
               className="border rounded-lg p-2"
               value={filtros.dataFim}
-              onChange={e => setFiltros({ ...filtros, dataFim: e.target.value })}
+              onChange={(e) =>
+                setFiltros({ ...filtros, dataFim: e.target.value })
+              }
             />
 
             <select
               className="border rounded-lg p-2"
               value={filtros.setor}
-              onChange={e => setFiltros({ ...filtros, setor: e.target.value })}
+              onChange={(e) =>
+                setFiltros({ ...filtros, setor: e.target.value })
+              }
             >
               <option value="">Setor</option>
               <option>CCO</option>
@@ -126,7 +165,9 @@ export default function CentralTratativas() {
             <select
               className="border rounded-lg p-2"
               value={filtros.status}
-              onChange={e => setFiltros({ ...filtros, status: e.target.value })}
+              onChange={(e) =>
+                setFiltros({ ...filtros, status: e.target.value })
+              }
             >
               <option value="">Status</option>
               <option value="Pendente">Pendente</option>
@@ -172,7 +213,7 @@ export default function CentralTratativas() {
                   </td>
                 </tr>
               ) : tratativas.length > 0 ? (
-                tratativas.map(t => (
+                tratativas.map((t) => (
                   <tr key={t.id} className="border-b hover:bg-gray-100">
                     <td className="p-3">{t.motorista_nome}</td>
                     <td className="p-3">{t.tipo_ocorrencia}</td>
@@ -180,17 +221,17 @@ export default function CentralTratativas() {
                     <td className="p-3 font-semibold">{t.status}</td>
                     <td className="p-3">{t.data_ocorrido}</td>
                     <td className="p-3">
-                      {t.status?.toLowerCase().includes('resol') ||
-                      t.status?.toLowerCase().includes('concl') ? (
+                      {t.status?.toLowerCase().includes("resol") ||
+                      t.status?.toLowerCase().includes("concl") ? (
                         <button
-                          onClick={() => (window.location.href = `/consultar/${t.id}`)}
+                          onClick={() => abrirConsultar(t.id)}
                           className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded"
                         >
                           Consultar
                         </button>
                       ) : (
                         <button
-                          onClick={() => (window.location.href = `/tratar/${t.id}`)}
+                          onClick={() => abrirTratar(t.id)}
                           className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
                         >
                           Tratar
@@ -211,7 +252,7 @@ export default function CentralTratativas() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function Card({ titulo, cor, valor }) {
@@ -220,5 +261,5 @@ function Card({ titulo, cor, valor }) {
       <p className="text-sm">{titulo}</p>
       <p className="text-2xl font-bold">{valor}</p>
     </div>
-  )
+  );
 }
