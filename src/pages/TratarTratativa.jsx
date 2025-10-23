@@ -7,10 +7,11 @@ import Navbar from "../components/Navbar";
 export default function TratarTratativa() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [tratativa, setTratativa] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [observacao, setObservacao] = useState("");
   const [imagem, setImagem] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
   useEffect(() => {
@@ -18,81 +19,87 @@ export default function TratarTratativa() {
   }, []);
 
   async function carregarTratativa() {
-    const { data, error } = await supabase
-      .from("tratativas")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (error) {
-      console.error(error);
-      alert("Erro ao carregar tratativa");
-    } else {
+    try {
+      const { data, error } = await supabase
+        .from("tratativas")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
       setTratativa(data);
+    } catch (err) {
+      console.error("Erro ao carregar tratativa:", err.message);
+      setMensagem("❌ Erro ao carregar tratativa.");
     }
   }
 
   const handleUploadImagem = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const nomeArquivo = `tratativas/${id}-${Date.now()}-${file.name}`;
+
+    const filePath = `tratativas/${id}-${Date.now()}-${file.name}`;
 
     const { error: uploadError } = await supabase.storage
       .from("imagens")
-      .upload(nomeArquivo, file);
+      .upload(filePath, file);
 
     if (uploadError) {
-      console.error(uploadError);
       alert("Erro ao enviar imagem.");
       return;
     }
 
-    const { data: urlData } = supabase.storage
-      .from("imagens")
-      .getPublicUrl(nomeArquivo);
-
-    setImagem(urlData.publicUrl);
+    const { data } = supabase.storage.from("imagens").getPublicUrl(filePath);
+    setImagem(data.publicUrl);
   };
 
   const salvarTratativa = async () => {
     if (!observacao.trim()) {
-      alert("Por favor, descreva a ação realizada.");
+      alert("Por favor, descreva a ação tomada.");
       return;
     }
 
     setLoading(true);
-    const { error } = await supabase
-      .from("tratativas")
-      .update({
-        status: "Resolvido",
-        descricao_tratativa: observacao,
-        imagem_tratativa: imagem,
-        data_tratamento: new Date().toISOString(),
-      })
-      .eq("id", id);
 
-    setLoading(false);
+    try {
+      const { error } = await supabase
+        .from("tratativas")
+        .update({
+          status: "Resolvido",
+          descricao_tratativa: observacao,
+          imagem_tratativa: imagem,
+          data_tratamento: new Date().toISOString(),
+        })
+        .eq("id", id);
 
-    if (error) {
-      console.error(error);
-      alert("Erro ao salvar tratativa.");
-    } else {
+      if (error) throw error;
+
       setMensagem("✅ Tratativa registrada com sucesso!");
-      setTimeout(() => navigate("/central"), 1800);
+      setTimeout(() => navigate("/central"), 1500);
+    } catch (err) {
+      console.error("Erro ao salvar:", err.message);
+      alert("Erro ao salvar tratativa.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!tratativa)
+  if (!tratativa) {
     return (
-      <div className="p-6 text-center text-gray-500">
+      <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <p>Carregando dados da tratativa...</p>
+        <div className="flex justify-center items-center h-[80vh] text-gray-600">
+          Carregando dados da tratativa...
+        </div>
       </div>
     );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-md border">
+
+      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow border">
         <h1 className="text-2xl font-bold mb-4 text-gray-800">
           Tratar Ocorrência - {tratativa.motorista_nome}
         </h1>
@@ -104,10 +111,11 @@ export default function TratarTratativa() {
           <Campo titulo="Prioridade" valor={tratativa.prioridade} />
           <Campo titulo="Setor de Origem" valor={tratativa.setor_origem} />
           <Campo titulo="Data do Ocorrido" valor={tratativa.data_ocorrido} />
-          <Campo titulo="Hora" valor={tratativa.hora_ocorrida} />
+          <Campo titulo="Hora do Ocorrido" valor={tratativa.hora_ocorrida} />
           <Campo titulo="Status Atual" valor={tratativa.status} />
         </div>
 
+        {/* Descrição Original */}
         <div className="mb-4">
           <p className="font-semibold text-gray-700 mb-1">Descrição Original</p>
           <textarea
@@ -118,21 +126,19 @@ export default function TratarTratativa() {
           />
         </div>
 
-        {/* Observação de tratamento */}
+        {/* Ação ou observação */}
         <div className="mb-4">
-          <p className="font-semibold text-gray-700 mb-1">
-            Ação ou Observação
-          </p>
+          <p className="font-semibold text-gray-700 mb-1">Ação / Observação</p>
           <textarea
             className="w-full border rounded-lg p-2"
             rows="4"
             value={observacao}
             onChange={(e) => setObservacao(e.target.value)}
-            placeholder="Descreva a ação realizada, contato, orientação etc..."
+            placeholder="Descreva a ação realizada (advertência, orientação, contato, etc)"
           />
         </div>
 
-        {/* Upload de imagem */}
+        {/* Upload de Imagem */}
         <div className="mb-6">
           <p className="font-semibold text-gray-700 mb-2">
             Anexar imagem (opcional)
@@ -152,12 +158,14 @@ export default function TratarTratativa() {
           )}
         </div>
 
+        {/* Feedback */}
         {mensagem && (
           <div className="bg-green-100 text-green-800 border border-green-300 rounded-md p-2 mb-4">
             {mensagem}
           </div>
         )}
 
+        {/* Botões */}
         <div className="flex justify-between">
           <button
             onClick={() => navigate(-1)}
