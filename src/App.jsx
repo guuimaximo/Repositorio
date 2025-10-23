@@ -1,22 +1,22 @@
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Login from './pages/Login'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
-import SolicitacaoTratativa from './pages/SolicitacaoTratativa'
-import CentralResolucao from './pages/CentralResolucao'
-import Tratativas from './pages/Tratativas'
-import Tratar from './pages/Tratar.jsx'
+import CentralTratativas from './pages/CentralTratativas'
+import SolicitarTratativa from './pages/SolicitacaoTratativa'
+import TratarTratativa from './pages/TratarTratativa'
+import ConsultarTratativa from './pages/ConsultarTratativa'
+import Login from './pages/Login'
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/solicitacao" element={<SolicitacaoTratativa />} />
-      <Route path="/central" element={<CentralResolucao />} />
-      <Route path="/tratativas" element={<Tratativas />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-      <Route path="/tratar/:id" element={<Tratar />} />
-    </Routes>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/solicitar" element={<SolicitarTratativa />} />
+        <Route path="/central" element={<CentralTratativas />} />
+        <Route path="/tratar/:id" element={<TratarTratativa />} />
+        <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+      </Routes>
+    </Router>
   )
 }
