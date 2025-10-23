@@ -1,164 +1,140 @@
-import React, { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../supabase'
+import CampoMotorista from '../components/CampoMotorista'
+
+const prioridades = ['Baixa', 'Média', 'Alta']
+const statusInic = 'Pendente'
 
 export default function SolicitacaoTratativa() {
-  const [motoristas, setMotoristas] = useState([])
-  const [linhas, setLinhas] = useState([])
-  const [setores, setSetores] = useState([])
-  const [prefixos, setPrefixos] = useState([])
-  const [tiposOcorrencia, setTiposOcorrencia] = useState([])
+  const [motorista, setMotorista] = useState({ chapa: '', nome: '' })
+  const [form, setForm] = useState({
+    tipo_ocorrencia: '',
+    prioridade: 'Média',
+    setor_origem: '',
+    descricao: '',
+    data_ocorrida: '',
+    hora_ocorrida: '',
+  })
+  const [imgFile, setImgFile] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  const [chapa, setChapa] = useState('')
-  const [nome, setNome] = useState('')
-  const [tipoOcorrencia, setTipoOcorrencia] = useState('')
-  const [dataOcorrido, setDataOcorrido] = useState('')
-  const [horaOcorrido, setHoraOcorrido] = useState('')
-  const [prioridade, setPrioridade] = useState('Média')
-  const [setor, setSetor] = useState('')
-  const [linha, setLinha] = useState('')
-  const [prefixo, setPrefixo] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [imagem, setImagem] = useState(null)
-
-  useEffect(() => {
-    buscarAuxiliares()
-  }, [])
-
-  async function buscarAuxiliares() {
-    const [mot, lin, set, pre, tipo] = await Promise.all([
-      supabase.from('motoristas').select('*'),
-      supabase.from('linhas').select('*'),
-      supabase.from('setores').select('*'),
-      supabase.from('prefixos').select('*'),
-      supabase.from('tipos_ocorrencia').select('*')
-    ])
-    setMotoristas(mot.data || [])
-    setLinhas(lin.data || [])
-    setSetores(set.data || [])
-    setPrefixos(pre.data || [])
-    setTiposOcorrencia(tipo.data || [])
-  }
-
-  const handleChapaChange = (e) => {
-    const value = e.target.value
-    setChapa(value)
-    const m = motoristas.find(m => m.chapa === value)
-    if (m) setNome(m.nome)
-  }
-
-  const handleNomeChange = (e) => {
-    const value = e.target.value.toLowerCase()
-    setNome(value)
-    const m = motoristas.find(m => m.nome.toLowerCase() === value)
-    if (m) setChapa(m.chapa)
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    let imagemUrl = null
-    if (imagem) {
-      const { data: upload, error: upError } = await supabase.storage
-        .from('tratativas')
-        .upload(`solicitacoes/${Date.now()}-${imagem.name}`, imagem, { upsert: true })
-
-      if (!upError) {
-        imagemUrl = `${supabase.storageUrl}/object/public/tratativas/${upload.path}`
+  async function salvar() {
+    if (!motorista.chapa && !motorista.nome) {
+      alert('Informe o motorista')
+      return
+    }
+    setLoading(true)
+    try {
+      let imagem_url = null
+      if (imgFile) {
+        const nome = `oc_${Date.now()}_${imgFile.name}`
+        const up = await supabase.storage.from('tratativas').upload(nome, imgFile)
+        if (up.error) throw up.error
+        const { data } = supabase.storage.from('tratativas').getPublicUrl(nome)
+        imagem_url = data.publicUrl
       }
-    }
 
-    const novaTratativa = {
-      motorista_id: chapa,
-      motorista_nome: nome,
-      tipo_ocorrencia: tipoOcorrencia,
-      data_ocorrido: dataOcorrido,
-      hora_ocorrido: horaOcorrido,
-      prioridade,
-      setor_origem: setor,
-      linha,
-      prefixo,
-      descricao,
-      imagem_url: imagemUrl,
-      status: 'Pendente'
+      const { error } = await supabase.from('tratativas').insert({
+        motorista_chapa: motorista.chapa || null,
+        motorista_nome: motorista.nome || null,
+        tipo_ocorrencia: form.tipo_ocorrencia,
+        prioridade: form.prioridade,
+        setor_origem: form.setor_origem,
+        descricao: form.descricao,
+        status: statusInic,
+        imagem_url,
+        data_ocorrida: form.data_ocorrida || null,
+        hora_ocorrida: form.hora_ocorrida || null,
+      })
+      if (error) throw error
+      alert('Solicitação registrada!')
+      setMotorista({ chapa: '', nome: '' })
+      setForm({
+        tipo_ocorrencia: '',
+        prioridade: 'Média',
+        setor_origem: '',
+        descricao: '',
+        data_ocorrida: '',
+        hora_ocorrida: '',
+      })
+      setImgFile(null)
+    } catch (e) {
+      alert(`Erro: ${e.message}`)
+    } finally {
+      setLoading(false)
     }
-
-    const { error } = await supabase.from('tratativas').insert([novaTratativa])
-    if (error) alert('❌ Erro ao criar tratativa: ' + error.message)
-    else alert('✅ Tratativa criada com sucesso!')
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <Navbar />
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Nova Solicitação de Tratativa</h1>
+    <div className="mx-auto max-w-4xl p-6">
+      <h1 className="text-2xl font-bold mb-4">Solicitar Tratativa</h1>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 bg-white p-6 rounded shadow">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <CampoMotorista value={motorista} onChange={setMotorista} />
+
         <div>
-          <label>Chapa</label>
-          <input value={chapa} onChange={handleChapaChange} className="border rounded p-2 w-full" />
+          <label className="block text-sm text-gray-600 mb-1">Tipo de Ocorrência</label>
+          <input className="w-full rounded-md border px-3 py-2"
+            value={form.tipo_ocorrencia}
+            onChange={e => setForm({ ...form, tipo_ocorrencia: e.target.value })}
+            placeholder="Ex.: Uso de celular, Excesso de velocidade…" />
         </div>
 
         <div>
-          <label>Motorista</label>
-          <input value={nome} onChange={handleNomeChange} className="border rounded p-2 w-full" />
-        </div>
-
-        <div>
-          <label>Data do ocorrido</label>
-          <input type="date" value={dataOcorrido} onChange={(e) => setDataOcorrido(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
-
-        <div>
-          <label>Hora do ocorrido</label>
-          <input type="time" value={horaOcorrido} onChange={(e) => setHoraOcorrido(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
-
-        <div>
-          <label>Tipo de Ocorrência</label>
-          <select value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {tiposOcorrencia.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+          <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
+          <select className="w-full rounded-md border px-3 py-2"
+            value={form.prioridade}
+            onChange={e => setForm({ ...form, prioridade: e.target.value })}
+          >
+            {prioridades.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
 
         <div>
-          <label>Setor</label>
-          <select value={setor} onChange={(e) => setSetor(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {setores.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
-          </select>
+          <label className="block text-sm text-gray-600 mb-1">Setor de Origem</label>
+          <input className="w-full rounded-md border px-3 py-2"
+                 value={form.setor_origem}
+                 onChange={e => setForm({ ...form, setor_origem: e.target.value })}
+                 placeholder="Telemetria, CCO, Manutenção…" />
         </div>
 
         <div>
-          <label>Linha</label>
-          <select value={linha} onChange={(e) => setLinha(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {linhas.map(l => <option key={l.id} value={l.codigo}>{l.codigo}</option>)}
-          </select>
+          <label className="block text-sm text-gray-600 mb-1">Data do ocorrido</label>
+          <input type="date" className="w-full rounded-md border px-3 py-2"
+                 value={form.data_ocorrida}
+                 onChange={e => setForm({ ...form, data_ocorrida: e.target.value })} />
         </div>
 
         <div>
-          <label>Prefixo</label>
-          <select value={prefixo} onChange={(e) => setPrefixo(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {prefixos.map(p => <option key={p.id} value={p.codigo}>{p.codigo}</option>)}
-          </select>
+          <label className="block text-sm text-gray-600 mb-1">Hora do ocorrido</label>
+          <input type="time" className="w-full rounded-md border px-3 py-2"
+                 value={form.hora_ocorrida}
+                 onChange={e => setForm({ ...form, hora_ocorrida: e.target.value })} />
         </div>
 
-        <div className="col-span-2">
-          <label>Descrição</label>
-          <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="border rounded p-2 w-full" />
+        <div className="md:col-span-2">
+          <label className="block text-sm text-gray-600 mb-1">Descrição</label>
+          <textarea rows={4} className="w-full rounded-md border px-3 py-2"
+            value={form.descricao}
+            onChange={e => setForm({ ...form, descricao: e.target.value })}
+          />
         </div>
 
-        <div className="col-span-2">
-          <label>Imagem / Evidência</label>
-          <input type="file" accept="image/*" onChange={(e) => setImagem(e.target.files[0])} />
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Imagem (opcional)</label>
+          <input type="file" accept="image/*" onChange={e => setImgFile(e.target.files?.[0] || null)} />
         </div>
+      </div>
 
-        <div className="col-span-2">
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">Salvar</button>
-        </div>
-      </form>
+      <div className="mt-4">
+        <button
+          onClick={salvar}
+          disabled={loading}
+          className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+        >
+          {loading ? 'Salvando…' : 'Criar'}
+        </button>
+      </div>
     </div>
   )
 }
