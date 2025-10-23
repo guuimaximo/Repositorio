@@ -1,44 +1,28 @@
-import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from 'react-router-dom'
 
 export default function Navbar() {
-  const location = useLocation();
+  const { pathname } = useLocation()
+  const link = ({ isActive }) =>
+    `px-3 py-2 rounded-md text-sm font-medium ${
+      isActive ? 'text-blue-700 underline' : 'text-gray-700 hover:text-blue-700'
+    }`
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <span className="text-2xl">🚌</span>
-          <h1 className="text-xl font-bold text-blue-700">InoveQuatai</h1>
-        </div>
+    <nav className="bg-white sticky top-0 z-20 shadow-sm">
+      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2 text-2xl font-semibold">
+          <span role="img" aria-label="bus">🚌</span>
+          <span>InoveQuatai</span>
+        </Link>
 
-        <div className="flex items-center space-x-6 text-gray-700 font-medium">
-          <Link
-            to="/"
-            className={`hover:text-blue-600 ${
-              location.pathname === "/" ? "text-blue-700 underline" : ""
-            }`}
-          >
-            Início
-          </Link>
-          <Link
-            to="/solicitar"
-            className={`hover:text-blue-600 ${
-              location.pathname === "/solicitar" ? "text-blue-700 underline" : ""
-            }`}
-          >
-            Solicitar Tratativa
-          </Link>
-          <Link
-            to="/central"
-            className={`hover:text-blue-600 ${
-              location.pathname === "/central" ? "text-blue-700 underline" : ""
-            }`}
-          >
-            Central de Tratativas
-          </Link>
+        <div className="flex items-center gap-4">
+          <NavLink to="/" className={link} end>Início</NavLink>
+          <NavLink to="/solicitar" className={link}>Solicitar Tratativa</NavLink>
+          <NavLink to="/central" className={link}>Central de Tratativas</NavLink>
         </div>
       </div>
+      {/* linha fina para separar quando há navbar fixa */}
+      <div className="h-px w-full bg-gray-100" />
     </nav>
-  );
+  )
 }
