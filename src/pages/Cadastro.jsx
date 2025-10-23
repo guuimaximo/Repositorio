@@ -12,9 +12,6 @@ export default function Cadastro() {
 
   const handleCadastro = async (e) => {
     e.preventDefault();
-    setErro("");
-    setMensagem("");
-
     if (senha !== confirmarSenha) {
       setErro("As senhas não coincidem.");
       return;
@@ -34,10 +31,8 @@ export default function Cadastro() {
     if (error) {
       setErro(error.message);
     } else {
-      setMensagem(
-        "✅ Conta criada com sucesso! Verifique seu e-mail para confirmar."
-      );
-      setTimeout(() => navigate("/login"), 4000);
+      setMensagem("✅ Conta criada! Verifique seu e-mail.");
+      setTimeout(() => navigate("/login"), 3000);
     }
   };
 
@@ -62,7 +57,6 @@ export default function Cadastro() {
           </div>
         )}
 
-        <label className="text-sm font-medium text-gray-700">E-mail</label>
         <input
           type="email"
           placeholder="seuemail@exemplo.com"
@@ -72,7 +66,6 @@ export default function Cadastro() {
           required
         />
 
-        <label className="text-sm font-medium text-gray-700">Senha</label>
         <input
           type="password"
           placeholder="Digite sua senha"
@@ -82,9 +75,6 @@ export default function Cadastro() {
           required
         />
 
-        <label className="text-sm font-medium text-gray-700">
-          Confirmar Senha
-        </label>
         <input
           type="password"
           placeholder="Confirme sua senha"
