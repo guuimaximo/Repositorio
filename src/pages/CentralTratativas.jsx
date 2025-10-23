@@ -22,8 +22,8 @@ export default function CentralTratativas() {
     }
     if (filtros.setor) query = query.eq('setor_origem', filtros.setor)
     if (filtros.status) query = query.eq('status', filtros.status)
-    if (filtros.dataInicio) query = query.gte('data_ocorrida', filtros.dataInicio)
-    if (filtros.dataFim) query = query.lte('data_ocorrida', filtros.dataFim)
+    if (filtros.dataInicio) query = query.gte('data_ocorrido', filtros.dataInicio)
+    if (filtros.dataFim) query = query.lte('data_ocorrido', filtros.dataFim)
 
     const { data, error } = await query.order('id', { ascending: false })
     if (!error) setTratativas(data || [])
