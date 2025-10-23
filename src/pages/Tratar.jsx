@@ -1,101 +1,156 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../supabase'
+// src/pages/Tratar.jsx
+import React, { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
+import { supabase } from '../supabase'
+import { useNavigate, useParams } from 'react-router-dom'
 
 export default function Tratar() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [tratativa, setTratativa] = useState(null)
-  const [tiposAcao, setTiposAcao] = useState([])
+  const [acoes, setAcoes] = useState([])
   const [tipoAcao, setTipoAcao] = useState('')
   const [observacao, setObservacao] = useState('')
-  const [imagemTratativa, setImagemTratativa] = useState(null)
+  const [arquivo, setArquivo] = useState(null)
+  const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    buscarTratativa()
-    buscarTiposAcao()
-  }, [])
+    (async () => {
+      const [{ data: t }, { data: a }] = await Promise.all([
+        supabase.from('tratativas').select('*').eq('id', id).single(),
+        supabase.from('tipos_acao').select('nome').order('nome')
+      ])
+      setTratativa(t || null)
+      setAcoes(a || [])
+    })()
+  }, [id])
 
-  async function buscarTratativa() {
-    const { data } = await supabase.from('tratativas').select('*').eq('id', id).single()
-    setTratativa(data)
+  async function uploadFotoTratativa() {
+    if (!arquivo) return { publicUrl: null }
+    const ext = arquivo.name.split('.').pop()
+    const path = `tratadas/${id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('tratativas').upload(path, arquivo, {
+      cacheControl: '3600',
+      upsert: true
+    })
+    if (upErr) return { error: upErr }
+    const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path)
+    return { publicUrl: pub?.publicUrl || null }
   }
 
-  async function buscarTiposAcao() {
-    const { data } = await supabase.from('tipos_acao').select('*')
-    setTiposAcao(data || [])
-  }
-
-  async function handleSalvar(e) {
+  async function salvar(e) {
     e.preventDefault()
-
-    let imagemUrl = tratativa.imagem_tratativa
-    if (imagemTratativa) {
-      const { data: upload } = await supabase.storage.from('tratativas').upload(`tratadas/${id}-${Date.now()}.jpg`, imagemTratativa, { upsert: true })
-      imagemUrl = `${supabase.storageUrl}/object/public/tratativas/${upload.path}`
+    if (!tipoAcao) {
+      alert('Selecione o tipo de ação.')
+      return
     }
-
-    const { error } = await supabase
-      .from('tratativas')
-      .update({
+    setSalvando(true)
+    try {
+      let imagem_tratativa = tratativa?.imagem_tratativa || null
+      if (arquivo) {
+        const up = await uploadFotoTratativa()
+        if (up.error) throw up.error
+        imagem_tratativa = up.publicUrl
+      }
+      const payload = {
         tipo_acao: tipoAcao,
-        descricao: observacao,
-        imagem_tratativa: imagemUrl,
-        status: 'Resolvido',
-      })
-      .eq('id', id)
-
-    if (error) alert('❌ Erro ao salvar: ' + error.message)
-    else {
-      alert('✅ Tratativa encerrada com sucesso!')
+        descricao: observacao || tratativa?.descricao || null,
+        imagem_tratativa,
+        status: 'Resolvido'
+      }
+      const { error } = await supabase.from('tratativas').update(payload).eq('id', id)
+      if (error) throw error
+      alert('✅ Tratativa resolvida com sucesso!')
       navigate('/central')
+    } catch (err) {
+      console.error(err)
+      alert('❌ Erro ao salvar: ' + err.message)
+    } finally {
+      setSalvando(false)
     }
   }
 
-  if (!tratativa) return <p className="p-6">Carregando...</p>
+  if (!tratativa) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="max-w-4xl mx-auto p-6">Carregando...</div>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <h1 className="text-2xl font-bold mb-4">Tratar Ocorrência</h1>
+      <div className="max-w-5xl mx-auto p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold text-gray-800">Tratar Ocorrência</h1>
+          <button onClick={() => navigate('/central')} className="px-4 py-2 rounded bg-gray-200">Voltar</button>
+        </div>
 
-      <div className="bg-white p-6 rounded shadow mb-6">
-        <p><b>Motorista:</b> {tratativa.motorista_nome}</p>
-        <p><b>Ocorrência:</b> {tratativa.tipo_ocorrencia}</p>
-        <p><b>Data:</b> {tratativa.data_ocorrido} — <b>Hora:</b> {tratativa.hora_ocorrido}</p>
-        <p><b>Setor:</b> {tratativa.setor_origem}</p>
-        <p><b>Status:</b> {tratativa.status}</p>
+        <div className="bg-white p-6 rounded shadow mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <p><b>Motorista:</b> {tratativa.motorista_nome} — <span className="text-gray-600">{tratativa.motorista_chapa}</span></p>
+          <p><b>Ocorrência:</b> {tratativa.tipo_ocorrencia}</p>
+          <p><b>Setor:</b> {tratativa.setor_origem}</p>
+          <p><b>Status:</b> {tratativa.status}</p>
+          <p><b>Data/Hora:</b> {tratativa.data_ocorrido || '-'} {tratativa.hora_ocorrido ? `— ${tratativa.hora_ocorrido}` : ''}</p>
+          <p><b>Linha / Prefixo:</b> {tratativa.linha || '-'} {tratativa.prefixo ? `— ${tratativa.prefixo}` : ''}</p>
+
+          {tratativa.imagem_solicitacao && (
+            <div className="md:col-span-2">
+              <b>Evidência inicial:</b><br />
+              <img src={tratativa.imagem_solicitacao} alt="Evidência" className="mt-2 max-h-48 rounded border" />
+            </div>
+          )}
+
+          {tratativa.imagem_tratativa && (
+            <div className="md:col-span-2">
+              <b>Foto tratativa (atual):</b><br />
+              <img src={tratativa.imagem_tratativa} alt="Tratativa" className="mt-2 max-h-48 rounded border" />
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={salvar} className="bg-white p-6 rounded shadow grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Tipo de Ação</label>
+            <select
+              className="w-full border rounded p-2"
+              value={tipoAcao}
+              onChange={(e) => setTipoAcao(e.target.value)}
+            >
+              <option value="">Selecione...</option>
+              {acoes.map((a) => (
+                <option key={a.nome} value={a.nome}>{a.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Foto/Assinatura do colaborador</label>
+            <input type="file" accept="image/*" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Observações / Descrição</label>
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+            />
+          </div>
+
+          <div className="md:col-span-2 flex justify-between">
+            <button type="button" onClick={() => navigate('/central')} className="px-4 py-2 rounded bg-gray-200">
+              Voltar
+            </button>
+            <button disabled={salvando} className="px-5 py-2 rounded bg-green-600 text-white">
+              {salvando ? 'Salvando...' : 'Salvar e marcar como Resolvido'}
+            </button>
+          </div>
+        </form>
       </div>
-
-      <form onSubmit={handleSalvar} className="bg-white p-6 rounded shadow grid grid-cols-2 gap-4">
-        <div>
-          <label>Tipo de Ação</label>
-          <select value={tipoAcao} onChange={(e) => setTipoAcao(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {tiposAcao.map(a => <option key={a.id} value={a.nome}>{a.nome}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label>Foto / Assinatura</label>
-          <input type="file" accept="image/*" onChange={(e) => setImagemTratativa(e.target.files[0])} />
-        </div>
-
-        <div className="col-span-2">
-          <label>Observações</label>
-          <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
-
-        <div className="col-span-2 flex justify-between">
-          <button type="button" onClick={() => navigate('/central')} className="bg-gray-400 text-white px-6 py-2 rounded">
-            Voltar
-          </button>
-          <button className="bg-green-600 text-white px-6 py-2 rounded">
-            Salvar Tratativa
-          </button>
-        </div>
-      </form>
     </div>
   )
 }
