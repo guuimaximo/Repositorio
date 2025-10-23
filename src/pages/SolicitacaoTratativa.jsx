@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import Navbar from '../components/Navbar'
 
 export default function SolicitacaoTratativa() {
   const [motoristas, setMotoristas] = useState([])
