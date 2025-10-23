@@ -1,165 +1,229 @@
-import React, { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+// src/pages/SolicitacaoTratativa.jsx
+import React, { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
+import CampoMotorista from '../components/CampoMotorista'
+import { supabase } from '../supabase'
+import { useNavigate } from 'react-router-dom'
 
 export default function SolicitacaoTratativa() {
-  const [motoristas, setMotoristas] = useState([])
+  const navigate = useNavigate()
   const [linhas, setLinhas] = useState([])
-  const [setores, setSetores] = useState([])
   const [prefixos, setPrefixos] = useState([])
-  const [tiposOcorrencia, setTiposOcorrencia] = useState([])
+  const [setores, setSetores] = useState([])
+  const [tipos, setTipos] = useState([])
 
-  const [chapa, setChapa] = useState('')
-  const [nome, setNome] = useState('')
-  const [tipoOcorrencia, setTipoOcorrencia] = useState('')
-  const [dataOcorrido, setDataOcorrido] = useState('')
-  const [horaOcorrido, setHoraOcorrido] = useState('')
-  const [prioridade, setPrioridade] = useState('Média')
-  const [setor, setSetor] = useState('')
-  const [linha, setLinha] = useState('')
-  const [prefixo, setPrefixo] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [imagem, setImagem] = useState(null)
+  const [form, setForm] = useState({
+    motorista_chapa: '',
+    motorista_nome: '',
+    tipo_ocorrencia: '',
+    setor_origem: '',
+    linha: '',
+    prefixo: '',
+    prioridade: 'Média',
+    data_ocorrido: '',
+    hora_ocorrido: '',
+    descricao: ''
+  })
+  const [arquivo, setArquivo] = useState(null)
+  const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    buscarAuxiliares()
+    (async () => {
+      const [l1, p1, s1, t1] = await Promise.all([
+        supabase.from('linhas').select('codigo').order('codigo'),
+        supabase.from('prefixos').select('codigo').order('codigo'),
+        supabase.from('setores').select('nome').order('nome'),
+        supabase.from('tipos_ocorrencia').select('nome').order('nome')
+      ])
+      setLinhas(l1.data || [])
+      setPrefixos(p1.data || [])
+      setSetores(s1.data || [])
+      setTipos(t1.data || [])
+    })()
   }, [])
 
-  async function buscarAuxiliares() {
-    const [mot, lin, set, pre, tipo] = await Promise.all([
-      supabase.from('motoristas').select('*'),
-      supabase.from('linhas').select('*'),
-      supabase.from('setores').select('*'),
-      supabase.from('prefixos').select('*'),
-      supabase.from('tipos_ocorrencia').select('*')
-    ])
-    setMotoristas(mot.data || [])
-    setLinhas(lin.data || [])
-    setSetores(set.data || [])
-    setPrefixos(pre.data || [])
-    setTiposOcorrencia(tipo.data || [])
+  function update(k, v) {
+    setForm((f) => ({ ...f, [k]: v }))
   }
 
-  const handleChapaChange = (e) => {
-    const value = e.target.value
-    setChapa(value)
-    const m = motoristas.find(m => m.chapa === value)
-    if (m) setNome(m.nome)
+  async function uploadEvidenciaInicial() {
+    if (!arquivo) return { publicUrl: null }
+    const ext = arquivo.name.split('.').pop()
+    const path = `solicitacoes/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('tratativas').upload(path, arquivo, {
+      cacheControl: '3600',
+      upsert: true
+    })
+    if (upErr) return { error: upErr }
+    const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path)
+    return { publicUrl: pub?.publicUrl || null }
   }
 
-  const handleNomeChange = (e) => {
-    const value = e.target.value.toLowerCase()
-    setNome(value)
-    const m = motoristas.find(m => m.nome.toLowerCase() === value)
-    if (m) setChapa(m.chapa)
-  }
-
-  const handleSubmit = async (e) => {
+  async function onSubmit(e) {
     e.preventDefault()
-
-    let imagemUrl = null
-    if (imagem) {
-      const { data: upload, error: upError } = await supabase.storage
-        .from('tratativas')
-        .upload(`solicitacoes/${Date.now()}-${imagem.name}`, imagem, { upsert: true })
-
-      if (!upError) {
-        imagemUrl = `${supabase.storageUrl}/object/public/tratativas/${upload.path}`
+    if (!form.motorista_chapa || !form.motorista_nome) {
+      alert('Selecione um motorista (nome ou chapa).')
+      return
+    }
+    if (!form.tipo_ocorrencia) {
+      alert('Selecione o tipo de ocorrência.')
+      return
+    }
+    setSalvando(true)
+    try {
+      let imagem_solicitacao = null
+      if (arquivo) {
+        const up = await uploadEvidenciaInicial()
+        if (up.error) throw up.error
+        imagem_solicitacao = up.publicUrl
       }
+      const payload = {
+        ...form,
+        status: 'Pendente',
+        imagem_solicitacao,
+        // retrocompatibilidade (se existir coluna antiga)
+        imagem_url: imagem_solicitacao ?? null
+      }
+      const { error } = await supabase.from('tratativas').insert([payload])
+      if (error) throw error
+      alert('✅ Tratativa criada com sucesso!')
+      navigate('/central')
+    } catch (err) {
+      console.error(err)
+      alert('❌ Erro ao salvar: ' + err.message)
+    } finally {
+      setSalvando(false)
     }
-
-    const novaTratativa = {
-      motorista_id: chapa,
-      motorista_nome: nome,
-      tipo_ocorrencia: tipoOcorrencia,
-      data_ocorrido: dataOcorrido,
-      hora_ocorrido: horaOcorrido,
-      prioridade,
-      setor_origem: setor,
-      linha,
-      prefixo,
-      descricao,
-      imagem_url: imagemUrl,
-      status: 'Pendente'
-    }
-
-    const { error } = await supabase.from('tratativas').insert([novaTratativa])
-    if (error) alert('❌ Erro ao criar tratativa: ' + error.message)
-    else alert('✅ Tratativa criada com sucesso!')
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Nova Solicitação de Tratativa</h1>
+      <div className="max-w-5xl mx-auto p-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Nova Solicitação de Tratativa</h1>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 bg-white p-6 rounded shadow">
-        <div>
-          <label>Chapa</label>
-          <input value={chapa} onChange={handleChapaChange} className="border rounded p-2 w-full" />
-        </div>
+        <form onSubmit={onSubmit} className="bg-white p-6 rounded shadow grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CampoMotorista
+            onSelect={(m) => {
+              update('motorista_chapa', m.chapa)
+              update('motorista_nome', m.nome)
+            }}
+          />
 
-        <div>
-          <label>Motorista</label>
-          <input value={nome} onChange={handleNomeChange} className="border rounded p-2 w-full" />
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Tipo de Ocorrência</label>
+            <select
+              className="w-full border rounded p-2"
+              value={form.tipo_ocorrencia}
+              onChange={(e) => update('tipo_ocorrencia', e.target.value)}
+            >
+              <option value="">Selecione...</option>
+              {tipos.map((t) => (
+                <option key={t.nome} value={t.nome}>{t.nome}</option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label>Data do ocorrido</label>
-          <input type="date" value={dataOcorrido} onChange={(e) => setDataOcorrido(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Setor de Origem</label>
+            <select
+              className="w-full border rounded p-2"
+              value={form.setor_origem}
+              onChange={(e) => update('setor_origem', e.target.value)}
+            >
+              <option value="">Selecione...</option>
+              {setores.map((s) => (
+                <option key={s.nome} value={s.nome}>{s.nome}</option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label>Hora do ocorrido</label>
-          <input type="time" value={horaOcorrido} onChange={(e) => setHoraOcorrido(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Prioridade</label>
+            <select
+              className="w-full border rounded p-2"
+              value={form.prioridade}
+              onChange={(e) => update('prioridade', e.target.value)}
+            >
+              <option>Baixa</option>
+              <option>Média</option>
+              <option>Alta</option>
+            </select>
+          </div>
 
-        <div>
-          <label>Tipo de Ocorrência</label>
-          <select value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {tiposOcorrencia.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Linha</label>
+            <select
+              className="w-full border rounded p-2"
+              value={form.linha}
+              onChange={(e) => update('linha', e.target.value)}
+            >
+              <option value="">Selecione...</option>
+              {linhas.map((l) => (
+                <option key={l.codigo} value={l.codigo}>{l.codigo}</option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label>Setor</label>
-          <select value={setor} onChange={(e) => setSetor(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {setores.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Prefixo</label>
+            <select
+              className="w-full border rounded p-2"
+              value={form.prefixo}
+              onChange={(e) => update('prefixo', e.target.value)}
+            >
+              <option value="">Selecione...</option>
+              {prefixos.map((p) => (
+                <option key={p.codigo} value={p.codigo}>{p.codigo}</option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label>Linha</label>
-          <select value={linha} onChange={(e) => setLinha(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {linhas.map(l => <option key={l.id} value={l.codigo}>{l.codigo}</option>)}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Data do ocorrido</label>
+            <input
+              type="date"
+              className="w-full border rounded p-2"
+              value={form.data_ocorrido}
+              onChange={(e) => update('data_ocorrido', e.target.value)}
+            />
+          </div>
 
-        <div>
-          <label>Prefixo</label>
-          <select value={prefixo} onChange={(e) => setPrefixo(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {prefixos.map(p => <option key={p.id} value={p.codigo}>{p.codigo}</option>)}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Hora do ocorrido</label>
+            <input
+              type="time"
+              className="w-full border rounded p-2"
+              value={form.hora_ocorrido}
+              onChange={(e) => update('hora_ocorrido', e.target.value)}
+            />
+          </div>
 
-        <div className="col-span-2">
-          <label>Descrição</label>
-          <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Descrição</label>
+            <textarea
+              className="w-full border rounded p-2"
+              rows={3}
+              value={form.descricao}
+              onChange={(e) => update('descricao', e.target.value)}
+            />
+          </div>
 
-        <div className="col-span-2">
-          <label>Imagem / Evidência</label>
-          <input type="file" accept="image/*" onChange={(e) => setImagem(e.target.files[0])} />
-        </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Evidência (foto/print)</label>
+            <input type="file" accept="image/*" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+          </div>
 
-        <div className="col-span-2">
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">Salvar</button>
-        </div>
-      </form>
+          <div className="md:col-span-2 flex gap-3 justify-between">
+            <button type="button" onClick={() => navigate('/')} className="px-4 py-2 rounded bg-gray-200">
+              Voltar
+            </button>
+            <button disabled={salvando} className="px-5 py-2 rounded bg-blue-600 text-white">
+              {salvando ? 'Salvando...' : 'Criar tratativa'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
