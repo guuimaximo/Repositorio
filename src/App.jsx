@@ -1,30 +1,29 @@
-import React from "react";
-import { Routes, Route } from "react-router-dom";
-
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Login from "./pages/Login";
+import Cadastro from "./pages/Cadastro";
 import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
-import SolicitacaoTratativa from "./pages/SolicitacaoTratativa"; // ✅ Nome certo
-import Home from "./pages/Login"; // se o login for a página inicial
+import SolicitarTratativa from "./pages/SolicitacaoTratativa";
+import Navbar from "./components/Navbar";
 
-export default function App() {
+function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/central" element={<CentralTratativas />} />
-      <Route path="/solicitar" element={<SolicitacaoTratativa />} /> {/* ✅ */}
-      <Route path="/tratar/:id" element={<TratarTratativa />} />
-      <Route path="/consultar/:id" element={<ConsultarTratativa />} />
-      <Route
-        path="*"
-        element={
-          <div className="min-h-screen flex items-center justify-center text-gray-600">
-            Página não encontrada 🚧
-          </div>
-        }
-      />
-    </Routes>
+    <Router>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Cadastro />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/central" element={<CentralTratativas />} />
+        <Route path="/tratar/:id" element={<TratarTratativa />} />
+        <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+        <Route path="/solicitar" element={<SolicitarTratativa />} />
+      </Routes>
+    </Router>
   );
 }
+
+export default App;
