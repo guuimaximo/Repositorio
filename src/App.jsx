@@ -7,7 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
-import SolicitarTratativa from "./pages/SolicitarTratativa";
+import SolicitarTratativa from "./pages/SolicitacaoTratativa";
 import Home from "./pages/Home"; // caso ainda exista a tela inicial
 
 // 🚀 Estrutura principal de rotas
