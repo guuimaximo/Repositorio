@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import SolicitacaoTratativa from './pages/SolicitacaoTratativa'
 import CentralResolucao from './pages/CentralResolucao'
 import Tratativas from './pages/Tratativas'
+import Tratar from './pages/Tratar.jsx'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/central" element={<CentralResolucao />} />
       <Route path="/tratativas" element={<Tratativas />} />
       <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/tratar/:id" element={<Tratar />} />
     </Routes>
   )
 }
