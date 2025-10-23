@@ -7,6 +7,7 @@ import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa"; // ✅ Nome certo
 import Home from "./pages/Login"; // se o login for a página inicial
+import Cadastro from "./pages/Cadastro";
 
 export default function App() {
   return (
@@ -17,6 +18,8 @@ export default function App() {
       <Route path="/solicitar" element={<SolicitacaoTratativa />} /> {/* ✅ */}
       <Route path="/tratar/:id" element={<TratarTratativa />} />
       <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/cadastro" element={<Cadastro />} />
       <Route
         path="*"
         element={
