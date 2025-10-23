@@ -1,196 +1,120 @@
-import React, { useState } from "react";
-import { supabase } from "../supabase";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from 'react'
+import { supabase } from '../supabase'
+import Navbar from '../components/Navbar'
 
 export default function SolicitacaoTratativa() {
-  const navigate = useNavigate();
+  const [motoristas, setMotoristas] = useState([])
+  const [chapa, setChapa] = useState('')
+  const [nome, setNome] = useState('')
+  const [tipoOcorrencia, setTipoOcorrencia] = useState('')
+  const [dataOcorrido, setDataOcorrido] = useState('')
+  const [horaOcorrido, setHoraOcorrido] = useState('')
+  const [prioridade, setPrioridade] = useState('Média')
+  const [setor, setSetor] = useState('')
+  const [linha, setLinha] = useState('')
+  const [prefixo, setPrefixo] = useState('')
+  const [descricao, setDescricao] = useState('')
 
-  const [motorista, setMotorista] = useState("");
-  const [tipoOcorrencia, setTipoOcorrencia] = useState("");
-  const [prioridade, setPrioridade] = useState("Média");
-  const [descricao, setDescricao] = useState("");
-  const [setorOrigem, setSetorOrigem] = useState("Operação");
-  const [imagem, setImagem] = useState(null);
-  const [mensagem, setMensagem] = useState("");
-  const [carregando, setCarregando] = useState(false);
+  useEffect(() => {
+    buscarMotoristas()
+  }, [])
 
-  // Função de upload de imagem para o Storage do Supabase
-  const uploadImagem = async (file) => {
-    try {
-      const fileName = `${Date.now()}_${file.name}`;
-      const { data, error } = await supabase.storage
-        .from("tratativas")
-        .upload(fileName, file);
+  async function buscarMotoristas() {
+    const { data } = await supabase.from('motoristas').select('*')
+    setMotoristas(data || [])
+  }
 
-      if (error) throw error;
+  const handleChapaChange = (e) => {
+    const value = e.target.value
+    setChapa(value)
+    const m = motoristas.find(m => m.chapa === value)
+    if (m) setNome(m.nome)
+  }
 
-      const { data: urlData } = supabase.storage
-        .from("tratativas")
-        .getPublicUrl(fileName);
+  const handleNomeChange = (e) => {
+    const value = e.target.value.toLowerCase()
+    setNome(value)
+    const m = motoristas.find(m => m.nome.toLowerCase() === value)
+    if (m) setChapa(m.chapa)
+  }
 
-      return urlData.publicUrl;
-    } catch (err) {
-      console.error("Erro no upload da imagem:", err.message);
-      return null;
-    }
-  };
-
-  // Função principal de envio
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setCarregando(true);
-    setMensagem("");
+    e.preventDefault()
 
-    try {
-      let imagemUrl = null;
-
-      if (imagem) {
-        imagemUrl = await uploadImagem(imagem);
-      }
-
-      const { data, error } = await supabase.from("tratativas").insert([
-        {
-          motorista_id: motorista,
-          tipo_ocorrencia: tipoOcorrencia,
-          prioridade: prioridade,
-          descricao: descricao,
-          imagem_url: imagemUrl,
-          setor_origem: setorOrigem,
-          status: "Pendente",
-          responsavel: "-",
-          created_by_email: "admin@grupocsc.com.br",
-        },
-      ]);
-
-      if (error) throw error;
-
-      setMensagem("✅ Tratativa registrada com sucesso!");
-      setMotorista("");
-      setTipoOcorrencia("");
-      setDescricao("");
-      setImagem(null);
-
-      setTimeout(() => navigate("/"), 2000); // volta para home
-    } catch (err) {
-      console.error("Erro ao criar tratativa:", err.message);
-      setMensagem("❌ Erro ao criar tratativa. Verifique os campos.");
-    } finally {
-      setCarregando(false);
+    const novaTratativa = {
+      motorista_id: chapa,
+      motorista_nome: nome,
+      tipo_ocorrencia: tipoOcorrencia,
+      data_ocorrido: dataOcorrido,
+      hora_ocorrido: horaOcorrido,
+      prioridade,
+      setor_origem: setor,
+      linha,
+      prefixo,
+      descricao,
+      status: 'Pendente'
     }
-  };
+
+    const { error } = await supabase.from('tratativas').insert([novaTratativa])
+    if (error) alert('❌ Erro ao criar tratativa: ' + error.message)
+    else alert('✅ Tratativa criada com sucesso!')
+  }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-md mt-10">
-      <h2 className="text-2xl font-bold mb-6 text-center text-blue-700">
-        📝 Solicitação de Tratativa
-      </h2>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <Navbar />
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">Nova Solicitação de Tratativa</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 bg-white p-6 rounded shadow">
         <div>
-          <label className="block font-medium mb-1">Motorista (crachá)</label>
-          <input
-            type="text"
-            value={motorista}
-            onChange={(e) => setMotorista(e.target.value)}
-            className="w-full border rounded p-2"
-            required
-          />
+          <label>Chapa</label>
+          <input value={chapa} onChange={handleChapaChange} className="border rounded p-2 w-full" />
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Tipo de Ocorrência</label>
-          <select
-            value={tipoOcorrencia}
-            onChange={(e) => setTipoOcorrencia(e.target.value)}
-            className="w-full border rounded p-2"
-            required
-          >
-            <option value="">Selecione</option>
-            <option value="Excesso de Velocidade">Excesso de Velocidade</option>
-            <option value="Uso de Celular">Uso de Celular</option>
-            <option value="Avaria">Avaria</option>
-            <option value="Outros">Outros</option>
-          </select>
+          <label>Motorista</label>
+          <input value={nome} onChange={handleNomeChange} className="border rounded p-2 w-full" />
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Prioridade</label>
-          <select
-            value={prioridade}
-            onChange={(e) => setPrioridade(e.target.value)}
-            className="w-full border rounded p-2"
-            required
-          >
-            <option value="Baixa">Baixa</option>
-            <option value="Média">Média</option>
-            <option value="Alta">Alta</option>
-          </select>
+          <label>Data do ocorrido</label>
+          <input type="date" value={dataOcorrido} onChange={(e) => setDataOcorrido(e.target.value)} className="border rounded p-2 w-full" />
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Setor de Origem</label>
-          <select
-            value={setorOrigem}
-            onChange={(e) => setSetorOrigem(e.target.value)}
-            className="w-full border rounded p-2"
-            required
-          >
-            <option value="Operação">Operação</option>
-            <option value="Manutenção">Manutenção</option>
-            <option value="Telemetria">Telemetria</option>
-          </select>
+          <label>Hora do ocorrido</label>
+          <input type="time" value={horaOcorrido} onChange={(e) => setHoraOcorrido(e.target.value)} className="border rounded p-2 w-full" />
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Descrição</label>
-          <textarea
-            value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
-            className="w-full border rounded p-2"
-            rows="3"
-            required
-          ></textarea>
+          <label>Tipo de Ocorrência</label>
+          <input value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} className="border rounded p-2 w-full" />
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Imagem (opcional)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setImagem(e.target.files[0])}
-            className="w-full"
-          />
+          <label>Setor</label>
+          <input value={setor} onChange={(e) => setSetor(e.target.value)} className="border rounded p-2 w-full" />
         </div>
 
-        <button
-          type="submit"
-          disabled={carregando}
-          className={`w-full py-2 text-white font-semibold rounded ${
-            carregando
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
-        >
-          {carregando ? "Enviando..." : "Enviar Tratativa"}
-        </button>
+        <div>
+          <label>Linha</label>
+          <input value={linha} onChange={(e) => setLinha(e.target.value)} className="border rounded p-2 w-full" />
+        </div>
 
-        {mensagem && (
-          <p
-            className={`text-center font-medium ${
-              mensagem.startsWith("✅") ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {mensagem}
-          </p>
-        )}
+        <div>
+          <label>Prefixo</label>
+          <input value={prefixo} onChange={(e) => setPrefixo(e.target.value)} className="border rounded p-2 w-full" />
+        </div>
+
+        <div className="col-span-2">
+          <label>Descrição</label>
+          <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="border rounded p-2 w-full" />
+        </div>
+
+        <div className="col-span-2">
+          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">Salvar</button>
+        </div>
       </form>
-
-      <button
-        onClick={() => navigate("/")}
-        className="mt-6 text-blue-600 hover:underline text-sm"
-      >
-        ← Voltar para Início
-      </button>
     </div>
-  );
+  )
 }
