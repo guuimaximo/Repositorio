@@ -4,6 +4,11 @@ import Navbar from '../components/Navbar'
 
 export default function SolicitacaoTratativa() {
   const [motoristas, setMotoristas] = useState([])
+  const [linhas, setLinhas] = useState([])
+  const [setores, setSetores] = useState([])
+  const [prefixos, setPrefixos] = useState([])
+  const [tiposOcorrencia, setTiposOcorrencia] = useState([])
+
   const [chapa, setChapa] = useState('')
   const [nome, setNome] = useState('')
   const [tipoOcorrencia, setTipoOcorrencia] = useState('')
@@ -14,14 +19,25 @@ export default function SolicitacaoTratativa() {
   const [linha, setLinha] = useState('')
   const [prefixo, setPrefixo] = useState('')
   const [descricao, setDescricao] = useState('')
+  const [imagem, setImagem] = useState(null)
 
   useEffect(() => {
-    buscarMotoristas()
+    buscarAuxiliares()
   }, [])
 
-  async function buscarMotoristas() {
-    const { data } = await supabase.from('motoristas').select('*')
-    setMotoristas(data || [])
+  async function buscarAuxiliares() {
+    const [mot, lin, set, pre, tipo] = await Promise.all([
+      supabase.from('motoristas').select('*'),
+      supabase.from('linhas').select('*'),
+      supabase.from('setores').select('*'),
+      supabase.from('prefixos').select('*'),
+      supabase.from('tipos_ocorrencia').select('*')
+    ])
+    setMotoristas(mot.data || [])
+    setLinhas(lin.data || [])
+    setSetores(set.data || [])
+    setPrefixos(pre.data || [])
+    setTiposOcorrencia(tipo.data || [])
   }
 
   const handleChapaChange = (e) => {
@@ -41,6 +57,17 @@ export default function SolicitacaoTratativa() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    let imagemUrl = null
+    if (imagem) {
+      const { data: upload, error: upError } = await supabase.storage
+        .from('tratativas')
+        .upload(`solicitacoes/${Date.now()}-${imagem.name}`, imagem, { upsert: true })
+
+      if (!upError) {
+        imagemUrl = `${supabase.storageUrl}/object/public/tratativas/${upload.path}`
+      }
+    }
+
     const novaTratativa = {
       motorista_id: chapa,
       motorista_nome: nome,
@@ -52,6 +79,7 @@ export default function SolicitacaoTratativa() {
       linha,
       prefixo,
       descricao,
+      imagem_url: imagemUrl,
       status: 'Pendente'
     }
 
@@ -88,27 +116,44 @@ export default function SolicitacaoTratativa() {
 
         <div>
           <label>Tipo de Ocorrência</label>
-          <input value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} className="border rounded p-2 w-full" />
+          <select value={tipoOcorrencia} onChange={(e) => setTipoOcorrencia(e.target.value)} className="border rounded p-2 w-full">
+            <option value="">Selecione...</option>
+            {tiposOcorrencia.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+          </select>
         </div>
 
         <div>
           <label>Setor</label>
-          <input value={setor} onChange={(e) => setSetor(e.target.value)} className="border rounded p-2 w-full" />
+          <select value={setor} onChange={(e) => setSetor(e.target.value)} className="border rounded p-2 w-full">
+            <option value="">Selecione...</option>
+            {setores.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+          </select>
         </div>
 
         <div>
           <label>Linha</label>
-          <input value={linha} onChange={(e) => setLinha(e.target.value)} className="border rounded p-2 w-full" />
+          <select value={linha} onChange={(e) => setLinha(e.target.value)} className="border rounded p-2 w-full">
+            <option value="">Selecione...</option>
+            {linhas.map(l => <option key={l.id} value={l.codigo}>{l.codigo}</option>)}
+          </select>
         </div>
 
         <div>
           <label>Prefixo</label>
-          <input value={prefixo} onChange={(e) => setPrefixo(e.target.value)} className="border rounded p-2 w-full" />
+          <select value={prefixo} onChange={(e) => setPrefixo(e.target.value)} className="border rounded p-2 w-full">
+            <option value="">Selecione...</option>
+            {prefixos.map(p => <option key={p.id} value={p.codigo}>{p.codigo}</option>)}
+          </select>
         </div>
 
         <div className="col-span-2">
           <label>Descrição</label>
           <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="border rounded p-2 w-full" />
+        </div>
+
+        <div className="col-span-2">
+          <label>Imagem / Evidência</label>
+          <input type="file" accept="image/*" onChange={(e) => setImagem(e.target.files[0])} />
         </div>
 
         <div className="col-span-2">
