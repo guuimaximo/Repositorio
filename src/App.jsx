@@ -1,38 +1,22 @@
-// src/App.jsx
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 
-// 🧭 Importação das páginas principais
 import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
-import SolicitarTratativa from "./pages/SolicitacaoTratativa";
-import Home from "./pages/Home"; // caso ainda exista a tela inicial
+import SolicitacaoTratativa from "./pages/SolicitacaoTratativa"; // ✅ Nome certo
+import Home from "./pages/Login"; // se o login for a página inicial
 
-// 🚀 Estrutura principal de rotas
 export default function App() {
   return (
     <Routes>
-      {/* Página inicial */}
       <Route path="/" element={<Home />} />
-
-      {/* Painel geral / dashboard */}
       <Route path="/dashboard" element={<Dashboard />} />
-
-      {/* Central de tratativas */}
       <Route path="/central" element={<CentralTratativas />} />
-
-      {/* Solicitar nova tratativa */}
-      <Route path="/solicitar" element={<SolicitarTratativa />} />
-
-      {/* Tratar tratativa existente */}
+      <Route path="/solicitar" element={<SolicitacaoTratativa />} /> {/* ✅ */}
       <Route path="/tratar/:id" element={<TratarTratativa />} />
-
-      {/* Consultar tratativa (modo leitura) */}
       <Route path="/consultar/:id" element={<ConsultarTratativa />} />
-
-      {/* Rota fallback */}
       <Route
         path="*"
         element={
