@@ -1,36 +1,44 @@
-import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
 
 export default function Navbar() {
-  const location = useLocation()
-
-  const isActive = (path) =>
-    location.pathname === path
-      ? 'text-quataiBlue font-semibold border-b-2 border-quataiBlue'
-      : 'text-gray-600 hover:text-quataiBlue'
+  const location = useLocation();
 
   return (
-    <nav className="bg-white shadow-md fixed top-0 left-0 w-full z-50">
-      <div className="max-w-7xl mx-auto flex items-center justify-between p-4">
-        <Link
-          to="/"
-          className="text-xl font-bold text-quataiBlue tracking-wide hover:opacity-80"
-        >
-          🚌 InoveQuatai
-        </Link>
+    <nav className="bg-white shadow-sm border-b border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <span className="text-2xl">🚌</span>
+          <h1 className="text-xl font-bold text-blue-700">InoveQuatai</h1>
+        </div>
 
-        <div className="flex space-x-6 text-sm">
-          <Link to="/" className={isActive('/')}>
+        <div className="flex items-center space-x-6 text-gray-700 font-medium">
+          <Link
+            to="/"
+            className={`hover:text-blue-600 ${
+              location.pathname === "/" ? "text-blue-700 underline" : ""
+            }`}
+          >
             Início
           </Link>
-          <Link to="/solicitacao" className={isActive('/solicitacao')}>
+          <Link
+            to="/solicitar"
+            className={`hover:text-blue-600 ${
+              location.pathname === "/solicitar" ? "text-blue-700 underline" : ""
+            }`}
+          >
             Solicitar Tratativa
           </Link>
-          <Link to="/central" className={isActive('/central')}>
+          <Link
+            to="/central"
+            className={`hover:text-blue-600 ${
+              location.pathname === "/central" ? "text-blue-700 underline" : ""
+            }`}
+          >
             Central de Tratativas
           </Link>
         </div>
       </div>
     </nav>
-  )
+  );
 }
