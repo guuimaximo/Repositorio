@@ -1,6 +1,5 @@
 // src/pages/SolicitacaoTratativa.jsx
 import React, { useEffect, useState } from 'react'
-import Navbar from '../components/Navbar'
 import CampoMotorista from '../components/CampoMotorista'
 import { supabase } from '../supabase'
 import { useNavigate } from 'react-router-dom'
