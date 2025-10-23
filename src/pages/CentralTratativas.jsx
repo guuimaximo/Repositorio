@@ -1,202 +1,160 @@
-// src/pages/CentralTratativas.jsx
-import React, { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { FaSyncAlt, FaSearch, FaFilter } from 'react-icons/fa'
+import { FaSync, FaSearch } from 'react-icons/fa'
 
 export default function CentralTratativas() {
-  const [tratativas, setTratativas] = useState([])
-  const [filtros, setFiltros] = useState({
-    busca: '',
-    motorista: '',
-    tipo_ocorrencia: '',
+  const nav = useNavigate()
+  const [lista, setLista] = useState([])
+  const [filtro, setFiltro] = useState({
+    q: '',
+    de: '',
+    ate: '',
     setor: '',
-    tipo_acao: '',
     status: '',
-    dataInicio: '',
-    dataFim: ''
   })
-  const [carregando, setCarregando] = useState(false)
 
-  useEffect(() => {
-    buscarTratativas()
-  }, [filtros])
-
-  async function buscarTratativas() {
-    setCarregando(true)
+  async function carregar() {
     let query = supabase.from('tratativas').select('*').order('created_at', { ascending: false })
 
-    if (filtros.busca) {
-      query = query.or(`motorista_nome.ilike.%${filtros.busca}%,motorista_chapa.ilike.%${filtros.busca}%,descricao.ilike.%${filtros.busca}%`)
+    if (filtro.q) {
+      // busca textual básica (nome, chapa, descricao)
+      query = query.ilike('motorista_nome', `%${filtro.q}%`)
+        .or(`motorista_chapa.ilike.%${filtro.q}%,descricao.ilike.%${filtro.q}%`)
     }
-    if (filtros.motorista) query = query.ilike('motorista_nome', `%${filtros.motorista}%`)
-    if (filtros.tipo_ocorrencia) query = query.eq('tipo_ocorrencia', filtros.tipo_ocorrencia)
-    if (filtros.setor) query = query.eq('setor_origem', filtros.setor)
-    if (filtros.tipo_acao) query = query.eq('tipo_acao', filtros.tipo_acao)
-    if (filtros.status) query = query.eq('status', filtros.status)
-    if (filtros.dataInicio && filtros.dataFim)
-      query = query.gte('data_ocorrido', filtros.dataInicio).lte('data_ocorrido', filtros.dataFim)
+    if (filtro.de) query = query.gte('created_at', `${filtro.de}T00:00:00`)
+    if (filtro.ate) query = query.lte('created_at', `${filtro.ate}T23:59:59`)
+    if (filtro.setor) query = query.eq('setor_origem', filtro.setor)
+    if (filtro.status) query = query.eq('status', filtro.status)
 
-    const { data, error } = await query
-    if (error) console.error(error)
-    else setTratativas(data)
-    setCarregando(false)
+    const { data } = await query
+    setLista(data || [])
   }
 
-  const limparFiltros = () => {
-    setFiltros({
-      busca: '',
-      motorista: '',
-      tipo_ocorrencia: '',
-      setor: '',
-      tipo_acao: '',
-      status: '',
-      dataInicio: '',
-      dataFim: ''
-    })
-  }
+  useEffect(() => { carregar() }, []) // inicial
+  useEffect(() => { carregar() }, [JSON.stringify(filtro)]) // re-carrega em filtro
+
+  const setores = useMemo(() => {
+    return [...new Set(lista.map(l => l.setor_origem).filter(Boolean))].sort()
+  }, [lista])
+
+  const status = ['Pendente', 'Concluída', 'Atrasada']
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <div className="mx-auto max-w-7xl p-6">
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <h2 className="font-semibold mb-3">Filtros</h2>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <div className="col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Buscar</label>
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-3 text-gray-400" />
+              <input
+                className="w-full pl-9 rounded-md border px-3 py-2"
+                placeholder="nome, chapa, descrição…"
+                value={filtro.q}
+                onChange={(e) => setFiltro({ ...filtro, q: e.target.value })}
+              />
+            </div>
+          </div>
 
-      {/* Cabeçalho e filtros */}
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Central de Tratativas</h1>
-        </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">De</label>
+            <input type="date" className="w-full rounded-md border px-3 py-2"
+              value={filtro.de} onChange={e => setFiltro({ ...filtro, de: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Até</label>
+            <input type="date" className="w-full rounded-md border px-3 py-2"
+              value={filtro.ate} onChange={e => setFiltro({ ...filtro, ate: e.target.value })} />
+          </div>
 
-        {/* Painel de Filtros */}
-        <div className="bg-white p-4 rounded-lg shadow-md border mb-6">
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <FaFilter className="text-blue-600" /> Filtros
-          </h2>
-
-          <div className="grid grid-cols-6 gap-3">
-            <input
-              type="text"
-              placeholder="🔍 Buscar (nome, chapa, descrição...)"
-              className="border rounded-lg p-2 col-span-2"
-              value={filtros.busca}
-              onChange={e => setFiltros({ ...filtros, busca: e.target.value })}
-            />
-
-            <input
-              type="date"
-              className="border rounded-lg p-2"
-              value={filtros.dataInicio}
-              onChange={e => setFiltros({ ...filtros, dataInicio: e.target.value })}
-            />
-            <input
-              type="date"
-              className="border rounded-lg p-2"
-              value={filtros.dataFim}
-              onChange={e => setFiltros({ ...filtros, dataFim: e.target.value })}
-            />
-
+          <div className="flex gap-2">
             <select
-              className="border rounded-lg p-2"
-              value={filtros.setor}
-              onChange={e => setFiltros({ ...filtros, setor: e.target.value })}
+              className="w-full rounded-md border px-3 py-2"
+              value={filtro.setor}
+              onChange={e => setFiltro({ ...filtro, setor: e.target.value })}
             >
               <option value="">Setor</option>
-              <option>CCO</option>
-              <option>Fiscalização</option>
-              <option>Gerência</option>
-              <option>Inspetoria</option>
-              <option>Monitoramento</option>
-              <option>Sac</option>
-              <option>Telemetria</option>
-              <option>Manutenção</option>
+              {setores.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
 
             <select
-              className="border rounded-lg p-2"
-              value={filtros.status}
-              onChange={e => setFiltros({ ...filtros, status: e.target.value })}
+              className="w-full rounded-md border px-3 py-2"
+              value={filtro.status}
+              onChange={e => setFiltro({ ...filtro, status: e.target.value })}
             >
               <option value="">Status</option>
-              <option value="Pendente">Pendente</option>
-              <option value="Concluída">Concluída</option>
-              <option value="Atrasada">Atrasada</option>
+              {status.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-
-            <button
-              onClick={limparFiltros}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded-lg flex items-center justify-center gap-2"
-            >
-              <FaSyncAlt /> Limpar
-            </button>
           </div>
         </div>
 
-        {/* Indicadores */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="bg-blue-100 p-4 rounded-md text-blue-700 text-center shadow">
-            <p className="text-sm">Total</p>
-            <p className="text-2xl font-bold">{tratativas.length}</p>
-          </div>
-          <div className="bg-yellow-100 p-4 rounded-md text-yellow-700 text-center shadow">
-            <p className="text-sm">Pendentes</p>
-            <p className="text-2xl font-bold">{tratativas.filter(t => t.status === 'Pendente').length}</p>
-          </div>
-          <div className="bg-green-100 p-4 rounded-md text-green-700 text-center shadow">
-            <p className="text-sm">Concluídas</p>
-            <p className="text-2xl font-bold">{tratativas.filter(t => t.status === 'Concluída').length}</p>
-          </div>
-          <div className="bg-red-100 p-4 rounded-md text-red-700 text-center shadow">
-            <p className="text-sm">Atrasadas</p>
-            <p className="text-2xl font-bold">{tratativas.filter(t => t.status === 'Atrasada').length}</p>
-          </div>
+        <div className="mt-3">
+          <button
+            onClick={() => { setFiltro({ q: '', de: '', ate: '', setor: '', status: '' }) }}
+            className="inline-flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2 text-sm"
+          >
+            <FaSync /> Limpar
+          </button>
         </div>
+      </div>
 
-        {/* Tabela */}
-        <div className="bg-white rounded-lg shadow overflow-x-auto">
-          <table className="min-w-full text-sm text-gray-700">
-            <thead className="bg-blue-700 text-white">
-              <tr>
-                <th className="p-3 text-left">Motorista</th>
-                <th className="p-3 text-left">Ocorrência</th>
-                <th className="p-3 text-left">Setor</th>
-                <th className="p-3 text-left">Status</th>
-                <th className="p-3 text-left">Data</th>
-                <th className="p-3 text-left">Ações</th>
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-blue-700 text-white">
+            <tr>
+              <th className="px-4 py-3 text-left">Motorista</th>
+              <th className="px-4 py-3 text-left">Ocorrência</th>
+              <th className="px-4 py-3 text-left">Prioridade</th>
+              <th className="px-4 py-3 text-left">Setor</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Imagem</th>
+              <th className="px-4 py-3 text-left">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((t) => (
+              <tr key={t.id} className="odd:bg-white even:bg-gray-50">
+                <td className="px-4 py-3">{t.motorista_nome || t.motorista_chapa}</td>
+                <td className="px-4 py-3">{t.tipo_ocorrencia || t.tipo}</td>
+                <td className="px-4 py-3">{t.prioridade || '-'}</td>
+                <td className="px-4 py-3">{t.setor_origem || '-'}</td>
+                <td className="px-4 py-3">
+                  {t.status === 'Pendente' && <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-700">Pendente</span>}
+                  {(t.status === 'Concluída' || t.status === 'Resolvido' || t.status === 'Concluida') &&
+                    <span className="px-2 py-1 rounded bg-green-100 text-green-700">Resolvido</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {t.imagem_url ? (
+                    <img src={t.imagem_url} alt="" className="h-12 w-12 object-cover rounded" />
+                  ) : <span className="text-gray-400">Sem imagem</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {t.status === 'Pendente' ? (
+                    <button
+                      onClick={() => nav(`/tratar/${t.id}`)}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700"
+                    >
+                      Tratar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => nav(`/consultar/${t.id}`)}
+                      className="rounded-md bg-gray-700 px-3 py-1.5 text-white hover:bg-gray-800"
+                    >
+                      Consultar
+                    </button>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {carregando ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-4">
-                    Carregando...
-                  </td>
-                </tr>
-              ) : tratativas.length > 0 ? (
-                tratativas.map(t => (
-                  <tr key={t.id} className="border-b hover:bg-gray-100">
-                    <td className="p-3">{t.motorista_nome}</td>
-                    <td className="p-3">{t.tipo_ocorrencia}</td>
-                    <td className="p-3">{t.setor_origem}</td>
-                    <td className="p-3 font-semibold">{t.status}</td>
-                    <td className="p-3">{t.data_ocorrido}</td>
-                    <td className="p-3">
-                      <button
-                        onClick={() => window.location.href = `/tratar/${t.id}`}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
-                      >
-                        Tratar
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6" className="text-center py-4 text-gray-500">
-                    Nenhuma tratativa encontrada
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
+
+        {lista.length === 0 && (
+          <div className="p-6 text-center text-gray-500">Nenhuma tratativa encontrada.</div>
+        )}
       </div>
     </div>
   )
