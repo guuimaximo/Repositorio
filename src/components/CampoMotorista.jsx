@@ -1,72 +1,81 @@
-// src/components/CampoMotorista.jsx
-import React, { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabase'
 
-export default function CampoMotorista({ label = 'Motorista', onSelect, initialValue = '' }) {
-  const [busca, setBusca] = useState(initialValue)
-  const [sugestoes, setSugestoes] = useState([])
-  const [mostrar, setMostrar] = useState(false)
-  const boxRef = useRef(null)
-  const timerRef = useRef(null)
+/**
+ * props:
+ *  - value: { chapa, nome }
+ *  - onChange: (novo) => void
+ *  - label?: string
+ */
+export default function CampoMotorista({ value, onChange, label = 'Motorista' }) {
+  const [todos, setTodos] = useState([])
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setMostrar(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    (async () => {
+      const { data, error } = await supabase
+        .from('motoristas')
+        .select('chapa, nome')
+        .order('nome', { ascending: true })
+      if (!error && data) setTodos(data)
+    })()
   }, [])
 
   useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    if (!busca || busca.trim().length < 2) {
-      setSugestoes([])
-      return
-    }
-    timerRef.current = setTimeout(() => buscar(busca.trim()), 180)
-  }, [busca])
+    if (!q) return setOpen(false)
+    setOpen(true)
+  }, [q])
 
-  async function buscar(valor) {
-    const { data, error } = await supabase
-      .from('motoristas')
-      .select('chapa,nome')
-      .or(`nome.ilike.%${valor}%,chapa.ilike.%${valor}%`)
-      .order('nome', { ascending: true })
-      .limit(12)
-    if (!error) setSugestoes(data || [])
+  const filtrados = useMemo(() => {
+    const s = (q || '').trim().toLowerCase()
+    if (!s) return []
+    return todos
+      .filter(
+        (m) =>
+          String(m.chapa).toLowerCase().startsWith(s) ||
+          (m.nome || '').toLowerCase().includes(s)
+      )
+      .slice(0, 8)
+  }, [q, todos])
+
+  function aplicar(m) {
+    onChange?.({ chapa: String(m.chapa), nome: m.nome })
+    setQ(`${m.chapa} - ${m.nome}`)
+    setOpen(false)
   }
 
-  function escolher(m) {
-    setBusca(`${m.nome} (${m.chapa})`)
-    setMostrar(false)
-    onSelect?.(m) // {chapa, nome}
-  }
+  // manter input sincronizado quando value vem pronto
+  useEffect(() => {
+    if (!value) return
+    const texto = [value.chapa, value.nome].filter(Boolean).join(' - ')
+    setQ(texto)
+  }, [value])
 
   return (
-    <div className="relative" ref={boxRef}>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <div className="relative">
+      <label className="block text-sm text-gray-600 mb-1">{label}</label>
       <input
-        value={busca}
-        onChange={(e) => {
-          setBusca(e.target.value)
-          setMostrar(true)
-        }}
-        className="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500"
-        placeholder="Digite nome ou chapa..."
+        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Digite a chapa ou nome…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => { if (q) setOpen(true) }}
       />
-      {mostrar && sugestoes.length > 0 && (
-        <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-md shadow max-h-64 overflow-auto">
-          {sugestoes.map((m) => (
-            <li
+      {open && filtrados.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
+          {filtrados.map((m) => (
+            <button
               key={m.chapa}
-              onClick={() => escolher(m)}
-              className="p-2 hover:bg-blue-50 cursor-pointer"
+              type="button"
+              onClick={() => aplicar(m)}
+              className="block w-full text-left px-3 py-2 hover:bg-gray-100"
             >
-              <span className="font-semibold">{m.nome}</span>{' '}
-              <span className="text-gray-500">— {m.chapa}</span>
-            </li>
+              <div className="text-sm font-medium">{m.nome}</div>
+              <div className="text-xs text-gray-500">Chapa: {m.chapa}</div>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )
