@@ -1,25 +1,45 @@
-import React, { useState } from 'react';
-import { supabase } from '../supabase';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { supabase } from "../supabase";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function Cadastro() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState('');
-  const [mensagem, setMensagem] = useState('');
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [mensagem, setMensagem] = useState("");
 
   const handleCadastro = async (e) => {
     e.preventDefault();
-    setErro('');
+    setErro("");
+    setMensagem("");
+
+    if (senha !== confirmarSenha) {
+      setErro("As senhas não coincidem.");
+      return;
+    }
+
+    // 🔄 Redirecionamento automático conforme ambiente
+    const redirectUrl =
+      window.location.hostname === "localhost"
+        ? "http://localhost:3000"
+        : "https://inovequatai.onrender.com";
+
+    // 🚀 Cadastro no Supabase Auth
     const { error } = await supabase.auth.signUp({
       email,
       password: senha,
+      options: { emailRedirectTo: redirectUrl },
     });
-    if (error) setErro(error.message);
-    else {
-      setMensagem('Conta criada! Verifique seu e-mail para confirmar.');
-      setTimeout(() => navigate('/login'), 3000);
+
+    if (error) {
+      setErro(error.message);
+    } else {
+      setMensagem(
+        "✅ Conta criada com sucesso! Verifique seu e-mail para confirmar o cadastro."
+      );
+      setTimeout(() => navigate("/login"), 4000);
     }
   };
 
@@ -29,33 +49,65 @@ export default function Cadastro() {
         onSubmit={handleCadastro}
         className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm"
       >
-        <h2 className="text-2xl font-bold mb-4 text-center text-green-700">Cadastro</h2>
-        {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
-        {mensagem && <p className="text-green-600 text-sm mb-3">{mensagem}</p>}
+        <h2 className="text-2xl font-bold mb-4 text-center text-blue-700">
+          Criar Conta
+        </h2>
+
+        {erro && (
+          <div className="bg-red-100 border border-red-400 text-red-700 p-2 rounded mb-3 text-sm">
+            {erro}
+          </div>
+        )}
+        {mensagem && (
+          <div className="bg-green-100 border border-green-400 text-green-700 p-2 rounded mb-3 text-sm">
+            {mensagem}
+          </div>
+        )}
+
+        <label className="text-sm font-medium text-gray-700">E-mail</label>
         <input
           type="email"
-          placeholder="E-mail"
+          placeholder="seuemail@exemplo.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 mb-3 border rounded"
+          className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-blue-500"
           required
         />
+
+        <label className="text-sm font-medium text-gray-700">Senha</label>
         <input
           type="password"
-          placeholder="Senha"
+          placeholder="Digite sua senha"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
+          className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-blue-500"
           required
         />
+
+        <label className="text-sm font-medium text-gray-700">
+          Confirmar Senha
+        </label>
+        <input
+          type="password"
+          placeholder="Confirme sua senha"
+          value={confirmarSenha}
+          onChange={(e) => setConfirmarSenha(e.target.value)}
+          className="w-full p-2 mb-5 border rounded focus:ring-2 focus:ring-blue-500"
+          required
+        />
+
         <button
           type="submit"
-          className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition"
         >
-          Criar conta
+          Cadastrar
         </button>
+
         <p className="text-sm text-center mt-3">
-          Já tem conta? <Link to="/login" className="text-blue-600">Entrar</Link>
+          Já possui conta?{" "}
+          <Link to="/login" className="text-blue-600 hover:underline">
+            Faça login
+          </Link>
         </p>
       </form>
     </div>
