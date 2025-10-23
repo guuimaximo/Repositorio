@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar'
 
 export default function CentralResolucao() {
   const [tratativas, setTratativas] = useState([])
+  const [filtroStatus, setFiltroStatus] = useState('Todas')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -12,7 +13,11 @@ export default function CentralResolucao() {
   }, [])
 
   async function buscarTratativas() {
-    const { data, error } = await supabase.from('tratativas').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase
+      .from('tratativas')
+      .select('*')
+      .order('created_at', { ascending: false })
+
     if (error) console.error('Erro ao buscar tratativas:', error)
     else setTratativas(data)
   }
@@ -21,16 +26,36 @@ export default function CentralResolucao() {
     if (!status) return 'text-gray-500'
     const s = status.toLowerCase()
     if (s === 'pendente') return 'text-yellow-600 font-semibold'
-    if (s === 'resolvido' || s === 'concluído' || s === 'concluída') return 'text-green-600 font-semibold'
+    if (s === 'resolvido' || s === 'concluído' || s === 'concluída')
+      return 'text-green-600 font-semibold'
     if (s === 'atrasado' || s === 'atrasada') return 'text-red-600 font-semibold'
     return 'text-gray-700'
   }
+
+  // Contadores de status
+  const totalPendentes = tratativas.filter(
+    (t) => t.status?.toLowerCase() === 'pendente'
+  ).length
+  const totalResolvidas = tratativas.filter(
+    (t) => t.status?.toLowerCase() === 'resolvido'
+  ).length
+
+  // Aplicar filtro
+  const tratativasFiltradas =
+    filtroStatus === 'Todas'
+      ? tratativas
+      : tratativas.filter((t) =>
+          filtroStatus === 'Pendentes'
+            ? t.status?.toLowerCase() === 'pendente'
+            : t.status?.toLowerCase() === 'resolvido'
+        )
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
       <div className="max-w-7xl mx-auto p-6">
+        {/* Cabeçalho */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-blue-700 flex items-center gap-2">
             🧩 Central de Tratativas
@@ -43,6 +68,43 @@ export default function CentralResolucao() {
           </button>
         </div>
 
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-4 mb-6">
+          <button
+            onClick={() => setFiltroStatus('Todas')}
+            className={`px-4 py-2 rounded-lg font-medium border ${
+              filtroStatus === 'Todas'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white hover:bg-gray-100 text-gray-700'
+            }`}
+          >
+            Todas ({tratativas.length})
+          </button>
+
+          <button
+            onClick={() => setFiltroStatus('Pendentes')}
+            className={`px-4 py-2 rounded-lg font-medium border ${
+              filtroStatus === 'Pendentes'
+                ? 'bg-yellow-500 text-white'
+                : 'bg-white hover:bg-gray-100 text-gray-700'
+            }`}
+          >
+            Pendentes ({totalPendentes})
+          </button>
+
+          <button
+            onClick={() => setFiltroStatus('Resolvidas')}
+            className={`px-4 py-2 rounded-lg font-medium border ${
+              filtroStatus === 'Resolvidas'
+                ? 'bg-green-600 text-white'
+                : 'bg-white hover:bg-gray-100 text-gray-700'
+            }`}
+          >
+            Resolvidas ({totalResolvidas})
+          </button>
+        </div>
+
+        {/* Tabela */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden">
           <table className="w-full border-collapse text-sm text-gray-700">
             <thead className="bg-blue-700 text-white">
@@ -58,18 +120,20 @@ export default function CentralResolucao() {
             </thead>
 
             <tbody>
-              {tratativas.length === 0 ? (
+              {tratativasFiltradas.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="text-center py-6 text-gray-500">
                     Nenhuma tratativa encontrada.
                   </td>
                 </tr>
               ) : (
-                tratativas.map((t) => (
+                tratativasFiltradas.map((t) => (
                   <tr
                     key={t.id}
                     className={`border-b ${
-                      t.status?.toLowerCase() === 'resolvido' ? 'bg-green-50' : 'bg-white'
+                      t.status?.toLowerCase() === 'resolvido'
+                        ? 'bg-green-50'
+                        : 'bg-white'
                     } hover:bg-gray-50 transition`}
                   >
                     <td className="p-3">{t.motorista_id || '-'}</td>
@@ -81,11 +145,17 @@ export default function CentralResolucao() {
                     </td>
                     <td className="p-3">
                       {t.imagem_url ? (
-                        <img
-                          src={t.imagem_url}
-                          alt="evidência"
-                          className="w-16 h-16 object-cover rounded border"
-                        />
+                        <a
+                          href={t.imagem_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={t.imagem_url}
+                            alt="evidência"
+                            className="w-16 h-16 object-cover rounded border hover:scale-105 transition-transform"
+                          />
+                        </a>
                       ) : (
                         <span className="italic text-gray-400">Sem imagem</span>
                       )}
