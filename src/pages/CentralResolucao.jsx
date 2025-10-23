@@ -104,12 +104,19 @@ export default function CentralTratativas() {
                   </td>
                   <td className="p-2">
                     {t.status !== "Resolvido" && (
-                      <button
-                        onClick={() => atualizarStatus(t.id, "Resolvido")}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm"
-                      >
-                        Marcar Resolvido
-                      </button>
+                      import { useNavigate } from 'react-router-dom'
+
+// (coloque essa linha no topo do componente)
+const navigate = useNavigate()
+
+// ... depois, dentro do map que renderiza as linhas da tabela:
+<button
+  onClick={() => navigate(`/tratar/${t.id}`)}
+  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
+>
+  Tratar
+</button>
+
                     )}
                   </td>
                 </tr>
