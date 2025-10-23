@@ -55,8 +55,8 @@ export default function SolicitacaoTratativa() {
         descricao: form.descricao,
         status: 'Pendente',
         imagem_url,
-        data_ocorrida: form.data_ocorrida || null,
-        hora_ocorrida: form.hora_ocorrida || null,
+        data_ocorrido: form.data_ocorrida || null,
+        hora_ocorrido: form.hora_ocorrida || null,
       })
       if (error) throw error
 
