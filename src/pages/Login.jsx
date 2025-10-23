@@ -17,8 +17,11 @@ export default function Login() {
       password: senha,
     });
 
-    if (error) setErro("E-mail ou senha inválidos!");
-    else navigate("/dashboard");
+    if (error) {
+      setErro("E-mail ou senha inválidos!");
+    } else {
+      navigate("/dashboard");
+    }
   };
 
   return (
@@ -67,7 +70,7 @@ export default function Login() {
         <p className="text-sm text-center mt-3">
           Não tem conta?{" "}
           <Link to="/cadastro" className="text-blue-600 hover:underline">
-            Cadastrar-se
+            Criar agora
           </Link>
         </p>
       </form>
