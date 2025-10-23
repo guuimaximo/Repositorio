@@ -10,8 +10,6 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setErro("");
-
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: senha,
