@@ -205,14 +205,14 @@ export default function CentralTratativas() {
                       {t.status?.toLowerCase().includes('conclu') ||
                       t.status?.toLowerCase().includes('resolvido') ? (
                         <button
-                          onClick={() => navigate(`/consultartratativa/${t.id}`)}
+                          onClick={() => navigate(`/consultar/${t.id}`)}
                           className="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400"
                         >
                           Consultar
                         </button>
                       ) : (
                         <button
-                          onClick={() => navigate(`/tratartratativa/${t.id}`)}
+                          onClick={() => navigate(`/tratar/${t.id}`)}
                           className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
                         >
                           Tratar
