@@ -12,7 +12,7 @@ export default function Navbar() {
       <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 text-2xl font-semibold">
           <span role="img" aria-label="bus">🚌</span>
-          <span>InoveQuatai</span>
+          <span>INOVEQUATAÍ</span>
         </Link>
 
         <div className="flex items-center gap-4">
