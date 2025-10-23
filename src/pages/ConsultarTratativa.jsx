@@ -1,86 +1,78 @@
-// src/pages/ConsultarTratativa.jsx
-import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 export default function ConsultarTratativa() {
   const { id } = useParams()
-  const navigate = useNavigate()
-  const [tratativa, setTratativa] = useState(null)
+  const [t, setT] = useState(null)
+  const [historico, setHistorico] = useState([])
 
   useEffect(() => {
-    buscar()
-  }, [])
+    (async () => {
+      const { data } = await supabase.from('tratativas').select('*').eq('id', id).single()
+      setT(data || null)
+      const h = await supabase.from('tratativas_detalhes').select('*').eq('tratativa_id', id).order('created_at')
+      setHistorico(h.data || [])
+    })()
+  }, [id])
 
-  async function buscar() {
-    const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
-    if (error) console.error(error)
-    else setTratativa(data)
-  }
-
-  if (!tratativa)
-    return (
-      <div className="p-6 text-center text-gray-500">
-        <Navbar />
-        <p>Carregando tratativa...</p>
-      </div>
-    )
+  if (!t) return <div className="p-6">Carregando…</div>
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-md border">
-        <h1 className="text-2xl font-bold mb-4 text-gray-800">
-          Consultar Tratativa - {tratativa.motorista_nome}
-        </h1>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <Campo titulo="Motorista" valor={`${tratativa.motorista_nome} (${tratativa.motorista_chapa})`} />
-          <Campo titulo="Tipo de Ocorrência" valor={tratativa.tipo_ocorrencia} />
-          <Campo titulo="Prioridade" valor={tratativa.prioridade} />
-          <Campo titulo="Setor de Origem" valor={tratativa.setor_origem} />
-          <Campo titulo="Tipo de Ação" valor={tratativa.tipo_acao} />
-          <Campo titulo="Data do Ocorrido" valor={tratativa.data_ocorrido} />
-          <Campo titulo="Hora" valor={tratativa.hora_ocorrida} />
-          <Campo titulo="Status" valor={tratativa.status} />
-        </div>
+    <div className="mx-auto max-w-5xl p-6">
+      <h1 className="text-2xl font-bold mb-2">Consultar</h1>
 
-        <div className="mb-4">
-          <p className="font-semibold text-gray-700 mb-1">Descrição</p>
-          <textarea
-            readOnly
-            className="w-full border rounded-lg p-2 bg-gray-100"
-            rows="4"
-            value={tratativa.descricao || 'Sem descrição'}
-          />
-        </div>
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Item titulo="Motorista" valor={`${t.motorista_nome || ''} ${t.motorista_chapa ? `(${t.motorista_chapa})` : ''}`} />
+          <Item titulo="Ocorrência" valor={t.tipo_ocorrencia} />
+          <Item titulo="Prioridade" valor={t.prioridade} />
+          <Item titulo="Setor" valor={t.setor_origem} />
+          <Item titulo="Status" valor={t.status} />
+          <Item titulo="Data/Hora" valor={`${t.data_ocorrida || '-'} ${t.hora_ocorrida || ''}`} />
+          <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
+          {t.imagem_url && (
+            <div className="md:col-span-2">
+              <span className="block text-sm text-gray-600 mb-1">Imagem enviada</span>
+              <img src={t.imagem_url} className="max-h-48 rounded" />
+            </div>
+          )}
+        </dl>
+      </div>
 
-        {tratativa.imagem_tratativa && (
-          <div className="mb-4">
-            <p className="font-semibold text-gray-700 mb-2">Imagem</p>
-            <img
-              src={tratativa.imagem_tratativa}
-              alt="Imagem da tratativa"
-              className="rounded-lg border w-64 h-auto"
-            />
-          </div>
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Histórico / Ações aplicadas</h2>
+        {historico.length === 0 ? (
+          <div className="text-gray-500">Sem histórico.</div>
+        ) : (
+          <ul className="space-y-3">
+            {historico.map(h => (
+              <li key={h.id} className="rounded border p-3">
+                <div className="text-sm text-gray-600">{new Date(h.created_at).toLocaleString('pt-BR')}</div>
+                <div className="font-medium">{h.acao_aplicada}</div>
+                {h.observacoes && <div className="text-gray-700">{h.observacoes}</div>}
+                <div className="flex gap-3 mt-2">
+                  {h.imagem_tratativa && <img src={h.imagem_tratativa} className="h-20 rounded" />}
+                  {h.assinatura_url && (
+                    <a className="text-blue-600 underline" href={h.assinatura_url} target="_blank" rel="noreferrer">
+                      Ver assinatura
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
-
-        <button
-          onClick={() => navigate(-1)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-        >
-          Voltar
-        </button>
       </div>
     </div>
   )
 }
 
-function Campo({ titulo, valor }) {
+function Item({ titulo, valor, className }) {
   return (
-    <div>
-      <p className="font-semibold text-gray-700">{titulo}</p>
-      <p className="bg-gray-100 border rounded-lg px-3 py-2">{valor || '-'}</p>
+    <div className={className}>
+      <dt className="text-sm text-gray-600">{titulo}</dt>
+      <dd className="font-medium">{valor}</dd>
     </div>
   )
 }
