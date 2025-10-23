@@ -1,130 +1,110 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "../supabase";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from 'react'
+import { supabase } from '../supabase'
+import { useNavigate } from 'react-router-dom'
+import Navbar from '../components/Navbar'
 
-export default function CentralTratativas() {
-  const [tratativas, setTratativas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+export default function CentralResolucao() {
+  const [tratativas, setTratativas] = useState([])
+  const navigate = useNavigate()
 
   useEffect(() => {
-    buscarTratativas();
-  }, []);
+    buscarTratativas()
+  }, [])
 
-  const buscarTratativas = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("tratativas")
-      .select("*")
-      .order("created_at", { ascending: false });
+  async function buscarTratativas() {
+    const { data, error } = await supabase.from('tratativas').select('*').order('created_at', { ascending: false })
+    if (error) console.error('Erro ao buscar tratativas:', error)
+    else setTratativas(data)
+  }
 
-    if (error) {
-      console.error("Erro ao carregar tratativas:", error.message);
-    } else {
-      setTratativas(data || []);
-    }
-    setLoading(false);
-  };
-
-  const atualizarStatus = async (id, novoStatus) => {
-    const { error } = await supabase
-      .from("tratativas")
-      .update({ status: novoStatus })
-      .eq("id", id);
-
-    if (error) {
-      alert("❌ Erro ao atualizar status: " + error.message);
-    } else {
-      alert("✅ Status atualizado para " + novoStatus);
-      buscarTratativas();
-    }
-  };
+  function getStatusClass(status) {
+    if (!status) return 'text-gray-500'
+    const s = status.toLowerCase()
+    if (s === 'pendente') return 'text-yellow-600 font-semibold'
+    if (s === 'resolvido' || s === 'concluído' || s === 'concluída') return 'text-green-600 font-semibold'
+    if (s === 'atrasado' || s === 'atrasada') return 'text-red-600 font-semibold'
+    return 'text-gray-700'
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md p-6">
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+
+      <div className="max-w-7xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-blue-700">
+          <h1 className="text-3xl font-bold text-blue-700 flex items-center gap-2">
             🧩 Central de Tratativas
           </h1>
           <button
-            onClick={() => navigate("/")}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md"
+            onClick={() => navigate(-1)}
+            className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-gray-700 flex items-center gap-1"
           >
-            ⬅️ Voltar
+            ← Voltar
           </button>
         </div>
 
-        {loading ? (
-          <p className="text-center text-gray-500">Carregando tratativas...</p>
-        ) : tratativas.length === 0 ? (
-          <p className="text-center text-gray-600">Nenhuma tratativa registrada.</p>
-        ) : (
-          <table className="w-full text-left border">
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="w-full border-collapse text-sm text-gray-700">
             <thead className="bg-blue-700 text-white">
               <tr>
-                <th className="p-2">Motorista</th>
-                <th className="p-2">Ocorrência</th>
-                <th className="p-2">Prioridade</th>
-                <th className="p-2">Setor</th>
-                <th className="p-2">Status</th>
-                <th className="p-2">Imagem</th>
-                <th className="p-2">Ações</th>
+                <th className="p-3 text-left">Motorista</th>
+                <th className="p-3 text-left">Ocorrência</th>
+                <th className="p-3 text-left">Prioridade</th>
+                <th className="p-3 text-left">Setor</th>
+                <th className="p-3 text-left">Status</th>
+                <th className="p-3 text-left">Imagem</th>
+                <th className="p-3 text-left">Ações</th>
               </tr>
             </thead>
+
             <tbody>
-              {tratativas.map((t) => (
-                <tr
-                  key={t.id}
-                  className={`border-b ${
-                    t.status === "Resolvido" ? "bg-green-50" : "bg-white"
-                  }`}
-                >
-                  <td className="p-2">{t.motorista_id}</td>
-                  <td className="p-2">{t.tipo_ocorrencia}</td>
-                  <td className="p-2">{t.prioridade}</td>
-                  <td className="p-2">{t.setor_origem}</td>
-                  <td className="p-2 font-semibold">{t.status}</td>
-                  <td className="p-2">
-                    {t.imagem_url ? (
-                      <a
-                        href={t.imagem_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <img
-                          src={t.imagem_url}
-                          alt="Imagem da tratativa"
-                          className="w-16 h-16 object-cover rounded shadow"
-                        />
-                      </a>
-                    ) : (
-                      <span className="text-gray-400 italic">Sem imagem</span>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    {t.status !== "Resolvido" && (
-                      import { useNavigate } from 'react-router-dom'
-
-// (coloque essa linha no topo do componente)
-const navigate = useNavigate()
-
-// ... depois, dentro do map que renderiza as linhas da tabela:
-<button
-  onClick={() => navigate(`/tratar/${t.id}`)}
-  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
->
-  Tratar
-</button>
-
-                    )}
+              {tratativas.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="text-center py-6 text-gray-500">
+                    Nenhuma tratativa encontrada.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                tratativas.map((t) => (
+                  <tr
+                    key={t.id}
+                    className={`border-b ${
+                      t.status?.toLowerCase() === 'resolvido' ? 'bg-green-50' : 'bg-white'
+                    } hover:bg-gray-50 transition`}
+                  >
+                    <td className="p-3">{t.motorista_id || '-'}</td>
+                    <td className="p-3">{t.tipo_ocorrencia || '-'}</td>
+                    <td className="p-3">{t.prioridade || '-'}</td>
+                    <td className="p-3">{t.setor_origem || '-'}</td>
+                    <td className={`p-3 ${getStatusClass(t.status)}`}>
+                      {t.status || 'Pendente'}
+                    </td>
+                    <td className="p-3">
+                      {t.imagem_url ? (
+                        <img
+                          src={t.imagem_url}
+                          alt="evidência"
+                          className="w-16 h-16 object-cover rounded border"
+                        />
+                      ) : (
+                        <span className="italic text-gray-400">Sem imagem</span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => navigate(`/tratar/${t.id}`)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
+                      >
+                        Tratar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-        )}
+        </div>
       </div>
     </div>
-  );
+  )
 }
