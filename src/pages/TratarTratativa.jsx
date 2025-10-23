@@ -1,101 +1,150 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 
+const acoes = [
+  'Advertência',
+  'Aviso de última oportunidade',
+  'Contato Pessoal',
+  'Não aplicada',
+  'Orientação',
+  'Suspensão',
+  'Contato via Celular',
+  'Elogiado',
+]
 
-export default function Tratar() {
+export default function TratarTratativa() {
   const { id } = useParams()
-  const navigate = useNavigate()
-  const [tratativa, setTratativa] = useState(null)
-  const [tiposAcao, setTiposAcao] = useState([])
-  const [tipoAcao, setTipoAcao] = useState('')
-  const [observacao, setObservacao] = useState('')
-  const [imagemTratativa, setImagemTratativa] = useState(null)
+  const nav = useNavigate()
+  const [t, setT] = useState(null)
+  const [resumo, setResumo] = useState('')
+  const [acao, setAcao] = useState('Orientação')
+  const [img, setImg] = useState(null)
+  const [assinatura, setAssinatura] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    buscarTratativa()
-    buscarTiposAcao()
-  }, [])
+    (async () => {
+      const { data } = await supabase.from('tratativas').select('*').eq('id', id).single()
+      setT(data || null)
+    })()
+  }, [id])
 
-  async function buscarTratativa() {
-    const { data } = await supabase.from('tratativas').select('*').eq('id', id).single()
-    setTratativa(data)
-  }
+  async function concluir() {
+    if (!t) return
+    if (!resumo) { alert('Informe o resumo/observações'); return }
 
-  async function buscarTiposAcao() {
-    const { data } = await supabase.from('tipos_acao').select('*')
-    setTiposAcao(data || [])
-  }
+    setLoading(true)
+    try {
+      let imagem_tratativa = null
+      if (img) {
+        const nome = `trat_${Date.now()}_${img.name}`
+        const up = await supabase.storage.from('tratativas').upload(nome, img)
+        if (up.error) throw up.error
+        imagem_tratativa = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
+      }
+      let assinatura_url = null
+      if (assinatura) {
+        const nome = `ass_${Date.now()}_${assinatura.name}`
+        const up = await supabase.storage.from('tratativas').upload(nome, assinatura)
+        if (up.error) throw up.error
+        assinatura_url = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
+      }
 
-  async function handleSalvar(e) {
-    e.preventDefault()
-
-    let imagemUrl = tratativa.imagem_tratativa
-    if (imagemTratativa) {
-      const { data: upload } = await supabase.storage.from('tratativas').upload(`tratadas/${id}-${Date.now()}.jpg`, imagemTratativa, { upsert: true })
-      imagemUrl = `${supabase.storageUrl}/object/public/tratativas/${upload.path}`
-    }
-
-    const { error } = await supabase
-      .from('tratativas')
-      .update({
-        tipo_acao: tipoAcao,
-        descricao: observacao,
-        imagem_tratativa: imagemUrl,
-        status: 'Resolvido',
+      // detalhe/histórico
+      await supabase.from('tratativas_detalhes').insert({
+        tratativa_id: t.id,
+        acao_aplicada: acao,
+        observacoes: resumo,
+        imagem_tratativa,
+        assinatura_url
       })
-      .eq('id', id)
 
-    if (error) alert('❌ Erro ao salvar: ' + error.message)
-    else {
-      alert('✅ Tratativa encerrada com sucesso!')
-      navigate('/central')
+      // atualiza status
+      await supabase.from('tratativas').update({
+        status: 'Concluída',
+        imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null
+      }).eq('id', t.id)
+
+      alert('Tratativa concluída com sucesso!')
+      nav('/central')
+    } catch (e) {
+      alert(`Erro: ${e.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (!tratativa) return <p className="p-6">Carregando...</p>
+  if (!t) return <div className="p-6">Carregando…</div>
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <Navbar />
-      <h1 className="text-2xl font-bold mb-4">Tratar Ocorrência</h1>
+    <div className="mx-auto max-w-5xl p-6">
+      <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+      <p className="text-gray-600 mb-6">Revise os dados e finalize a tratativa.</p>
 
-      <div className="bg-white p-6 rounded shadow mb-6">
-        <p><b>Motorista:</b> {tratativa.motorista_nome}</p>
-        <p><b>Ocorrência:</b> {tratativa.tipo_ocorrencia}</p>
-        <p><b>Data:</b> {tratativa.data_ocorrido} — <b>Hora:</b> {tratativa.hora_ocorrido}</p>
-        <p><b>Setor:</b> {tratativa.setor_origem}</p>
-        <p><b>Status:</b> {tratativa.status}</p>
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Item titulo="Motorista" valor={`${t.motorista_nome || ''} ${t.motorista_chapa ? `(${t.motorista_chapa})` : ''}`} />
+          <Item titulo="Ocorrência" valor={t.tipo_ocorrencia} />
+          <Item titulo="Prioridade" valor={t.prioridade} />
+          <Item titulo="Setor" valor={t.setor_origem} />
+          <Item titulo="Status" valor={t.status} />
+          <Item titulo="Data/Hora" valor={`${t.data_ocorrida || '-'} ${t.hora_ocorrida || ''}`} />
+          <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
+          {t.imagem_url && (
+            <div className="md:col-span-2">
+              <span className="block text-sm text-gray-600 mb-1">Imagem enviada</span>
+              <img src={t.imagem_url} className="max-h-48 rounded" />
+            </div>
+          )}
+        </dl>
       </div>
 
-      <form onSubmit={handleSalvar} className="bg-white p-6 rounded shadow grid grid-cols-2 gap-4">
-        <div>
-          <label>Tipo de Ação</label>
-          <select value={tipoAcao} onChange={(e) => setTipoAcao(e.target.value)} className="border rounded p-2 w-full">
-            <option value="">Selecione...</option>
-            {tiposAcao.map(a => <option key={a.id} value={a.nome}>{a.nome}</option>)}
-          </select>
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
+            <select className="w-full rounded-md border px-3 py-2" value={acao} onChange={e => setAcao(e.target.value)}>
+              {acoes.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Imagem da tratativa (opcional)</label>
+            <input type="file" accept="image/*" onChange={e => setImg(e.target.files?.[0] || null)} />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Assinatura do colaborador (foto/PDF)</label>
+            <input type="file" onChange={e => setAssinatura(e.target.files?.[0] || null)} />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
+            <textarea rows={4} className="w-full rounded-md border px-3 py-2"
+              value={resumo} onChange={e => setResumo(e.target.value)} />
+          </div>
         </div>
 
-        <div>
-          <label>Foto / Assinatura</label>
-          <input type="file" accept="image/*" onChange={(e) => setImagemTratativa(e.target.files[0])} />
-        </div>
-
-        <div className="col-span-2">
-          <label>Observações</label>
-          <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} className="border rounded p-2 w-full" />
-        </div>
-
-        <div className="col-span-2 flex justify-between">
-          <button type="button" onClick={() => navigate('/central')} className="bg-gray-400 text-white px-6 py-2 rounded">
-            Voltar
+        <div className="mt-4">
+          <button
+            onClick={concluir}
+            disabled={loading}
+            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {loading ? 'Salvando…' : 'Concluir'}
           </button>
-          <button className="bg-green-600 text-white px-6 py-2 rounded">
-            Salvar Tratativa
-          </button>
         </div>
-      </form>
+      </div>
+    </div>
+  )
+}
+
+function Item({ titulo, valor, className }) {
+  return (
+    <div className={className}>
+      <dt className="text-sm text-gray-600">{titulo}</dt>
+      <dd className="font-medium">{valor}</dd>
     </div>
   )
 }
