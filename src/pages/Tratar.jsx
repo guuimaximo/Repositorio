@@ -1,156 +1,188 @@
-// src/pages/Tratar.jsx
-import React, { useEffect, useState } from 'react'
-import Navbar from '../components/Navbar'
-import { supabase } from '../supabase'
-import { useNavigate, useParams } from 'react-router-dom'
+// src/pages/TratarTratativa.jsx
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "../supabase";
+import Navbar from "../components/Navbar";
 
-export default function Tratar() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const [tratativa, setTratativa] = useState(null)
-  const [acoes, setAcoes] = useState([])
-  const [tipoAcao, setTipoAcao] = useState('')
-  const [observacao, setObservacao] = useState('')
-  const [arquivo, setArquivo] = useState(null)
-  const [salvando, setSalvando] = useState(false)
+export default function TratarTratativa() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [tratativa, setTratativa] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [observacao, setObservacao] = useState("");
+  const [imagem, setImagem] = useState(null);
+  const [mensagem, setMensagem] = useState("");
 
   useEffect(() => {
-    (async () => {
-      const [{ data: t }, { data: a }] = await Promise.all([
-        supabase.from('tratativas').select('*').eq('id', id).single(),
-        supabase.from('tipos_acao').select('nome').order('nome')
-      ])
-      setTratativa(t || null)
-      setAcoes(a || [])
-    })()
-  }, [id])
+    carregarTratativa();
+  }, []);
 
-  async function uploadFotoTratativa() {
-    if (!arquivo) return { publicUrl: null }
-    const ext = arquivo.name.split('.').pop()
-    const path = `tratadas/${id}-${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('tratativas').upload(path, arquivo, {
-      cacheControl: '3600',
-      upsert: true
-    })
-    if (upErr) return { error: upErr }
-    const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path)
-    return { publicUrl: pub?.publicUrl || null }
-  }
-
-  async function salvar(e) {
-    e.preventDefault()
-    if (!tipoAcao) {
-      alert('Selecione o tipo de ação.')
-      return
-    }
-    setSalvando(true)
-    try {
-      let imagem_tratativa = tratativa?.imagem_tratativa || null
-      if (arquivo) {
-        const up = await uploadFotoTratativa()
-        if (up.error) throw up.error
-        imagem_tratativa = up.publicUrl
-      }
-      const payload = {
-        tipo_acao: tipoAcao,
-        descricao: observacao || tratativa?.descricao || null,
-        imagem_tratativa,
-        status: 'Resolvido'
-      }
-      const { error } = await supabase.from('tratativas').update(payload).eq('id', id)
-      if (error) throw error
-      alert('✅ Tratativa resolvida com sucesso!')
-      navigate('/central')
-    } catch (err) {
-      console.error(err)
-      alert('❌ Erro ao salvar: ' + err.message)
-    } finally {
-      setSalvando(false)
+  async function carregarTratativa() {
+    const { data, error } = await supabase
+      .from("tratativas")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) {
+      console.error(error);
+      alert("Erro ao carregar tratativa");
+    } else {
+      setTratativa(data);
     }
   }
 
-  if (!tratativa) {
+  const handleUploadImagem = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const nomeArquivo = `tratativas/${id}-${Date.now()}-${file.name}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("imagens")
+      .upload(nomeArquivo, file);
+
+    if (uploadError) {
+      console.error(uploadError);
+      alert("Erro ao enviar imagem.");
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("imagens")
+      .getPublicUrl(nomeArquivo);
+
+    setImagem(urlData.publicUrl);
+  };
+
+  const salvarTratativa = async () => {
+    if (!observacao.trim()) {
+      alert("Por favor, descreva a ação realizada.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("tratativas")
+      .update({
+        status: "Resolvido",
+        descricao_tratativa: observacao,
+        imagem_tratativa: imagem,
+        data_tratamento: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    setLoading(false);
+
+    if (error) {
+      console.error(error);
+      alert("Erro ao salvar tratativa.");
+    } else {
+      setMensagem("✅ Tratativa registrada com sucesso!");
+      setTimeout(() => navigate("/central"), 1800);
+    }
+  };
+
+  if (!tratativa)
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="p-6 text-center text-gray-500">
         <Navbar />
-        <div className="max-w-4xl mx-auto p-6">Carregando...</div>
+        <p>Carregando dados da tratativa...</p>
       </div>
-    )
-  }
+    );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-5xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Tratar Ocorrência</h1>
-          <button onClick={() => navigate('/central')} className="px-4 py-2 rounded bg-gray-200">Voltar</button>
+      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-md border">
+        <h1 className="text-2xl font-bold mb-4 text-gray-800">
+          Tratar Ocorrência - {tratativa.motorista_nome}
+        </h1>
+
+        {/* Dados da tratativa */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Campo titulo="Motorista" valor={`${tratativa.motorista_nome} (${tratativa.motorista_chapa})`} />
+          <Campo titulo="Tipo de Ocorrência" valor={tratativa.tipo_ocorrencia} />
+          <Campo titulo="Prioridade" valor={tratativa.prioridade} />
+          <Campo titulo="Setor de Origem" valor={tratativa.setor_origem} />
+          <Campo titulo="Data do Ocorrido" valor={tratativa.data_ocorrido} />
+          <Campo titulo="Hora" valor={tratativa.hora_ocorrida} />
+          <Campo titulo="Status Atual" valor={tratativa.status} />
         </div>
 
-        <div className="bg-white p-6 rounded shadow mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <p><b>Motorista:</b> {tratativa.motorista_nome} — <span className="text-gray-600">{tratativa.motorista_chapa}</span></p>
-          <p><b>Ocorrência:</b> {tratativa.tipo_ocorrencia}</p>
-          <p><b>Setor:</b> {tratativa.setor_origem}</p>
-          <p><b>Status:</b> {tratativa.status}</p>
-          <p><b>Data/Hora:</b> {tratativa.data_ocorrido || '-'} {tratativa.hora_ocorrido ? `— ${tratativa.hora_ocorrido}` : ''}</p>
-          <p><b>Linha / Prefixo:</b> {tratativa.linha || '-'} {tratativa.prefixo ? `— ${tratativa.prefixo}` : ''}</p>
-
-          {tratativa.imagem_solicitacao && (
-            <div className="md:col-span-2">
-              <b>Evidência inicial:</b><br />
-              <img src={tratativa.imagem_solicitacao} alt="Evidência" className="mt-2 max-h-48 rounded border" />
-            </div>
-          )}
-
-          {tratativa.imagem_tratativa && (
-            <div className="md:col-span-2">
-              <b>Foto tratativa (atual):</b><br />
-              <img src={tratativa.imagem_tratativa} alt="Tratativa" className="mt-2 max-h-48 rounded border" />
-            </div>
-          )}
+        <div className="mb-4">
+          <p className="font-semibold text-gray-700 mb-1">Descrição Original</p>
+          <textarea
+            readOnly
+            className="w-full border rounded-lg p-2 bg-gray-100"
+            rows="3"
+            value={tratativa.descricao || "Sem descrição registrada."}
+          />
         </div>
 
-        <form onSubmit={salvar} className="bg-white p-6 rounded shadow grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Tipo de Ação</label>
-            <select
-              className="w-full border rounded p-2"
-              value={tipoAcao}
-              onChange={(e) => setTipoAcao(e.target.value)}
-            >
-              <option value="">Selecione...</option>
-              {acoes.map((a) => (
-                <option key={a.nome} value={a.nome}>{a.nome}</option>
-              ))}
-            </select>
-          </div>
+        {/* Observação de tratamento */}
+        <div className="mb-4">
+          <p className="font-semibold text-gray-700 mb-1">
+            Ação ou Observação
+          </p>
+          <textarea
+            className="w-full border rounded-lg p-2"
+            rows="4"
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+            placeholder="Descreva a ação realizada, contato, orientação etc..."
+          />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Foto/Assinatura do colaborador</label>
-            <input type="file" accept="image/*" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-1">Observações / Descrição</label>
-            <textarea
-              rows={3}
-              className="w-full border rounded p-2"
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
+        {/* Upload de imagem */}
+        <div className="mb-6">
+          <p className="font-semibold text-gray-700 mb-2">
+            Anexar imagem (opcional)
+          </p>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleUploadImagem}
+            className="border p-2 rounded-md"
+          />
+          {imagem && (
+            <img
+              src={imagem}
+              alt="Preview"
+              className="mt-3 w-48 h-auto rounded-md border"
             />
-          </div>
+          )}
+        </div>
 
-          <div className="md:col-span-2 flex justify-between">
-            <button type="button" onClick={() => navigate('/central')} className="px-4 py-2 rounded bg-gray-200">
-              Voltar
-            </button>
-            <button disabled={salvando} className="px-5 py-2 rounded bg-green-600 text-white">
-              {salvando ? 'Salvando...' : 'Salvar e marcar como Resolvido'}
-            </button>
+        {mensagem && (
+          <div className="bg-green-100 text-green-800 border border-green-300 rounded-md p-2 mb-4">
+            {mensagem}
           </div>
-        </form>
+        )}
+
+        <div className="flex justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+          >
+            Voltar
+          </button>
+          <button
+            onClick={salvarTratativa}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+          >
+            {loading ? "Salvando..." : "Salvar Tratativa"}
+          </button>
+        </div>
       </div>
     </div>
-  )
+  );
+}
+
+function Campo({ titulo, valor }) {
+  return (
+    <div>
+      <p className="font-semibold text-gray-700">{titulo}</p>
+      <p className="bg-gray-100 border rounded-lg px-3 py-2">{valor || "-"}</p>
+    </div>
+  );
 }
