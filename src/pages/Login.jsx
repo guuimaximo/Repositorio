@@ -1,77 +1,46 @@
-import React, { useState } from "react";
-import { supabase } from "../supabase";
-import { useNavigate, Link } from "react-router-dom";
+import { useState } from 'react'
+import { supabase } from '../supabase'
 
 export default function Login() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState("");
+  const [email, setEmail] = useState('')
+  const [ok, setOk] = useState(false)
+  const [err, setErr] = useState('')
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    const { error } = await supabase.auth.signInWithPassword({
+  async function enviar() {
+    setErr('')
+    if (!email) return
+    const { error } = await supabase.auth.signInWithOtp({
       email,
-      password: senha,
-    });
-
-    if (error) {
-      setErro("E-mail ou senha inválidos!");
-    } else {
-      navigate("/dashboard");
-    }
-  };
+      options: {
+        emailRedirectTo: window.location.origin + '/', // voltar pro app
+      },
+    })
+    if (error) setErr(error.message)
+    else setOk(true)
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form
-        onSubmit={handleLogin}
-        className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm"
-      >
-        <h2 className="text-2xl font-bold mb-4 text-center text-blue-700">
-          Login
-        </h2>
+    <div className="mx-auto max-w-md p-6">
+      <h1 className="text-2xl font-bold mb-3">Acesso</h1>
+      <p className="text-gray-600 mb-4">Informe seu e-mail corporativo para receber o link de acesso.</p>
 
-        {erro && (
-          <div className="bg-red-100 border border-red-400 text-red-700 p-2 rounded mb-3 text-sm">
-            {erro}
-          </div>
-        )}
-
-        <label className="text-sm font-medium text-gray-700">E-mail</label>
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <label className="block text-sm text-gray-600 mb-1">E-mail</label>
         <input
-          type="email"
-          placeholder="seuemail@exemplo.com"
+          className="w-full rounded-md border px-3 py-2"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-blue-500"
-          required
+          placeholder="seunome@grupocsc.com.br"
         />
-
-        <label className="text-sm font-medium text-gray-700">Senha</label>
-        <input
-          type="password"
-          placeholder="Digite sua senha"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          className="w-full p-2 mb-5 border rounded focus:ring-2 focus:ring-blue-500"
-          required
-        />
-
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition"
-        >
-          Entrar
-        </button>
-
-        <p className="text-sm text-center mt-3">
-          Não tem conta?{" "}
-          <Link to="/cadastro" className="text-blue-600 hover:underline">
-            Criar agora
-          </Link>
-        </p>
-      </form>
+        {err && <div className="text-red-600 text-sm mt-2">{err}</div>}
+        {ok ? (
+          <div className="text-green-700 mt-3">Verifique sua caixa de entrada.</div>
+        ) : (
+          <button onClick={enviar} className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+            Enviar link
+          </button>
+        )}
+      </div>
     </div>
-  );
+  )
 }
