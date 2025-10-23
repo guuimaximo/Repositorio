@@ -28,7 +28,6 @@ export default function CentralTratativas() {
   async function buscarTratativas() {
     setCarregando(true);
 
-    // Busca com contagem total
     let query = supabase
       .from("tratativas")
       .select("*", { count: "exact" })
