@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 export default function CentralTratativas() {
@@ -11,6 +12,7 @@ export default function CentralTratativas() {
     status: '',
   })
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   // 🔹 Buscar tratativas
   async function carregar() {
@@ -24,8 +26,8 @@ export default function CentralTratativas() {
     }
     if (filtros.setor) query = query.eq('setor_origem', filtros.setor)
     if (filtros.status) query = query.eq('status', filtros.status)
-    if (filtros.dataInicio) query = query.gte('data_ocorrido', filtros.dataInicio)
-    if (filtros.dataFim) query = query.lte('data_ocorrido', filtros.dataFim)
+    if (filtros.dataInicio) query = query.gte('data_ocorrida', filtros.dataInicio)
+    if (filtros.dataFim) query = query.lte('data_ocorrida', filtros.dataFim)
 
     const { data, error } = await query.order('created_at', { ascending: false })
     if (!error) setTratativas(data || [])
@@ -202,11 +204,17 @@ export default function CentralTratativas() {
                     <td className="py-2 px-3">
                       {t.status?.toLowerCase().includes('conclu') ||
                       t.status?.toLowerCase().includes('resolvido') ? (
-                        <button className="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400">
+                        <button
+                          onClick={() => navigate(`/consultar-tratativa/${t.id}`)}
+                          className="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400"
+                        >
                           Consultar
                         </button>
                       ) : (
-                        <button className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">
+                        <button
+                          onClick={() => navigate(`/tratar-tratativa/${t.id}`)}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
+                        >
                           Tratar
                         </button>
                       )}
