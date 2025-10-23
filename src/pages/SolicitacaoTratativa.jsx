@@ -1,9 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import CampoMotorista from '../components/CampoMotorista'
-
-const prioridades = ['Baixa', 'Média', 'Alta']
-const statusInic = 'Pendente'
 
 export default function SolicitacaoTratativa() {
   const [motorista, setMotorista] = useState({ chapa: '', nome: '' })
@@ -17,6 +14,21 @@ export default function SolicitacaoTratativa() {
   })
   const [imgFile, setImgFile] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [tiposOcorrencia, setTiposOcorrencia] = useState([])
+  const [setores, setSetores] = useState([])
+
+  // 🔹 Buscar listas dinâmicas
+  useEffect(() => {
+    async function carregarListas() {
+      const [{ data: tipos }, { data: setoresData }] = await Promise.all([
+        supabase.from('tipos_ocorrencia').select('id, nome').order('nome'),
+        supabase.from('setores').select('id, nome').order('nome'),
+      ])
+      setTiposOcorrencia(tipos || [])
+      setSetores(setoresData || [])
+    }
+    carregarListas()
+  }, [])
 
   async function salvar() {
     if (!motorista.chapa && !motorista.nome) {
@@ -41,13 +53,14 @@ export default function SolicitacaoTratativa() {
         prioridade: form.prioridade,
         setor_origem: form.setor_origem,
         descricao: form.descricao,
-        status: statusInic,
+        status: 'Pendente',
         imagem_url,
         data_ocorrida: form.data_ocorrida || null,
         hora_ocorrida: form.hora_ocorrida || null,
       })
       if (error) throw error
-      alert('Solicitação registrada!')
+
+      alert('Solicitação registrada com sucesso!')
       setMotorista({ chapa: '', nome: '' })
       setForm({
         tipo_ocorrencia: '',
@@ -72,30 +85,48 @@ export default function SolicitacaoTratativa() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg shadow-sm">
         <CampoMotorista value={motorista} onChange={setMotorista} />
 
+        {/* 🔹 Tipo de Ocorrência - dinâmico */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Tipo de Ocorrência</label>
-          <input className="w-full rounded-md border px-3 py-2"
+          <select
+            className="w-full rounded-md border px-3 py-2"
             value={form.tipo_ocorrencia}
-            onChange={e => setForm({ ...form, tipo_ocorrencia: e.target.value })}
-            placeholder="Ex.: Uso de celular, Excesso de velocidade…" />
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
-          <select className="w-full rounded-md border px-3 py-2"
-            value={form.prioridade}
-            onChange={e => setForm({ ...form, prioridade: e.target.value })}
+            onChange={(e) => setForm({ ...form, tipo_ocorrencia: e.target.value })}
           >
-            {prioridades.map(p => <option key={p} value={p}>{p}</option>)}
+            <option value="">Selecione...</option>
+            {tiposOcorrencia.map((t) => (
+              <option key={t.id} value={t.nome}>{t.nome}</option>
+            ))}
           </select>
         </div>
 
+        {/* 🔹 Setor de Origem - dinâmico */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Setor de Origem</label>
-          <input className="w-full rounded-md border px-3 py-2"
-                 value={form.setor_origem}
-                 onChange={e => setForm({ ...form, setor_origem: e.target.value })}
-                 placeholder="Telemetria, CCO, Manutenção…" />
+          <select
+            className="w-full rounded-md border px-3 py-2"
+            value={form.setor_origem}
+            onChange={(e) => setForm({ ...form, setor_origem: e.target.value })}
+          >
+            <option value="">Selecione...</option>
+            {setores.map((s) => (
+              <option key={s.id} value={s.nome}>{s.nome}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Restante do formulário permanece igual */}
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
+          <select
+            className="w-full rounded-md border px-3 py-2"
+            value={form.prioridade}
+            onChange={(e) => setForm({ ...form, prioridade: e.target.value })}
+          >
+            <option>Baixa</option>
+            <option>Média</option>
+            <option>Alta</option>
+          </select>
         </div>
 
         <div>
