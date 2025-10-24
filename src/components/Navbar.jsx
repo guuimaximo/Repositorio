@@ -1,27 +1,57 @@
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import Navbar from "./components/Navbar";
 
-export default function Navbar() {
-  const { pathname } = useLocation()
-  const link = ({ isActive }) =>
-    `px-3 py-2 rounded-md text-sm font-medium ${
-      isActive ? 'text-blue-700 underline' : 'text-gray-700 hover:text-blue-700'
-    }`
+// Páginas
+import Dashboard from "./pages/Dashboard";
+import CentralTratativas from "./pages/CentralTratativas";
+import TratarTratativa from "./pages/TratarTratativa";
+import ConsultarTratativa from "./pages/ConsultarTratativa";
+import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
+import Login from "./pages/Login";
+import Cadastro from "./pages/Cadastro";
+import Home from "./pages/Home";
+
+export default function App() {
+  const location = useLocation();
+
+  // 🔹 Páginas que DEVEM exibir o Navbar (somente tratativas)
+  const mostrarNavbar = ["/central", "/tratar", "/consultar", "/solicitar"].some(
+    (path) => location.pathname.startsWith(path)
+  );
 
   return (
-    <nav className="bg-white sticky top-0 z-20 shadow-sm">
-      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 text-2xl font-semibold">
-          <span role="img" aria-label="bus">🚌</span>
-          <span>INOVEQUATAÍ</span>
-        </Link>
+    <div className="min-h-screen bg-gray-50">
+      {/* ✅ Só mostra o Navbar nas telas de tratativas */}
+      {mostrarNavbar && <Navbar />}
 
-        <div className="flex items-center gap-4">
-          <NavLink to="/solicitar" className={link}>Solicitar Tratativa</NavLink>
-          <NavLink to="/central" className={link}>Central de Tratativas</NavLink>
-        </div>
-      </div>
-      {/* linha fina para separar quando há navbar fixa */}
-      <div className="h-px w-full bg-gray-100" />
-    </nav>
-  )
+      <Routes>
+        {/* HOME (Sidebar) */}
+        <Route path="/" element={<Home />} />
+
+        {/* DASHBOARD e módulos principais */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route
+          path="/avarias"
+          element={
+            <div className="p-10 text-gray-700 text-lg">
+              🚧 Módulo de <strong>Cobrança de Avarias</strong> em desenvolvimento.
+            </div>
+          }
+        />
+
+        {/* TRATATIVAS */}
+        <Route path="/central" element={<CentralTratativas />} />
+        <Route path="/tratar/:id" element={<TratarTratativa />} />
+        <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+        <Route path="/solicitar" element={<SolicitacaoTratativa />} />
+
+        {/* LOGIN / CADASTRO */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Cadastro />} />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
+  );
 }
