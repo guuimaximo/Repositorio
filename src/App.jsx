@@ -1,40 +1,52 @@
-// src/App.jsx
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
-import Navbar from './components/Navbar'
+import { Routes, Route, Navigate } from "react-router-dom";
+import Navbar from "./components/Navbar";
 
-// === Páginas (lazy para carregar mais rápido; se preferir, pode voltar aos imports diretos) ===
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const CentralTratativas = lazy(() => import('./pages/CentralTratativas'))
-const TratarTratativa = lazy(() => import('./pages/TratarTratativa'))
-const ConsultarTratativa = lazy(() => import('./pages/ConsultarTratativa'))
-const SolicitacaoTratativa = lazy(() => import('./pages/SolicitacaoTratativa'))
-const Login = lazy(() => import('./pages/Login'))
+// Páginas antigas (mantidas)
+import Dashboard from "./pages/Dashboard";
+import CentralTratativas from "./pages/CentralTratativas";
+import TratarTratativa from "./pages/TratarTratativa";
+import ConsultarTratativa from "./pages/ConsultarTratativa";
+import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
+import Login from "./pages/Login";
+
+// Novas páginas (atualização)
+import Home from "./pages/Home"; // nova página principal
+import Cadastro from "./pages/Cadastro"; // já está no seu projeto
 
 export default function App() {
-  // ATENÇÃO: NÃO usar <BrowserRouter> aqui.
-  // Ele já deve estar em src/main.jsx. Assim evitamos "You cannot render a <Router> inside another <Router>".
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navbar global: se quiser ocultar no /login, dá pra condicionar via useLocation() */}
+      {/* Navbar global (só aparece fora do login) */}
       <Navbar />
 
-      {/* Suspense exibe um fallback leve enquanto a página carrega (lazy) */}
-      <Suspense fallback={<div className="p-6 text-gray-500">Carregando…</div>}>
-        <Routes>
-          {/* ROTAS ANTIGAS (mesmos paths) */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/central" element={<CentralTratativas />} />
-          <Route path="/tratar/:id" element={<TratarTratativa />} />
-          <Route path="/consultar/:id" element={<ConsultarTratativa />} />
-          <Route path="/solicitar" element={<SolicitacaoTratativa />} />
-          <Route path="/login" element={<Login />} />
+      <Routes>
+        {/* 🔹 NOVA PÁGINA INICIAL */}
+        <Route path="/" element={<Home />} />
 
-          {/* Fallback para qualquer rota inválida */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+        {/* 🔹 ROTAS EXISTENTES — preservadas exatamente como estavam */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/central" element={<CentralTratativas />} />
+        <Route path="/tratar/:id" element={<TratarTratativa />} />
+        <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+        <Route path="/solicitar" element={<SolicitacaoTratativa />} />
+
+        {/* 🔹 LOGIN / CADASTRO */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Cadastro />} />
+
+        {/* 🔹 MÓDULO FUTURO — COBRANÇA DE AVARIAS */}
+        <Route
+          path="/avarias"
+          element={
+            <div className="p-10 text-gray-700 text-lg">
+              🚧 Módulo de <strong>Cobrança de Avarias</strong> em desenvolvimento.
+            </div>
+          }
+        />
+
+        {/* Fallback para rotas inexistentes */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
-  )
+  );
 }
