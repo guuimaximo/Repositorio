@@ -5,7 +5,7 @@ import { NavLink } from "react-router-dom";
 export default function Sidebar() {
   const menu = [
     { name: "Início", path: "/", icon: <FaHome /> },
-    { name: "Tratativas", path: "/central-tratativas", icon: <FaBrain /> },
+    { name: "Tratativas", path: "/central", icon: <FaBrain /> },
     { name: "Avarias", path: "/avarias", icon: <FaFileInvoice /> },
     { name: "Painel", path: "/dashboard", icon: <FaChartBar /> },
     { name: "Configurações", path: "/configuracoes", icon: <FaCog /> },
@@ -14,7 +14,6 @@ export default function Sidebar() {
   return (
     <div className="h-screen w-60 bg-blue-700 text-white flex flex-col py-6 shadow-lg fixed">
       <h1 className="text-2xl font-bold mb-10 px-6 flex items-center gap-2">
-        🚌 InoveQuatai
       </h1>
 
       <nav className="flex flex-col gap-2 px-3">
