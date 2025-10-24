@@ -89,7 +89,7 @@ export default function TratarTratativa() {
           <Item titulo="Prioridade" valor={t.prioridade} />
           <Item titulo="Setor" valor={t.setor_origem} />
           <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrida || '-'} ${t.hora_ocorrida || ''}`} />
+          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
           <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
           {t.imagem_url && (
             <div className="md:col-span-2">
