@@ -1,39 +1,40 @@
-import React from "react";
-import { FaHome, FaBrain, FaFileInvoice, FaChartBar, FaCog } from "react-icons/fa";
 import { NavLink } from "react-router-dom";
+import { FaHome, FaClipboardList, FaTools, FaMoneyBill, FaSignOutAlt } from "react-icons/fa";
 
 export default function Sidebar() {
-  const menu = [
-    { name: "Início", path: "/", icon: <FaHome /> },
-    { name: "Tratativas", path: "/central", icon: <FaBrain /> },
-    { name: "Avarias", path: "/avarias", icon: <FaFileInvoice /> },
-    { name: "Painel", path: "/dashboard", icon: <FaChartBar /> },
-    { name: "Configurações", path: "/configuracoes", icon: <FaCog /> },
+  const links = [
+    { to: "/", icon: <FaHome />, label: "Início" },
+    { to: "/central", icon: <FaClipboardList />, label: "Tratativas" },
+    { to: "/avarias", icon: <FaTools />, label: "Avarias" },
+    { to: "/cobrancas", icon: <FaMoneyBill />, label: "Cobranças" },
   ];
 
   return (
-    <div className="h-screen w-60 bg-blue-700 text-white flex flex-col py-6 shadow-lg fixed">
-      <h1 className="text-2xl font-bold mb-10 px-6 flex items-center gap-2">
-      </h1>
-
-      <nav className="flex flex-col gap-2 px-3">
-        {menu.map((item, index) => (
+    <aside className="w-60 bg-blue-700 text-white flex flex-col">
+      <div className="p-4 text-center font-bold text-xl border-b border-blue-600">
+        INOVEQUATAI
+      </div>
+      <nav className="flex-1 p-3">
+        {links.map((link) => (
           <NavLink
-            key={index}
-            to={item.path}
+            key={link.to}
+            to={link.to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                isActive
-                  ? "bg-blue-500 font-semibold"
-                  : "hover:bg-blue-600 hover:pl-5"
+              `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
+                isActive ? "bg-blue-500" : "hover:bg-blue-600"
               }`
             }
           >
-            {item.icon}
-            <span>{item.name}</span>
+            {link.icon}
+            <span>{link.label}</span>
           </NavLink>
         ))}
       </nav>
-    </div>
+      <div className="p-4 border-t border-blue-600">
+        <button className="flex items-center gap-2 text-sm hover:text-red-300">
+          <FaSignOutAlt /> Sair
+        </button>
+      </div>
+    </aside>
   );
 }
