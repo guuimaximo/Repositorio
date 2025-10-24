@@ -1,21 +1,18 @@
-import Sidebar from "./Sidebar";
+import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
-import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar";
 
 export default function Layout() {
+  const location = useLocation();
+  const hideLayout = location.pathname === "/login";
+
   return (
     <div className="flex min-h-screen bg-gray-50">
-      
-      {/* Sempre renderiza o Sidebar, pois este Layout só é usado em rotas protegidas */}
-      <Sidebar /> 
-      
-      <div className="flex-1 flex flex-col">
-        
-        {/* Sempre renderiza a Navbar */}
-        <Navbar />
-
-        <main className="flex-1 p-4">
-          <Outlet /> {/* Onde as páginas (Dashboard, Avarias, etc.) aparecem */}
+      {!hideLayout && <Sidebar />}
+      <div className="flex flex-col flex-1">
+        {!hideLayout && <Navbar />}
+        <main className="flex-1 p-6 overflow-y-auto">
+          <Outlet />
         </main>
       </div>
     </div>
