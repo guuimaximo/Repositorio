@@ -1,15 +1,16 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import Navbar from "./components/Navbar";
+import Navbar from "/components/Navbar.jsx";
 
 // Páginas
-import Dashboard from "./pages/Dashboard";
-import CentralTratativas from "./pages/CentralTratativas";
-import TratarTratativa from "./pages/TratarTratativa";
-import ConsultarTratativa from "./pages/ConsultarTratativa";
-import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import Login from "./pages/Login";
-import Cadastro from "./pages/Cadastro";
-import Home from "./pages/Home";
+import Dashboard from "/pages/Dashboard.jsx";
+import CentralTratativas from "/pages/CentralTratativas.jsx";
+import TratarTratativa from "/pages/TratarTratativa.jsx";
+import ConsultarTratativa from "/pages/ConsultarTratativa.jsx";
+import SolicitacaoTratativa from "/pages/SolicitacaoTratativa.jsx";
+import Login from "/pages/Login.jsx";
+import Cadastro from "/pages/Cadastro.jsx";
+import Home from "/pages/Home.jsx";
+import Avarias from "/pages/Avarias.jsx"; // 1. Adicionada a importação
 
 export default function App() {
   const location = useLocation();
@@ -30,21 +31,15 @@ export default function App() {
 
         {/* DASHBOARD e módulos principais */}
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route
-          path="/avarias"
-          element={
-            <div className="p-10 text-gray-700 text-lg">
-        <Route path="/avarias" element={<Avarias />} /
-            </div>
-          }
-        />
+        
+        {/* 2. Rota de Avarias corrigida */}
+        <Route path="/avarias" element={<Avarias />} />
 
         {/* TRATATIVAS */}
         <Route path="/central" element={<CentralTratativas />} />
         <Route path="/tratar/:id" element={<TratarTratativa />} />
         <Route path="/consultar/:id" element={<ConsultarTratativa />} />
         <Route path="/solicitar" element={<SolicitacaoTratativa />} />
-
 
         {/* LOGIN / CADASTRO */}
         <Route path="/login" element={<Login />} />
@@ -56,3 +51,4 @@ export default function App() {
     </div>
   );
 }
+
