@@ -18,10 +18,10 @@ export default function App() {
         <Route path="/" element={<Home />} />
 
         {/* MÓDULO DE TRATATIVAS */}
-        <Route path="/central-tratativas" element={<CentralTratativas />} />
-        <Route path="/consultar-tratativa/:id" element={<ConsultarTratativa />} />
-        <Route path="/tratar-tratativa/:id" element={<TratarTratativa />} />
-        <Route path="/solicitar-tratativa" element={<SolicitarTratativa />} />
+        <Route path="/central" element={<CentralTratativas />} />
+        <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+        <Route path="/tratar/:id" element={<TratarTratativa />} />
+        <Route path="/solicitar" element={<SolicitarTratativa />} />
 
         {/* MÓDULO DE COBRANÇA DE AVARIAS (em breve) */}
         <Route path="/avarias" element={<h1 className='p-10'>🚧 Módulo de Avarias em construção</h1>} />
