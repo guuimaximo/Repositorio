@@ -34,7 +34,7 @@ export default function App() {
           path="/avarias"
           element={
             <div className="p-10 text-gray-700 text-lg">
-              🚧 Módulo de <strong>Cobrança de Avarias</strong> em desenvolvimento.
+        <Route path="/avarias" element={<Avarias />} /
             </div>
           }
         />
@@ -44,6 +44,7 @@ export default function App() {
         <Route path="/tratar/:id" element={<TratarTratativa />} />
         <Route path="/consultar/:id" element={<ConsultarTratativa />} />
         <Route path="/solicitar" element={<SolicitacaoTratativa />} />
+
 
         {/* LOGIN / CADASTRO */}
         <Route path="/login" element={<Login />} />
