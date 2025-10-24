@@ -91,12 +91,22 @@ export default function TratarTratativa() {
           <Item titulo="Status" valor={t.status} />
           <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
           <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
+          
+          {/* SEÇÃO MODIFICADA */}
           {t.imagem_url && (
             <div className="md:col-span-2">
-              <span className="block text-sm text-gray-600 mb-1">Imagem enviada</span>
-              <img src={t.imagem_url} className="max-h-48 rounded" />
+              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
+              <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
+                <img 
+                  src={t.imagem_url} 
+                  className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity" 
+                  alt="Imagem da ocorrência"
+                />
+              </a>
             </div>
           )}
+          {/* FIM DA SEÇÃO MODIFICADA */}
+
         </dl>
       </div>
 
