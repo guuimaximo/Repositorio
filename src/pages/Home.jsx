@@ -10,7 +10,7 @@ export default function Home() {
       title: "Tratativas de Comportamento",
       desc: "Gerencie e acompanhe tratativas de motoristas e ocorrências operacionais.",
       color: "from-blue-500 to-blue-700",
-      path: "/central-tratativas",
+      path: "/central",
     },
     {
       title: "Cobrança de Avarias",
@@ -48,7 +48,7 @@ export default function Home() {
         </div>
 
         <div className="mt-12 text-sm text-gray-500">
-          Desenvolvido por <strong>InoveQuatai</strong> © 2025 — Sistema Integrado de Gestão.
+          Desenvolvido por <strong>INOVEQUATAÍ</strong> © 2025 — Sistema Integrado de Gestão.
         </div>
       </div>
     </div>
