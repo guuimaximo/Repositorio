@@ -1,27 +1,35 @@
-import React from 'react'
-import logoInova from '../assets/logoInovaQuatai.png'
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function Navbar() {
-  return (
-    <nav className="bg-white shadow-md px-6 py-3 flex items-center justify-between">
-      {/* Logo e nome */}
-      <div className="flex items-center gap-3">
-        <img 
-          src={logoInova} 
-          alt="Logo InovaQuatai" 
-          className="h-10 w-auto object-contain" 
-        />
-        <span className="font-semibold text-xl text-gray-800">
-          InovaQuatai
-        </span>
-      </div>
+  const location = useLocation();
+  // Verifica se a rota atual é a página inicial ("/")
+  const isDashboard = location.pathname === '/';
 
-      {/* Itens de menu (exemplo, pode mudar depois) */}
+  return (
+    <nav className="bg-white shadow-md px-6 py-3 flex items-center justify-end">
+      {/* Logo removido. "justify-between" alterado para "justify-end" */}
+
+      {/* Itens de menu */}
       <div className="flex items-center gap-6 text-gray-700">
-        <a href="/dashboard" className="hover:text-blue-600 transition">Dashboard</a>
-        <a href="/centraltratativas" className="hover:text-blue-600 transition">Tratativas</a>
-        <a href="/login" className="hover:text-blue-600 transition">Sair</a>
+        
+        {/* Mostra "Dashboard" e "Tratativas" apenas se NÃO estiver na página inicial */}
+        {!isDashboard && (
+          <>
+            <Link to="/" className="hover:text-blue-600 transition">
+              Dashboard
+            </Link>
+            <Link to="/central" className="hover:text-blue-600 transition">
+              Tratativas
+            </Link>
+          </>
+        )}
+
+        {/* Link "Sair" (usando Link em vez de <a>) */}
+        <Link to="/login" className="hover:text-blue-600 transition">
+          Sair
+        </Link>
       </div>
     </nav>
-  )
+  );
 }
