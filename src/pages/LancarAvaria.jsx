@@ -307,7 +307,7 @@ export default function LancarAvaria() {
           >
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               {/* <Upload className="w-10 h-10 mb-3 text-gray-400" /> */}
-              <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Clique para enviar</span> ou arraste e solte</M>
+              <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Clique para enviar</span> ou arraste e solte</p>
               <p className="text-xs text-gray-500">Imagens (PNG, JPG) ou Vídeos (MP4, MOV)</p>
             </div>
             <input id="file-upload" type="file" className="hidden" multiple onChange={handleFileChange} accept="image/*,video/*" />
