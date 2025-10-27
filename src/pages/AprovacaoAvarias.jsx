@@ -189,7 +189,7 @@ export default function AprovacaoAvarias() {
 
     if (error) {
       console.error('Erro ao buscar avarias pendentes:', error);
-      alert('Falha ao buscar avarias: 'D' + error.message);
+      alert('Falha ao buscar avarias: ' + error.message);
     } else {
       setAvarias(data || []);
     }
