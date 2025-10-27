@@ -15,15 +15,15 @@ import {
   FaWrench,
   FaClipboardCheck
 } from "react-icons/fa";
-import { useAuth } from "../AuthContext"; // 1. Importar o hook de autenticação
+import { useAuth } from "../AuthContext"; 
+import logoInova from '../assets/logoInovaQuatai.png'; // 1. Importar o logo
 
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
-  const [avariasOpen, setAvariasOpen] =useState(false);
+  const [avariasOpen, setAvariasOpen] = useState(false);
 
-  // 2. Obter a função de logout e o perfil do usuário
   const { logout, profile } = useAuth();
-  const userRole = profile?.role; // Ex: 'Analista', 'Gerente', 'Operacao'
+  const userRole = profile?.role; 
 
   // Estilos (sem alteração)
   const navLinkClass = ({ isActive }) =>
@@ -38,9 +38,20 @@ export default function Sidebar() {
 
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
-      <div className="p-4 text-center font-bold text-xl border-b border-blue-600">
-        INOVEQUATAI
+      
+      {/* --- 2. ÁREA DO LOGO ATUALIZADA --- */}
+      <div className="p-4 flex items-center justify-center gap-2 border-b border-blue-600">
+        <img 
+          src={logoInova} 
+          alt="Logo InoveQuatai" 
+          className="h-8 w-auto" // Ajuste a altura 'h-8' se necessário
+        />
+        <span className="font-bold text-xl">
+          INOVEQUATAI
+        </span>
       </div>
+      {/* --- FIM DA ATUALIZAÇÃO --- */}
+
       <nav className="flex-1 p-3">
         
         {/* 1. Início (Todos veem) */}
@@ -121,7 +132,7 @@ export default function Sidebar() {
       {/* 5. Botão Sair (Funcional) */}
       <div className="p-4 border-t border-blue-600">
         <button 
-          onClick={logout} // <-- Ação de Sair
+          onClick={logout} // Ação de Sair
           className="w-full flex items-center gap-2 text-sm hover:text-red-300"
         >
           <FaSignOutAlt /> Sair
