@@ -8,23 +8,22 @@ import {
   FaSignOutAlt, 
   FaChevronDown, 
   FaChevronRight,
-  FaPenSquare, // Ícone para Solicitação
-  FaListAlt,   // Ícone para Central
-  FaWrench     // Ícone para Lançamento
+  FaPenSquare, 
+  FaListAlt,   
+  FaWrench,
+  FaClipboardCheck // Ícone Adicionado
 } from "react-icons/fa";
 
 export default function Sidebar() {
-  // Estados para controlar os menus expansíveis
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
 
-  // Estilos reutilizáveis (do seu código original)
+  // Estilos reutilizáveis
   const navLinkClass = ({ isActive }) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
   
-  // Estilo para os sub-itens
   const subNavLinkClass = ({ isActive }) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg mb-1 ml-4 transition-all duration-200 text-sm ${
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
@@ -37,7 +36,7 @@ export default function Sidebar() {
       </div>
       <nav className="flex-1 p-3">
         
-        {/* 1. Início (Link normal) */}
+        {/* 1. Início */}
         <NavLink to="/" className={navLinkClass}>
           <FaHome />
           <span>Início</span>
@@ -88,6 +87,13 @@ export default function Sidebar() {
               <FaWrench />
               <span>Lançamento</span>
             </NavLink>
+
+            {/* Link Adicionado */}
+            <NavLink to="/aprovar-avarias" className={subNavLinkClass}>
+              <FaClipboardCheck />
+              <span>Aprovações</span>
+            </NavLink>
+
             <NavLink to="/cobrancas" className={subNavLinkClass}>
               <FaMoneyBill />
               <span>Cobranças</span>
