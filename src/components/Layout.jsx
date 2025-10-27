@@ -2,28 +2,23 @@
 
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
-import { useAuth } from "../AuthContext"; // 1. Importar o hook de autenticação
+import { useAuth } from "../AuthContext"; // Importar o hook de autenticação
 
 export default function Layout() {
-  const { isLoggedIn, loading } = useAuth(); // 2. Obter status do login
+  const { isLoggedIn, loading } = useAuth(); // Obter status do login
   const location = useLocation();
 
-  // 3. Mostrar "Carregando..." enquanto o AuthContext verifica a sessão
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        Carregando sessão...
-      </div>
-    );
-  }
+  // Mostrar "Carregando..." enquanto o AuthContext verifica a sessão
+  // (Este estado é gerenciado dentro do AuthProvider agora)
+  // if (loading) { ... } // Não é mais necessário aqui
 
-  // 4. Se não estiver logado, redireciona para /login
+  // Se não estiver logado, redireciona para /login
   if (!isLoggedIn) {
-    // Guarda a página que o usuário tentou acessar, para redirecionar de volta após o login
+    // Guarda a página que o usuário tentou acessar
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 5. Se estiver logado, mostra a Sidebar e o conteúdo da página
+  // Se estiver logado, mostra a Sidebar e o conteúdo
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
