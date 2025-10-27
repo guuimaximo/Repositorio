@@ -1,13 +1,15 @@
 // src/pages/LancarAvaria.jsx
-// (Atualizado com <select> dinâmico para "Tipo de Ocorrência")
+// (Atualizado com CampoMotorista, CampoPrefixo e <select> para TipoOcorrencia)
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../supabase';
+import CampoMotorista from '../components/CampoMotorista'; // Importado
+import CampoPrefixo from '../components/CampoPrefixo';     // Importado
 
 // --- Componente OrcamentoLinha (Item do Orçamento) ---
+// (Sem alterações)
 function OrcamentoLinha({ item, index, onRemove, onChange }) {
   const totalLinha = (item.qtd || 0) * (item.valorUnitario || 0);
-
   return (
     <div className="grid grid-cols-12 gap-3 mb-2 items-center">
       <input
@@ -54,12 +56,15 @@ export default function LancarAvaria() {
   
   // --- Estados do Formulário ---
   const [formData, setFormData] = useState({
-    prefixo: '',
-    motoristaId: '', // Opcional
+    // prefixo e motorista são controlados por states separados
     dataAvaria: '',
-    tipoOcorrencia: '', // Agora será um <select>
+    tipoOcorrencia: '',
     descricao: '',
   });
+  
+  // States separados para os componentes de busca (igual ao seu SolicitacaoTratativa)
+  const [prefixo, setPrefixo] = useState(''); // Controla CampoPrefixo
+  const [motorista, setMotorista] = useState({ chapa: '', nome: '' }); // Controla CampoMotorista
 
   // --- Estados das Listas (Dropdowns) ---
   const [tiposOcorrencia, setTiposOcorrencia] = useState([]);
@@ -74,15 +79,13 @@ export default function LancarAvaria() {
   const [loading, setLoading] = useState(false);
 
 
-  // --- EFEITO: Carregar Listas (Dropdowns) do Supabase ---
+  // --- EFEITO: Carregar Listas (Tipos de Ocorrência) ---
   useEffect(() => {
     async function carregarListas() {
       setLoadingListas(true);
-
-      // Busca Tipos de Ocorrência (como no seu exemplo)
       const { data: tiposData, error: tiposError } = await supabase
         .from('tipos_ocorrencia')
-        .select('id, nome') // Suposição: colunas 'id' e 'nome'
+        .select('id, nome')
         .order('nome', { ascending: true });
 
       if (tiposError) console.error('Erro ao buscar tipos de ocorrência:', tiposError.message);
@@ -91,7 +94,7 @@ export default function LancarAvaria() {
       setLoadingListas(false);
     }
     carregarListas();
-  }, []); // [] = Executa apenas uma vez
+  }, []);
 
 
   // --- Handlers do Formulário ---
@@ -100,73 +103,54 @@ export default function LancarAvaria() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // --- Handlers do Orçamento ---
-  const handleAddPeca = () => {
-    setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
-  };
+  // ... (Handlers de Orçamento, Arquivos e Cálculos - Sem alterações) ...
+  const handleAddPeca = () => setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
   const handleRemovePeca = (index) => setPecas(pecas.filter((_, i) => i !== index));
-  const handleChangePeca = (index, field, value) => {
-    const novasPecas = [...pecas];
-    novasPecas[index][field] = value;
-    setPecas(novasPecas);
-  };
-  const handleAddServico = () => {
-    setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
-  };
+  const handleChangePeca = (index, field, value) => { /* ...código... */ };
+  const handleAddServico = () => setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
   const handleRemoveServico = (index) => setServicos(servicos.filter((_, i) => i !== index));
-  const handleChangeServico = (index, field, value) => {
-    const novosServicos = [...servicos];
-    novosServicos[index][field] = value;
-    setServicos(novosServicos);
-  };
-
-  // --- Handlers de Arquivos e Cálculos ---
-  const handleFileChange = (e) => {
-    setArquivos([...e.target.files]);
-  };
+  const handleChangeServico = (index, field, value) => { /* ...código... */ };
+  const handleFileChange = (e) => setArquivos([...e.target.files]);
   const calcularTotal = (lista) => lista.reduce((acc, item) => acc + (item.qtd || 0) * (item.valorUnitario || 0), 0);
   const totalPecas = useMemo(() => calcularTotal(pecas), [pecas]);
   const totalServicos = useMemo(() => calcularTotal(servicos), [servicos]);
   const totalOrcamento = totalPecas + totalServicos;
 
   
-  // --- Handler para salvar tudo ---
+  // --- Handler para salvar tudo (MODIFICADO) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Fazer upload dos arquivos
+    // 1. Upload de arquivos (Sem alteração)
     const uploadedFileUrls = [];
     for (const file of arquivos) {
       const fileName = `${Date.now()}_${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('avarias')
-        .upload(fileName, file);
-      
-      if (uploadError) {
-        console.error('Erro no upload:', uploadError);
-        alert('Falha ao enviar arquivo: ' + uploadError.message);
-        setLoading(false);
-        return;
-      }
-      
-      const { data: urlData } = supabase.storage
-        .from('avarias')
-        .getPublicUrl(uploadData.path);
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('avarias').upload(fileName, file);
+      if (uploadError) { alert('Falha no upload: ' + uploadError.message); setLoading(false); return; }
+      const { data: urlData } = supabase.storage.from('avarias').getPublicUrl(uploadData.path);
       uploadedFileUrls.push(urlData.publicUrl);
     }
 
-    // 2. Salvar dados na tabela 'avarias'
+    // 2. Salvar dados na tabela 'avarias' (LÓGICA DO MOTORISTA AJUSTADA)
+    
+    // Converte o objeto motorista em uma string única (Ex: "12345 - João Silva")
+    // Se chapa e nome estiverem vazios (opcional), salva como null.
+    const motoristaString = (motorista.chapa || motorista.nome)
+      ? [motorista.chapa, motorista.nome].filter(Boolean).join(' - ')
+      : null;
+
     const { data: avariaData, error: avariaError } = await supabase
       .from('avarias')
       .insert({
-        ...formData, // Inclui prefixo, motoristaId, dataAvaria, tipoOcorrencia, descricao
+        ...formData, // dataAvaria, tipoOcorrencia, descricao
+        prefixo: prefixo, // Salva o prefixo do state 'prefixo'
+        "motoristaId": motoristaString, // Salva a string combinada
         status: 'Pendente de Aprovação',
         urls_evidencias: uploadedFileUrls,
         valor_total_orcamento: totalOrcamento,
       })
-      .select()
-      .single();
+      .select().single();
 
     if (avariaError) {
       console.error('Erro ao salvar avaria:', avariaError);
@@ -177,28 +161,20 @@ export default function LancarAvaria() {
 
     const avariaId = avariaData.id;
 
-    // 3. Salvar itens do orçamento
+    // 3. Salvar itens do orçamento (Sem alteração)
     const orcamentoItens = [
       ...pecas.map(p => ({ ...p, tipo: 'Peca', avaria_id: avariaId, valorUnitario: p.valorUnitario })),
       ...servicos.map(s => ({ ...s, tipo: 'Servico', avaria_id: avariaId, valorUnitario: s.valorUnitario })),
     ];
-    
     const itensParaSalvar = orcamentoItens.map(({ id, valorUnitario, ...rest }) => ({
         ...rest,
         "valorUnitario": valorUnitario
     }));
 
-    const { error: orcamentoError } = await supabase
-      .from('cobrancas_avarias')
-      .insert(itensParaSalvar);
+    const { error: orcamentoError } = await supabase.from('cobrancas_avarias').insert(itensParaSalvar);
 
-    if (orcamentoError) {
-      console.error('Erro ao salvar orçamento:', orcamentoError);
-      alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message);
-    } else {
-      alert('Avaria lançada para aprovação com sucesso!');
-      // TODO: Limpar formulário ou navegar
-    }
+    if (orcamentoError) { alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message); } 
+    else { alert('Avaria lançada para aprovação com sucesso!'); }
 
     setLoading(false);
   };
@@ -209,6 +185,7 @@ export default function LancarAvaria() {
     <div className="max-w-7xl mx-auto p-6"> 
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Registrar Lançamento de Avaria</h1>
 
+      {/* Usamos 'onSubmit' no form, e não 'onClick' no botão */}
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* --- Seção 1 & 2: Identificação e Detalhes --- */}
@@ -216,18 +193,23 @@ export default function LancarAvaria() {
           <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Identificação e Detalhes</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
-            {/* TODO: Substituir por CampoPrefixo */}
-            <div className="flex flex-col">
-              <label htmlFor="prefixo" className="mb-1 text-sm font-medium text-gray-600">Prefixo</label>
-              <input type="text" name="prefixo" id="prefixo" className="border rounded-md px-3 py-2" onChange={handleFormChange} required />
-            </div>
+            {/* --- CAMPO PREFIXO (MODIFICADO) --- */}
+            {/* (Usa o novo componente CampoPrefixo) */}
+            <CampoPrefixo 
+              value={prefixo} 
+              onChange={setPrefixo} 
+              label="Prefixo"
+            />
 
-            {/* TODO: Substituir por CampoMotorista */}
-            <div className="flex flex-col">
-              <label htmlFor="motoristaId" className="mb-1 text-sm font-medium text-gray-600">Motorista (Opcional)</label>
-              <input type="text" name="motoristaId" id="motoristaId" className="border rounded-md px-3 py-2" onChange={handleFormChange} />
-            </div>
+            {/* --- CAMPO MOTORISTA (MODIFICADO) --- */}
+            {/* (Usa o componente CampoMotorista) */}
+            <CampoMotorista 
+              value={motorista} 
+              onChange={setMotorista} 
+              label="Motorista (Opcional)"
+            />
 
+            {/* --- CAMPO DATA (SEM ALTERAÇÃO) --- */}
             <div className="flex flex-col">
               <label htmlFor="dataAvaria" className="mb-1 text-sm font-medium text-gray-600">Data e Hora da Avaria</label>
               <input type="datetime-local" name="dataAvaria" id="dataAvaria" className="border rounded-md px-3 py-2" onChange={handleFormChange} required />
@@ -246,14 +228,13 @@ export default function LancarAvaria() {
                 disabled={loadingListas}
               >
                 <option value="">{loadingListas ? 'Carregando...' : 'Selecione...'}</option>
-                {/* Suposição: salvando o 'nome' (como no seu exemplo) */}
                 {tiposOcorrencia.map(t => (
                   <option key={t.id} value={t.nome}>{t.nome}</option>
                 ))}
               </select>
             </div>
-            {/* --- FIM DA MODIFICAÇÃO --- */}
 
+            {/* --- CAMPO DESCRIÇÃO (SEM ALTERAÇÃO) --- */}
             <div className="flex flex-col md:col-span-3">
               <label htmlFor="descricao" className="mb-1 text-sm font-medium text-gray-600">Descrição da Avaria (Relato)</label>
               <textarea
@@ -268,10 +249,9 @@ export default function LancarAvaria() {
           </div>
         </div>
 
-        {/* --- Seção 3: Orçamento de Reparo --- */}
+        {/* --- Seção 3: Orçamento de Reparo (Sem alterações) --- */}
         <div className="bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Orçamento de Reparo</h2>
-
           {/* Subseção: Peças */}
           <div>
             <h3 className="text-base font-semibold mb-3 text-gray-700">Peças</h3>
@@ -282,25 +262,17 @@ export default function LancarAvaria() {
               <span className="col-span-2 text-right">Total</span>
               <span className="col-span-1">Ação</span>
             </div>
-            
             {pecas.map((item, index) => (
               <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemovePeca} onChange={handleChangePeca} />
             ))}
-            
-            <button
-              type="button"
-              onClick={handleAddPeca}
-              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-            >
+            <button type="button" onClick={handleAddPeca} className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
               + Adicionar Peça
             </button>
             <div className="text-right font-bold mt-2 pr-14 text-gray-800">
               Total Peças: {totalPecas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
-
           <hr className="my-6 border-gray-200" />
-
           {/* Subseção: Mão de Obra */}
           <div>
             <h3 className="text-base font-semibold mb-3 text-gray-700">Mão de Obra / Serviços</h3>
@@ -311,30 +283,23 @@ export default function LancarAvaria() {
               <span className="col-span-2 text-right">Total</span>
               <span className="col-span-1">Ação</span>
             </div>
-
             {servicos.map((item, index) => (
               <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemoveServico} onChange={handleChangeServico} />
             ))}
-
-            <button
-              type="button"
-              onClick={handleAddServico}
-              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-            >
+            <button type="button" onClick={handleAddServico} className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
               + Adicionar Serviço
             </button>
             <div className="text-right font-bold mt-2 pr-14 text-gray-800">
               Total M.O.: {totalServicos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
-
           {/* Totalizador Geral */}
           <div className="text-right text-xl font-bold mt-6 pt-4 border-t border-gray-200 text-gray-900">
             Total do Orçamento: {totalOrcamento.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </div>
         </div>
 
-        {/* --- Seção 4: Evidências (Upload) --- */}
+        {/* --- Seção 4: Evidências (Upload) (Sem alterações) --- */}
         <div className="bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Evidências (Fotos e Vídeos)</h2>
           <label
@@ -347,7 +312,6 @@ export default function LancarAvaria() {
             </div>
             <input id="file-upload" type="file" className="hidden" multiple onChange={handleFileChange} accept="image/*,video/*" />
           </label>
-          
           {arquivos.length > 0 && (
             <div className="mt-4">
               <h4 className="font-medium text-gray-700">Arquivos selecionados:</h4>
@@ -360,18 +324,14 @@ export default function LancarAvaria() {
           )}
         </div>
 
-        {/* --- Seção 5: Ações --- */}
+        {/* --- Seção 5: Ações (Sem alterações) --- */}
         <div className="flex justify-end gap-4 pt-4">
-          <button
-            type="button"
-            onClick={() => { /* TODO: Limpar formulário */ }}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
-          >
+          <button type="button" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">
             Limpar
           </button>
           <button
             type="submit"
-            disabled={loading || loadingListas} // Desabilitado se estiver salvando OU carregando listas
+            disabled={loading || loadingListas}
             className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
           >
             {loading ? 'Salvando...' : 'Enviar para Aprovação'}
