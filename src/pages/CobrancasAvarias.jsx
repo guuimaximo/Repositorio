@@ -1,11 +1,24 @@
+// src/pages/CobrancasAvarias.jsx
+// (Código totalmente reescrito para o novo schema)
+
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { FaSearch } from "react-icons/fa";
 
+// Componente para card de resumo
+function CardResumo({ titulo, valor, cor }) {
+  return (
+    <div className={`${cor} rounded-lg p-4 shadow text-center`}>
+      <h3 className="text-gray-600 text-sm">{titulo}</h3>
+      <p className="text-2xl font-bold text-gray-800">{valor}</p>
+    </div>
+  );
+}
+
 export default function CobrancasAvarias() {
-  const [cobrancas, setCobrancas] = useState([]);
+  const [cobrancas, setCobrancas] = useState([]); // Avarias aprovadas
   const [filtro, setFiltro] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState(""); // Filtra por 'status_cobranca'
   const [loading, setLoading] = useState(true);
   const [resumo, setResumo] = useState({
     total: 0,
@@ -14,62 +27,80 @@ export default function CobrancasAvarias() {
     canceladas: 0,
   });
 
-  // === Buscar cobranças do Supabase ===
+  // === Buscar cobranças (Avarias Aprovadas) ===
   const carregarCobrancas = async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("cobrancas_avarias")
-      .select("*, avarias:avarias!id_avaria(prefixo, tipo_avaria, valor_estimado)")
+    // 1. Busca da tabela 'avarias' onde o status de aprovação é 'Aprovado'
+    let query = supabase
+      .from("avarias")
+      .select("*")
+      .eq("status", "Aprovado") // <-- O filtro principal
       .order("created_at", { ascending: false });
 
+    // 2. Aplica filtro de status de cobrança (se houver)
+    if (statusFiltro) {
+      query = query.eq("status_cobranca", statusFiltro);
+    }
+    
+    // 3. Aplica filtro de busca de texto (se houver)
+    if (filtro) {
+      // (Note que motoristaId e tipoOcorrencia estão com aspas por causa do camelCase)
+      query = query.or(
+        `prefixo.ilike.%${filtro}%, "motoristaId".ilike.%${filtro}%, "tipoOcorrencia".ilike.%${filtro}%`
+      );
+    }
+
+    const { data, error } = await query;
+
     if (!error && data) {
-      let filtradas = data;
-
-      if (filtro)
-        filtradas = filtradas.filter((c) =>
-          [
-            c.motorista_chapa,
-            c.prefixo,
-            c.avarias?.tipo_avaria,
-            c.descricao_acao,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(filtro.toLowerCase())
-        );
-
-      if (statusFiltro)
-        filtradas = filtradas.filter((c) => c.status_cobranca === statusFiltro);
-
-      setCobrancas(filtradas);
-
-      // Calcular resumo
-      setResumo({
-        total: data.length,
-        pendentes: data.filter((c) => c.status_cobranca === "Pendente").length,
-        cobradas: data.filter((c) => c.status_cobranca === "Cobrada").length,
-        canceladas: data.filter((c) => c.status_cobranca === "Cancelada").length,
-      });
+      setCobrancas(data); // Define os dados filtrados
+      
+      // Para o Resumo: precisamos recalcular os totais
+      // (Idealmente, isso seria feito no DB, mas faremos no JS)
+      await carregarResumo(); 
+      
+    } else {
+      console.error("Erro ao carregar cobranças:", error);
+      alert("Erro ao carregar cobranças.");
     }
 
     setLoading(false);
   };
+  
+  // Função separada para carregar o Resumo
+  // (Conta *todas* as avarias aprovadas, ignorando filtros)
+  const carregarResumo = async () => {
+     const { data, error } = await supabase
+      .from("avarias")
+      .select("status_cobranca") // Só precisamos do status
+      .eq("status", "Aprovado"); // Apenas as aprovadas
 
+     if (!error && data) {
+        setResumo({
+          total: data.length,
+          pendentes: data.filter((c) => c.status_cobranca === "Pendente").length,
+          cobradas: data.filter((c) => c.status_cobranca === "Cobrada").length,
+          canceladas: data.filter((c) => c.status_cobranca === "Cancelada").length,
+        });
+     }
+  }
+
+  // Recarrega quando os filtros mudam
   useEffect(() => {
     carregarCobrancas();
   }, [filtro, statusFiltro]);
 
-  // === Tratar cobrança ===
-  const tratarCobranca = async (cobranca, novoStatus) => {
+  // === Tratar cobrança (Marcar como Cobrada/Cancelada) ===
+  const tratarCobranca = async (avariaId, novoStatus) => {
     const { error } = await supabase
-      .from("cobrancas_avarias")
+      .from("avarias") // Atualiza a tabela 'avarias'
       .update({ status_cobranca: novoStatus })
-      .eq("id", cobranca.id);
+      .eq("id", avariaId);
 
     if (!error) {
       alert(`✅ Cobrança marcada como ${novoStatus}`);
-      carregarCobrancas();
+      carregarCobrancas(); // Recarrega a lista
     } else {
       alert("❌ Erro ao atualizar cobrança.");
     }
@@ -118,8 +149,8 @@ export default function CobrancasAvarias() {
 
       {/* Cards resumo */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <CardResumo titulo="Total" valor={resumo.total} cor="bg-blue-100" />
-        <CardResumo titulo="Pendentes" valor={resumo.pendentes} cor="bg-yellow-100" />
+        <CardResumo titulo="Total Aprovado" valor={resumo.total} cor="bg-blue-100" />
+        <CardResumo titulo="Pendentes Cobrança" valor={resumo.pendentes} cor="bg-yellow-100" />
         <CardResumo titulo="Cobradas" valor={resumo.cobradas} cor="bg-green-100" />
         <CardResumo titulo="Canceladas" valor={resumo.canceladas} cor="bg-red-100" />
       </div>
@@ -129,21 +160,19 @@ export default function CobrancasAvarias() {
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-blue-600 text-white text-left">
-              <th className="p-3">Data</th>
+              <th className="p-3">Data Aprovação</th>
               <th className="p-3">Motorista</th>
               <th className="p-3">Prefixo</th>
               <th className="p-3">Tipo Avaria</th>
-              <th className="p-3">Valor</th>
-              <th className="p-3">Status</th>
+              <th className="p-3">Valor Total</th>
+              <th className="p-3">Status Cobrança</th>
               <th className="p-3">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center p-6">
-                  Carregando...
-                </td>
+                <td colSpan="7" className="text-center p-6">Carregando...</td>
               </tr>
             ) : cobrancas.length === 0 ? (
               <tr>
@@ -157,11 +186,13 @@ export default function CobrancasAvarias() {
                   <td className="p-3">
                     {new Date(c.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-3">{c.motorista_chapa}</td>
-                  <td className="p-3">{c.avarias?.prefixo || "-"}</td>
-                  <td className="p-3">{c.avarias?.tipo_avaria || "-"}</td>
+                  <td className="p-3">{c.motoristaId || "-"}</td>
+                  <td className="p-3">{c.prefixo || "-"}</td>
+                  <td className="p-3">{c.tipoOcorrencia || "-"}</td>
                   <td className="p-3">
-                    R$ {c.avarias?.valor_estimado?.toFixed(2) || "-"}
+                    {(c.valor_total_orcamento || 0).toLocaleString('pt-BR', {
+                      style: 'currency', currency: 'BRL'
+                    })}
                   </td>
                   <td className="p-3">
                     <span
@@ -180,13 +211,13 @@ export default function CobrancasAvarias() {
                     {c.status_cobranca === "Pendente" ? (
                       <>
                         <button
-                          onClick={() => tratarCobranca(c, "Cobrada")}
+                          onClick={() => tratarCobranca(c.id, "Cobrada")}
                           className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
                         >
                           Cobrar
                         </button>
                         <button
-                          onClick={() => tratarCobranca(c, "Cancelada")}
+                          onClick={() => tratarCobranca(c.id, "Cancelada")}
                           className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
                         >
                           Cancelar
@@ -204,16 +235,6 @@ export default function CobrancasAvarias() {
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-// Componente para card de resumo
-function CardResumo({ titulo, valor, cor }) {
-  return (
-    <div className={`${cor} rounded-lg p-4 shadow text-center`}>
-      <h3 className="text-gray-600 text-sm">{titulo}</h3>
-      <p className="text-2xl font-bold text-gray-800">{valor}</p>
     </div>
   );
 }
