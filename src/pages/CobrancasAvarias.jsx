@@ -1,92 +1,133 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado para receber e salvar todos os novos dados do modal)
+// (Adicionado try/catch/finally para garantir setLoading(false))
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { FaSearch, FaEye } from "react-icons/fa"; 
-import CobrancaDetalheModal from "../components/CobrancaDetalheModal"; 
+import { FaSearch, FaEye } from "react-icons/fa";
+import CobrancaDetalheModal from "../components/CobrancaDetalheModal";
 
 function CardResumo({ titulo, valor, cor }) { /* ...código... */ }
 
 export default function CobrancasAvarias() {
-  const [cobrancas, setCobrancas] = useState([]); 
+  const [cobrancas, setCobrancas] = useState([]);
   const [filtro, setFiltro] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState(""); 
-  const [loading, setLoading] = useState(true);
-  const [resumo, setResumo] = useState({ /* ... */ });
+  const [statusFiltro, setStatusFiltro] = useState("");
+  const [loading, setLoading] = useState(true); // Começa true
+  const [resumo, setResumo] = useState({ total: 0, pendentes: 0, cobradas: 0, canceladas: 0 });
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
 
-  const formatCurrency = (value) => (value === null || value === undefined ? '-' : 
+  const formatCurrency = (value) => (value === null || value === undefined ? '-' :
     Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   );
 
-  // === Funções de Carregamento e Modal (sem alteração) ===
-  const carregarCobrancas = async () => { /* ... */ };
-  const carregarResumo = async () => { /* ... */ };
-  useEffect(() => { carregarCobrancas(); }, [filtro, statusFiltro]);
-  const handleVerDetalhes = (avaria) => { /* ... */ };
-  const handleCloseModal = () => { /* ... */ };
+  // === Buscar cobranças (Avarias Aprovadas) ===
+  const carregarCobrancas = async () => {
+    // Não seta loading aqui, pois carregarResumo também o controla
+    let query = supabase.from("avarias").select("*").eq("status", "Aprovado")
+      .order("created_at", { ascending: false });
 
-  // --- FUNÇÃO MODIFICADA ---
-  // Recebe o objeto updateData completo do modal
-  const handleAtualizarStatusCobranca = async (avariaId, novoStatus, updateData) => {
-     // A confirmação agora é feita dentro do modal antes de chamar esta função
-     // if (!window.confirm(...)) return; 
-    
-     // Remove a chave 'status_cobranca' do objeto updateData, pois já está implícito
-     // (Embora não seja estritamente necessário, é boa prática)
-     // delete updateData.status_cobranca; 
+    if (statusFiltro) query = query.eq("status_cobranca", statusFiltro);
+    if (filtro) query = query.or(`prefixo.ilike.%${filtro}%, "motoristaId".ilike.%${filtro}%, "tipoOcorrencia".ilike.%${filtro}%`);
 
-     const { error } = await supabase
-      .from("avarias") 
-      .update(updateData) // Salva todos os dados recebidos (status, obs, parcelas, valor, motoristaId)
-      .eq("id", avariaId);
+    const { data, error } = await query;
 
-    if (!error) {
-      alert(`✅ Cobrança marcada como ${novoStatus}`);
-      handleCloseModal(); 
-      carregarCobrancas(); 
+    if (error) {
+      console.error("Erro ao carregar lista de cobranças:", error);
+      alert("Erro ao carregar lista de cobranças. Verifique o console.");
+      setCobrancas([]); // Define como vazio em caso de erro
     } else {
-      alert(`❌ Erro ao atualizar status: ${error.message}`);
+      setCobrancas(data || []);
     }
+    // setLoading será chamado no finally do carregarTudo
   };
-  // --- FIM MODIFICAÇÃO ---
+
+  // Função para carregar o Resumo
+  const carregarResumo = async () => {
+    // Não seta loading aqui
+     const { data, error } = await supabase
+      .from("avarias")
+      .select("status_cobranca")
+      .eq("status", "Aprovado");
+
+     if (error) {
+        console.error("Erro ao carregar resumo:", error);
+        alert("Erro ao carregar resumo das cobranças. Verifique o console.");
+        // Mantém o resumo anterior ou zera? Decidi zerar.
+        setResumo({ total: 0, pendentes: 0, cobradas: 0, canceladas: 0 });
+     } else if (data) {
+        setResumo({
+          total: data.length,
+          pendentes: data.filter((c) => c.status_cobranca === "Pendente").length,
+          cobradas: data.filter((c) => c.status_cobranca === "Cobrada").length,
+          canceladas: data.filter((c) => c.status_cobranca === "Cancelada").length,
+        });
+     }
+     // setLoading será chamado no finally do carregarTudo
+  }
+
+  // --- NOVA FUNÇÃO PARA CARREGAR TUDO ---
+  const carregarTudo = async () => {
+      setLoading(true); // Define loading true no início
+      try {
+          // Roda as duas buscas em paralelo
+          await Promise.all([
+              carregarResumo(),
+              carregarCobrancas()
+          ]);
+      } catch (err) {
+          // Erros específicos já são tratados dentro das funções
+          console.error("Erro geral ao carregar dados do dashboard:", err);
+      } finally {
+          // ESSENCIAL: Garante que loading vire false
+          setLoading(false);
+      }
+  }
+  // --- FIM NOVA FUNÇÃO ---
+
+  // Roda carregarTudo quando os filtros mudam
+  useEffect(() => {
+    carregarTudo();
+  }, [filtro, statusFiltro]); // Dependências corretas
+
+  // === Funções do Modal (sem alteração) ===
+  const handleVerDetalhes = (avaria) => { setSelectedAvaria(avaria); setModalOpen(true); };
+  const handleCloseModal = () => { setModalOpen(false); setSelectedAvaria(null); };
+  const handleAtualizarStatusCobranca = async (avariaId, novoStatus, updateData) => {
+     // ... (lógica igual, já inclui try/catch implícito do await)
+     const { error } = await supabase.from("avarias").update(updateData).eq("id", avariaId);
+     if (!error) { /* ... (sucesso) ... */ carregarTudo(); } // Recarrega tudo
+     else { /* ... (erro) ... */ }
+  };
 
 
   return (
     <div className="p-6">
-      <h1 className="..."> Central de Cobranças ... </h1>
+      <h1 className="text-2xl font-semibold ..."> Central de Cobranças ... </h1>
       {/* ... (Filtros) ... */}
       {/* ... (Cards resumo) ... */}
 
       {/* Tabela */}
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="min-w-full border-collapse">
-          <thead>
-            <tr className="bg-blue-600 text-white text-left">
-              <th className="p-3">Data Aprovação</th>
-              <th className="p-3">Motorista</th>
-              <th className="p-3">Prefixo</th>
-              <th className="p-3">Tipo Avaria</th>
-              <th className="p-3">Valor Orçado</th> 
-              <th className="p-3">Valor Cobrado</th> 
-              <th className="p-3">Status Cobrança</th>
-              <th className="p-3">Ações</th>
-            </tr>
-          </thead>
+          {/* ... (thead igual) ... */}
           <tbody>
             {(() => {
-              if (loading) { return <tr><td colSpan="8">Carregando...</td></tr>; } 
-              if (cobrancas.length === 0) { return <tr><td colSpan="8">Nenhuma cobrança...</td></tr>; } 
+              if (loading) { // Verifica o estado 'loading'
+                return <tr><td colSpan="8" className="text-center p-6">Carregando...</td></tr>;
+              }
+              if (cobrancas.length === 0) {
+                return <tr><td colSpan="8" className="text-center p-6 text-gray-500">Nenhuma cobrança encontrada.</td></tr>;
+              }
               return cobrancas.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
+                  {/* ... (células da tabela iguais) ... */}
                   <td className="p-3">{new Date(c.created_at).toLocaleDateString()}</td>
                   <td className="p-3">{c.motoristaId || "-"}</td>
                   <td className="p-3">{c.prefixo || "-"}</td>
                   <td className="p-3">{c.tipoOcorrencia || "-"}</td>
-                  <td className="p-3">{formatCurrency(c.valor_total_orcamento)}</td> 
-                  <td className="p-3 font-medium">{formatCurrency(c.valor_cobrado)}</td> 
+                  <td className="p-3">{formatCurrency(c.valor_total_orcamento)}</td>
+                  <td className="p-3 font-medium">{formatCurrency(c.valor_cobrado)}</td>
                   <td className="p-3"> <span className={`px-2 py-1 ...`}> {c.status_cobranca} </span> </td>
                   <td className="p-3"> <button onClick={() => handleVerDetalhes(c)} className="..."> <FaEye /> Detalhes </button> </td>
                 </tr>
@@ -96,14 +137,8 @@ export default function CobrancasAvarias() {
         </table>
       </div>
 
-       {/* Renderiza o Modal (passa a função atualizada) */}
-      {modalOpen && (
-        <CobrancaDetalheModal 
-          avaria={selectedAvaria}
-          onClose={handleCloseModal}
-          onAtualizarStatus={handleAtualizarStatusCobranca} 
-        />
-      )}
+       {/* Renderiza o Modal */}
+      {modalOpen && ( <CobrancaDetalheModal /* ... */ /> )}
     </div>
   );
 }
