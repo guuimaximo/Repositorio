@@ -1,20 +1,32 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado para usar o CobrancaDetalheModal)
+// (Corrigido erro de sintaxe no tbody)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { FaSearch, FaEye } from "react-icons/fa"; // Adicionado FaEye
-import CobrancaDetalheModal from "../components/CobrancaDetalheModal"; // 1. Importar o Modal
+import { FaSearch, FaEye } from "react-icons/fa"; 
+import CobrancaDetalheModal from "../components/CobrancaDetalheModal"; 
 
-// Componente CardResumo (sem alteração)
-function CardResumo({ titulo, valor, cor }) { /* ...código... */ }
+// Componente CardResumo
+function CardResumo({ titulo, valor, cor }) {
+  return (
+    <div className={`${cor} rounded-lg p-4 shadow text-center`}>
+      <h3 className="text-gray-600 text-sm">{titulo}</h3>
+      <p className="text-2xl font-bold text-gray-800">{valor}</p>
+    </div>
+  );
+}
 
 export default function CobrancasAvarias() {
   const [cobrancas, setCobrancas] = useState([]); 
   const [filtro, setFiltro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState(""); 
   const [loading, setLoading] = useState(true);
-  const [resumo, setResumo] = useState({ /* ... */ });
+  const [resumo, setResumo] = useState({
+    total: 0,
+    pendentes: 0,
+    cobradas: 0,
+    canceladas: 0,
+  });
 
   // --- Estados do Modal ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -41,8 +53,22 @@ export default function CobrancasAvarias() {
     setLoading(false);
   };
   
-  // Função para carregar o Resumo (sem alteração)
-  const carregarResumo = async () => { /* ...código... */ }
+  // Função para carregar o Resumo
+  const carregarResumo = async () => {
+     const { data, error } = await supabase
+      .from("avarias")
+      .select("status_cobranca") 
+      .eq("status", "Aprovado");
+
+     if (!error && data) {
+        setResumo({
+          total: data.length,
+          pendentes: data.filter((c) => c.status_cobranca === "Pendente").length,
+          cobradas: data.filter((c) => c.status_cobranca === "Cobrada").length,
+          canceladas: data.filter((c) => c.status_cobranca === "Cancelada").length,
+        });
+     }
+  }
 
   useEffect(() => {
     carregarCobrancas();
@@ -72,8 +98,8 @@ export default function CobrancasAvarias() {
 
     if (!error) {
       alert(`✅ Cobrança marcada como ${novoStatus}`);
-      handleCloseModal(); // Fecha o modal
-      carregarCobrancas(); // Recarrega a lista
+      handleCloseModal(); 
+      carregarCobrancas(); 
     } else {
       alert("❌ Erro ao atualizar status da cobrança.");
     }
@@ -85,13 +111,43 @@ export default function CobrancasAvarias() {
         Central de Cobranças de Avarias
       </h1>
 
-      {/* Filtros (sem alteração) */}
-      {/* ... */}
+      {/* Filtros */}
+      <div className="bg-white p-4 shadow rounded-lg mb-6 flex flex-wrap gap-3 items-center">
+        <div className="flex items-center border rounded-md px-2 flex-1">
+          <FaSearch className="text-gray-400 mr-2" />
+          <input
+            type="text"
+            placeholder="Buscar (motorista, prefixo, tipo...)"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            className="flex-1 outline-none py-1"
+          />
+        </div>
+        <select
+          className="border rounded-md p-2"
+          value={statusFiltro}
+          onChange={(e) => setStatusFiltro(e.target.value)}
+        >
+          <option value="">Todos os Status</option>
+          <option value="Pendente">Pendentes</option>
+          <option value="Cobrada">Cobradas</option>
+          <option value="Cancelada">Canceladas</option>
+        </select>
+        <button
+          onClick={() => { setFiltro(""); setStatusFiltro(""); }}
+          className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2"
+        > Limpar </button>
+      </div>
 
-      {/* Cards resumo (sem alteração) */}
-      {/* ... */}
+      {/* Cards resumo */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <CardResumo titulo="Total Aprovado" valor={resumo.total} cor="bg-blue-100" />
+        <CardResumo titulo="Pendentes Cobrança" valor={resumo.pendentes} cor="bg-yellow-100" />
+        <CardResumo titulo="Cobradas" valor={resumo.cobradas} cor="bg-green-100" />
+        <CardResumo titulo="Canceladas" valor={resumo.canceladas} cor="bg-red-100" />
+      </div>
 
-      {/* Tabela (MODIFICADA) */}
+      {/* Tabela */}
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="min-w-full border-collapse">
           <thead>
@@ -102,14 +158,19 @@ export default function CobrancasAvarias() {
               <th className="p-3">Tipo Avaria</th>
               <th className="p-3">Valor Total</th>
               <th className="p-3">Status Cobrança</th>
-              <th className="p-3">Ações</th> {/* Mudou o conteúdo */}
+              <th className="p-3">Ações</th>
             </tr>
           </thead>
+          {/* --- TBODY CORRIGIDO --- */}
           <tbody>
-            {loading ? ( /* ... */ ) 
-            : cobrancas.length === 0 ? ( /* ... */ ) 
-            : (
-              cobrancas.map((c) => (
+            {(() => {
+              if (loading) {
+                return <tr><td colSpan="7" className="text-center p-6">Carregando...</td></tr>;
+              }
+              if (cobrancas.length === 0) {
+                return <tr><td colSpan="7" className="text-center p-6 text-gray-500">Nenhuma cobrança encontrada.</td></tr>;
+              }
+              return cobrancas.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
                   <td className="p-3">{new Date(c.created_at).toLocaleDateString()}</td>
                   <td className="p-3">{c.motoristaId || "-"}</td>
@@ -125,10 +186,9 @@ export default function CobrancasAvarias() {
                         : "bg-yellow-100 text-yellow-800" }`}
                     > {c.status_cobranca} </span>
                   </td>
-                  {/* --- BOTÃO DE AÇÃO MODIFICADO --- */}
                   <td className="p-3">
                      <button
-                        onClick={() => handleVerDetalhes(c)} // Abre o modal
+                        onClick={() => handleVerDetalhes(c)}
                         className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                         title="Ver Detalhes e Ações"
                       >
@@ -136,11 +196,11 @@ export default function CobrancasAvarias() {
                         Detalhes
                       </button>
                   </td>
-                  {/* --- FIM DA MODIFICAÇÃO --- */}
                 </tr>
-              ))
-            )}
+              ));
+            })()}
           </tbody>
+          {/* --- FIM TBODY CORRIGIDO --- */}
         </table>
       </div>
 
@@ -149,7 +209,7 @@ export default function CobrancasAvarias() {
         <CobrancaDetalheModal 
           avaria={selectedAvaria}
           onClose={handleCloseModal}
-          onAtualizarStatus={handleAtualizarStatusCobranca} // Passa a função correta
+          onAtualizarStatus={handleAtualizarStatusCobranca} 
         />
       )}
     </div>
