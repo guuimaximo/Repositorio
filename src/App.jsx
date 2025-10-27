@@ -9,8 +9,8 @@ import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import Login from "./pages/Login";
-import Cadastro from "./pages/Cadastro"; // Importar Cadastro
+// import Login from "./pages/Login"; // Comentado
+// import Cadastro from "./pages/Cadastro"; // Comentado
 import LancarAvaria from "./pages/LancarAvaria"; 
 import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias"; 
@@ -18,7 +18,7 @@ import AprovacaoAvarias from "./pages/AprovacaoAvarias";
 export default function App() {
   return (
     <Routes>
-      {/* Rotas internas (protegidas pelo Layout) */}
+      {/* Rotas internas (agora públicas temporariamente) */}
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/central" element={<CentralTratativas />} />
@@ -28,15 +28,13 @@ export default function App() {
         <Route path="/lancar-avaria" element={<LancarAvaria />} />
         <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
-        {/* Adicione outras rotas protegidas aqui */}
       </Route>
 
-      {/* Rotas públicas (sem layout) */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/cadastro" element={<Cadastro />} /> {/* Rota de Cadastro */}
+      {/* Rotas públicas comentadas */}
+      {/* <Route path="/login" element={<Login />} /> */}
+      {/* <Route path="/cadastro" element={<Cadastro />} /> */}
 
-      {/* Redirecionamento para rotas não encontradas */}
-      {/* O Layout agora cuida do redirecionamento de não logados */}
+      {/* Redirecionamento padrão */}
       <Route path="*" element={<Navigate to="/" replace />} /> 
     </Routes>
   );
