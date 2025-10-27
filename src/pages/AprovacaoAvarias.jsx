@@ -1,16 +1,15 @@
 // src/pages/AprovacaoAvarias.jsx
+// (Código completo com a modificação)
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { FaCheckCircle, FaTimesCircle, FaEye, FaTimes } from 'react-icons/fa';
 
 // --- Componente Modal ---
-// (Colocado no mesmo arquivo para simplicidade)
 function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [itensOrcamento, setItensOrcamento] = useState([]);
   const [loadingItens, setLoadingItens] = useState(false);
 
-  // Busca os itens do orçamento (peças/serviços) quando o modal abre
   useEffect(() => {
     async function carregarItens() {
       if (!avaria) return;
@@ -19,7 +18,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       const { data, error } = await supabase
         .from('cobrancas_avarias')
         .select('*')
-        .eq('avaria_id', avaria.id); // Busca itens ligados a esta avaria
+        .eq('avaria_id', avaria.id);
       
       if (error) {
         console.error('Erro ao buscar itens do orçamento:', error);
@@ -33,21 +32,16 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
   if (!avaria) return null;
 
-  // Separa peças e serviços
   const pecas = itensOrcamento.filter(item => item.tipo === 'Peca');
   const servicos = itensOrcamento.filter(item => item.tipo === 'Servico');
 
-  // Helper para formatar moeda
   const formatCurrency = (value) => (value || 0).toLocaleString('pt-BR', {
     style: 'currency', currency: 'BRL'
   });
 
   return (
-    // Overlay (fundo escuro)
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
-      {/* Conteúdo do Modal */}
       <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        {/* Cabeçalho do Modal */}
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
@@ -55,9 +49,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
           </button>
         </div>
 
-        {/* Corpo do Modal (com scroll) */}
         <div className="p-6 space-y-4 overflow-y-auto">
-          
           {/* Seção 1: Identificação */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -66,19 +58,16 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Motorista</label>
-              {/* (O nome da coluna com aspas é necessário aqui) */}
               <p className="text-lg text-gray-800">{avaria.motoristaId || 'N/A'}</p> 
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Data da Avaria</label>
-              {/* (O nome da coluna com aspas é necessário aqui) */}
               <p className="text-lg text-gray-800">
                 {new Date(avaria.dataAvaria).toLocaleString('pt-BR')}
               </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Tipo de Ocorrência</label>
-              {/* (O nome da coluna com aspas é necessário aqui) */}
               <p className="text-lg text-gray-800">{avaria.tipoOcorrencia}</p>
             </div>
           </div>
@@ -94,7 +83,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             <h3 className="text-xl font-semibold text-gray-800 mb-2">Orçamento</h3>
             {loadingItens ? (<p>Carregando orçamento...</p>) : (
               <div className="space-y-3">
-                {/* Peças */}
                 <div>
                   <h4 className="font-semibold text-gray-700">Peças</h4>
                   {pecas.length > 0 ? pecas.map(item => (
@@ -105,7 +93,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
                     </div>
                   )) : <p className="text-gray-500 text-sm">Nenhuma peça lançada.</p>}
                 </div>
-                {/* Serviços */}
                 <div>
                   <h4 className="font-semibold text-gray-700">Mão de Obra / Serviços</h4>
                   {servicos.length > 0 ? servicos.map(item => (
@@ -116,7 +103,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
                     </div>
                   )) : <p className="text-gray-500 text-sm">Nenhum serviço lançado.</p>}
                 </div>
-                {/* Total */}
                 <div className="text-right text-xl font-bold mt-2 pt-2 border-t">
                   Total: {formatCurrency(avaria.valor_total_orcamento)}
                 </div>
@@ -131,7 +117,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
               {(avaria.urls_evidencias || []).map((url, index) => (
                 <a key={index} href={url} target="_blank" rel="noopener noreferrer" 
                    className="border rounded-lg overflow-hidden hover:opacity-80">
-                  {/* Tenta detectar se é vídeo ou imagem pela extensão */}
                   {url.match(/\.(mp4|mov|webm)$/i) ? (
                     <video controls src={url} className="w-full h-32 object-cover" />
                   ) : (
@@ -173,12 +158,9 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 export default function AprovacaoAvarias() {
   const [avarias, setAvarias] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estados do Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
 
-  // Função para carregar as avarias pendentes
   async function carregarAvariasPendentes() {
     setLoading(true);
     const { data, error } = await supabase
@@ -200,46 +182,50 @@ export default function AprovacaoAvarias() {
     carregarAvariasPendentes();
   }, []);
 
-  // Função para abrir o modal
   const handleVerDetalhes = (avaria) => {
     setSelectedAvaria(avaria);
     setModalOpen(true);
   };
 
-  // Função para fechar o modal
   const handleCloseModal = () => {
     setModalOpen(false);
     setSelectedAvaria(null);
   };
 
-  // Função para atualizar o status (chamada DE DENTRO do modal)
+  // ### INÍCIO DA MODIFICAÇÃO ###
+  // Atualiza o status de aprovação E o status de cobrança
   const handleAtualizarStatus = async (id, novoStatus) => {
     if (!window.confirm(`Deseja realmente ${novoStatus.toLowerCase()} esta avaria?`)) {
       return;
     }
 
+    // Prepara os dados para atualização
+    const dadosUpdate = { status: novoStatus };
+    
+    // Se for 'Aprovado', define o status_cobranca como 'Pendente'
+    if (novoStatus === 'Aprovado') {
+      dadosUpdate.status_cobranca = 'Pendente';
+    }
+
     const { error } = await supabase
       .from('avarias')
-      .update({ status: novoStatus })
+      .update(dadosUpdate) // Atualiza com os novos dados
       .eq('id', id);
 
     if (error) {
       alert('Falha ao atualizar status: ' + error.message);
     } else {
       alert(`Avaria ${novoStatus.toLowerCase()} com sucesso!`);
-      handleCloseModal(); // Fecha o modal
-      carregarAvariasPendentes(); // Recarrega a lista
+      handleCloseModal();
+      carregarAvariasPendentes();
     }
   };
+  // ### FIM DA MODIFICAÇÃO ###
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Aprovação de Avarias</h1>
-      <p className="mb-4 text-gray-600">
-        Revise os lançamentos pendentes e aprove ou reprove.
-      </p>
-
-      {/* Lista / Tabela de Avarias Pendentes */}
+      {/* ... (resto do JSX da página, sem alteração) ... */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
@@ -251,7 +237,6 @@ export default function AprovacaoAvarias() {
               <th className="py-2 px-3 text-left">Ações</th>
             </tr>
           </thead>
-
           <tbody>
             {loading ? (
               <tr><td colSpan="5" className="text-center p-4">Carregando...</td></tr>
@@ -264,10 +249,8 @@ export default function AprovacaoAvarias() {
                     {new Date(avaria.created_at).toLocaleDateString('pt-BR')}
                   </td>
                   <td className="py-2 px-3">{avaria.prefixo || '-'}</td>
-                  {/* (O nome da coluna com aspas é necessário aqui) */}
                   <td className="py-2 px-3">{avaria.tipoOcorrencia || '-'}</td>
                   <td className="py-2 px-3 font-medium">
-                    {/* (O nome da coluna com aspas é necessário aqui) */}
                     {(avaria.valor_total_orcamento || 0).toLocaleString('pt-BR', {
                       style: 'currency', currency: 'BRL'
                     })}
@@ -289,7 +272,6 @@ export default function AprovacaoAvarias() {
         </table>
       </div>
 
-      {/* Renderiza o Modal */}
       {modalOpen && (
         <DetalheAvariaModal 
           avaria={selectedAvaria}
