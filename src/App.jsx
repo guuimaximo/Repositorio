@@ -8,9 +8,9 @@ import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
 import Login from "./pages/Login";
-import LancarAvaria from "./pages/LancarAvaria"; // Nova página de Lançamento
+import LancarAvaria from "./pages/LancarAvaria"; 
 import CobrancasAvarias from "./pages/CobrancasAvarias";
-// A página 'Avarias.jsx' antiga não é mais usada
+import AprovacaoAvarias from "./pages/AprovacaoAvarias"; // Importação Adicionada
 
 export default function App() {
   return (
@@ -23,8 +23,9 @@ export default function App() {
         <Route path="/consultar/:id" element={<ConsultarTratativa />} />
         <Route path="/solicitar" element={<SolicitacaoTratativa />} />
         
-        {/* Rotas de Avarias Atualizadas */}
+        {/* Rotas de Avarias */}
         <Route path="/lancar-avaria" element={<LancarAvaria />} />
+        <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} /> {/* Rota Adicionada */}
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
       </Route>
 
