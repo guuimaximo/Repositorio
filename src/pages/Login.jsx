@@ -3,30 +3,33 @@
 
 import { useState } from 'react'
 import { supabase } from '../supabase'
-import { Link, useNavigate } from 'react-router-dom' // Adicionado Link e useNavigate
+import { Link, useNavigate, useLocation } from 'react-router-dom' // Adicionado useLocation
 
 export default function Login() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('') // Adicionado estado de senha
-  const [loading, setLoading] = useState(false) // Adicionado estado de loading
+  const [password, setPassword] = useState('') 
+  const [loading, setLoading] = useState(false) 
   const [err, setErr] = useState('')
-  const navigate = useNavigate() // Hook para redirecionar
+  const navigate = useNavigate() 
+  const location = useLocation() // Para saber para onde redirecionar após login
+
+  // Pega a página de origem (se houver) para redirecionar após o login
+  const from = location.state?.from?.pathname || "/";
 
   async function handleLogin() {
     setLoading(true)
     setErr('')
     
-    // Modificado de signInWithOtp para signInWithPassword
     const { error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
     })
 
     if (error) {
-      setErr('E-mail ou senha inválidos.') // Mensagem de erro genérica
+      setErr('E-mail ou senha inválidos.') 
     } else {
-      // Sucesso, redireciona para a página principal
-      navigate('/') 
+      // Redireciona para a página de origem ou para a home
+      navigate(from, { replace: true }); 
     }
     setLoading(false)
   }
@@ -48,7 +51,6 @@ export default function Login() {
           />
         </div>
 
-        {/* Campo de Senha Adicionado */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Senha</label>
           <input
