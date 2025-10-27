@@ -3,13 +3,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../supabase';
-import CampoMotorista from '../components/CampoMotorista'; // Importado
-import CampoPrefixo from '../components/CampoPrefixo';     // Importado
+import CampoMotorista from '../components/CampoMotorista'; // Importa seu componente
+import CampoPrefixo from '../components/CampoPrefixo';     // Importa o novo componente
 
 // --- Componente OrcamentoLinha (Item do Orçamento) ---
-// (Sem alterações)
 function OrcamentoLinha({ item, index, onRemove, onChange }) {
   const totalLinha = (item.qtd || 0) * (item.valorUnitario || 0);
+
   return (
     <div className="grid grid-cols-12 gap-3 mb-2 items-center">
       <input
@@ -62,7 +62,7 @@ export default function LancarAvaria() {
     descricao: '',
   });
   
-  // States separados para os componentes de busca (igual ao seu SolicitacaoTratativa)
+  // States separados para os componentes de busca
   const [prefixo, setPrefixo] = useState(''); // Controla CampoPrefixo
   const [motorista, setMotorista] = useState({ chapa: '', nome: '' }); // Controla CampoMotorista
 
@@ -84,7 +84,7 @@ export default function LancarAvaria() {
     async function carregarListas() {
       setLoadingListas(true);
       const { data: tiposData, error: tiposError } = await supabase
-        .from('tipos_ocorrencia')
+        .from('tipos_ocorrencia') // <-- Busca na tabela 'tipos_ocorrencia'
         .select('id, nome')
         .order('nome', { ascending: true });
 
@@ -94,7 +94,7 @@ export default function LancarAvaria() {
       setLoadingListas(false);
     }
     carregarListas();
-  }, []);
+  }, []); // [] = Executa apenas uma vez
 
 
   // --- Handlers do Formulário ---
@@ -103,14 +103,30 @@ export default function LancarAvaria() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // ... (Handlers de Orçamento, Arquivos e Cálculos - Sem alterações) ...
-  const handleAddPeca = () => setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  // --- Handlers do Orçamento ---
+  const handleAddPeca = () => {
+    setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  };
   const handleRemovePeca = (index) => setPecas(pecas.filter((_, i) => i !== index));
-  const handleChangePeca = (index, field, value) => { /* ...código... */ };
-  const handleAddServico = () => setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  const handleChangePeca = (index, field, value) => {
+    const novasPecas = [...pecas];
+    novasPecas[index][field] = value;
+    setPecas(novasPecas);
+  };
+  const handleAddServico = () => {
+    setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  };
   const handleRemoveServico = (index) => setServicos(servicos.filter((_, i) => i !== index));
-  const handleChangeServico = (index, field, value) => { /* ...código... */ };
-  const handleFileChange = (e) => setArquivos([...e.target.files]);
+  const handleChangeServico = (index, field, value) => {
+    const novosServicos = [...servicos];
+    novosServicos[index][field] = value;
+    setServicos(novosServicos);
+  };
+
+  // --- Handlers de Arquivos e Cálculos ---
+  const handleFileChange = (e) => {
+    setArquivos([...e.target.files]);
+  };
   const calcularTotal = (lista) => lista.reduce((acc, item) => acc + (item.qtd || 0) * (item.valorUnitario || 0), 0);
   const totalPecas = useMemo(() => calcularTotal(pecas), [pecas]);
   const totalServicos = useMemo(() => calcularTotal(servicos), [servicos]);
@@ -122,17 +138,22 @@ export default function LancarAvaria() {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Upload de arquivos (Sem alteração)
+    // 1. Upload de arquivos
     const uploadedFileUrls = [];
     for (const file of arquivos) {
       const fileName = `${Date.now()}_${file.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage.from('avarias').upload(fileName, file);
-      if (uploadError) { alert('Falha no upload: ' + uploadError.message); setLoading(false); return; }
+      if (uploadError) {
+        console.error('Erro no upload:', uploadError);
+        alert('Falha ao enviar arquivo: ' + uploadError.message);
+        setLoading(false);
+        return;
+      }
       const { data: urlData } = supabase.storage.from('avarias').getPublicUrl(uploadData.path);
       uploadedFileUrls.push(urlData.publicUrl);
     }
 
-    // 2. Salvar dados na tabela 'avarias' (LÓGICA DO MOTORISTA AJUSTADA)
+    // 2. Salvar dados na tabela 'avarias'
     
     // Converte o objeto motorista em uma string única (Ex: "12345 - João Silva")
     // Se chapa e nome estiverem vazios (opcional), salva como null.
@@ -145,7 +166,7 @@ export default function LancarAvaria() {
       .insert({
         ...formData, // dataAvaria, tipoOcorrencia, descricao
         prefixo: prefixo, // Salva o prefixo do state 'prefixo'
-        "motoristaId": motoristaString, // Salva a string combinada
+        "motoristaId": motoristaString, // Salva a string combinada na coluna camelCase
         status: 'Pendente de Aprovação',
         urls_evidencias: uploadedFileUrls,
         valor_total_orcamento: totalOrcamento,
@@ -161,20 +182,26 @@ export default function LancarAvaria() {
 
     const avariaId = avariaData.id;
 
-    // 3. Salvar itens do orçamento (Sem alteração)
+    // 3. Salvar itens do orçamento
     const orcamentoItens = [
       ...pecas.map(p => ({ ...p, tipo: 'Peca', avaria_id: avariaId, valorUnitario: p.valorUnitario })),
       ...servicos.map(s => ({ ...s, tipo: 'Servico', avaria_id: avariaId, valorUnitario: s.valorUnitario })),
     ];
+    
     const itensParaSalvar = orcamentoItens.map(({ id, valorUnitario, ...rest }) => ({
         ...rest,
-        "valorUnitario": valorUnitario
+        "valorUnitario": valorUnitario // Mapeia para a coluna camelCase do DB
     }));
 
     const { error: orcamentoError } = await supabase.from('cobrancas_avarias').insert(itensParaSalvar);
 
-    if (orcamentoError) { alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message); } 
-    else { alert('Avaria lançada para aprovação com sucesso!'); }
+    if (orcamentoError) {
+      console.error('Erro ao salvar orçamento:', orcamentoError);
+      alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message);
+    } else {
+      alert('Avaria lançada para aprovação com sucesso!');
+      // TODO: Limpar formulário ou navegar
+    }
 
     setLoading(false);
   };
@@ -195,24 +222,36 @@ export default function LancarAvaria() {
             
             {/* --- CAMPO PREFIXO (MODIFICADO) --- */}
             {/* (Usa o novo componente CampoPrefixo) */}
-            <CampoPrefixo 
-              value={prefixo} 
-              onChange={setPrefixo} 
-              label="Prefixo"
-            />
+            <div className="flex flex-col">
+              <CampoPrefixo 
+                value={prefixo} 
+                onChange={setPrefixo} 
+                label="Prefixo"
+              />
+            </div>
 
             {/* --- CAMPO MOTORISTA (MODIFICADO) --- */}
             {/* (Usa o componente CampoMotorista) */}
-            <CampoMotorista 
-              value={motorista} 
-              onChange={setMotorista} 
-              label="Motorista (Opcional)"
-            />
+            <div className="flex flex-col">
+              <CampoMotorista 
+                value={motorista} 
+                onChange={setMotorista} 
+                label="Motorista (Opcional)"
+              />
+            </div>
 
             {/* --- CAMPO DATA (SEM ALTERAÇÃO) --- */}
             <div className="flex flex-col">
               <label htmlFor="dataAvaria" className="mb-1 text-sm font-medium text-gray-600">Data e Hora da Avaria</label>
-              <input type="datetime-local" name="dataAvaria" id="dataAvaria" className="border rounded-md px-3 py-2" onChange={handleFormChange} required />
+              <input 
+                type="datetime-local" 
+                name="dataAvaria" 
+                id="dataAvaria" 
+                className="border rounded-md px-3 py-2" // Estilo padrão
+                onChange={handleFormChange} 
+                value={formData.dataAvaria}
+                required 
+              />
             </div>
 
             {/* --- CAMPO TIPO OCORRÊNCIA (MODIFICADO) --- */}
@@ -221,13 +260,14 @@ export default function LancarAvaria() {
               <select
                 name="tipoOcorrencia"
                 id="tipoOcorrencia"
-                className="border rounded-md px-3 py-2 bg-white"
+                className="border rounded-md px-3 py-2 bg-white" // Estilo padrão
                 onChange={handleFormChange}
                 value={formData.tipoOcorrencia}
                 required
                 disabled={loadingListas}
               >
                 <option value="">{loadingListas ? 'Carregando...' : 'Selecione...'}</option>
+                {/* Suposição: salvando o 'nome' (como no seu exemplo) */}
                 {tiposOcorrencia.map(t => (
                   <option key={t.id} value={t.nome}>{t.nome}</option>
                 ))}
@@ -241,17 +281,19 @@ export default function LancarAvaria() {
                 name="descricao"
                 id="descricao"
                 rows="4"
-                className="border rounded-md px-3 py-2"
+                className="border rounded-md px-3 py-2" // Estilo padrão
                 placeholder="Descreva o que foi identificado pela manutenção..."
                 onChange={handleFormChange}
+                value={formData.descricao}
               ></textarea>
             </div>
           </div>
         </div>
 
-        {/* --- Seção 3: Orçamento de Reparo (Sem alterações) --- */}
+        {/* --- Seção 3: Orçamento de Reparo --- */}
         <div className="bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Orçamento de Reparo</h2>
+
           {/* Subseção: Peças */}
           <div>
             <h3 className="text-base font-semibold mb-3 text-gray-700">Peças</h3>
@@ -262,17 +304,25 @@ export default function LancarAvaria() {
               <span className="col-span-2 text-right">Total</span>
               <span className="col-span-1">Ação</span>
             </div>
+            
             {pecas.map((item, index) => (
               <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemovePeca} onChange={handleChangePeca} />
             ))}
-            <button type="button" onClick={handleAddPeca} className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
+            
+            <button
+              type="button"
+              onClick={handleAddPeca}
+              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+            >
               + Adicionar Peça
             </button>
             <div className="text-right font-bold mt-2 pr-14 text-gray-800">
               Total Peças: {totalPecas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
+
           <hr className="my-6 border-gray-200" />
+
           {/* Subseção: Mão de Obra */}
           <div>
             <h3 className="text-base font-semibold mb-3 text-gray-700">Mão de Obra / Serviços</h3>
@@ -283,23 +333,30 @@ export default function LancarAvaria() {
               <span className="col-span-2 text-right">Total</span>
               <span className="col-span-1">Ação</span>
             </div>
+
             {servicos.map((item, index) => (
               <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemoveServico} onChange={handleChangeServico} />
             ))}
-            <button type="button" onClick={handleAddServico} className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
+
+            <button
+              type="button"
+              onClick={handleAddServico}
+              className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+            >
               + Adicionar Serviço
             </button>
             <div className="text-right font-bold mt-2 pr-14 text-gray-800">
               Total M.O.: {totalServicos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
           </div>
+
           {/* Totalizador Geral */}
           <div className="text-right text-xl font-bold mt-6 pt-4 border-t border-gray-200 text-gray-900">
             Total do Orçamento: {totalOrcamento.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </div>
         </div>
 
-        {/* --- Seção 4: Evidências (Upload) (Sem alterações) --- */}
+        {/* --- Seção 4: Evidências (Upload) --- */}
         <div className="bg-white shadow rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Evidências (Fotos e Vídeos)</h2>
           <label
@@ -312,6 +369,7 @@ export default function LancarAvaria() {
             </div>
             <input id="file-upload" type="file" className="hidden" multiple onChange={handleFileChange} accept="image/*,video/*" />
           </label>
+          
           {arquivos.length > 0 && (
             <div className="mt-4">
               <h4 className="font-medium text-gray-700">Arquivos selecionados:</h4>
@@ -324,9 +382,13 @@ export default function LancarAvaria() {
           )}
         </div>
 
-        {/* --- Seção 5: Ações (Sem alterações) --- */}
+        {/* --- Seção 5: Ações --- */}
         <div className="flex justify-end gap-4 pt-4">
-          <button type="button" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">
+          <button
+            type="button"
+            // TODO: Adicionar função de limpar o formulário
+            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+          >
             Limpar
           </button>
           <button
