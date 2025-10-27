@@ -15,16 +15,27 @@ export default function Cadastro() {
     setLoading(true)
     setErr('')
     
+    // Verifica se a senha tem pelo menos 6 caracteres (requisito Supabase)
+    if (password.length < 6) {
+      setErr('A senha deve ter pelo menos 6 caracteres.')
+      setLoading(false)
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: email,
       password: password,
+      // Você pode adicionar opções aqui se precisar
+      // options: {
+      //   emailRedirectTo: 'https://example.com/welcome',
+      // }
     })
 
     if (error) {
       setErr(error.message)
     } else {
-      // O Gatilho SQL cuidará de criar o 'profile'
-      alert('Cadastro realizado! Redirecionando para o Login.')
+      // O Gatilho SQL cuidará de criar o 'profile' com role 'Analista'
+      alert('Cadastro realizado! Um e-mail de confirmação foi enviado (se habilitado). Redirecionando para o Login.')
       navigate('/login')
     }
     setLoading(false)
@@ -34,7 +45,7 @@ export default function Cadastro() {
     <div className="mx-auto max-w-md p-6 mt-10">
       <h1 className="text-2xl font-bold mb-3">Cadastro de Novo Usuário</h1>
       <p className="text-gray-600 mb-4">
-        Crie sua conta. Você será registrado com o perfil padrão.
+        Crie sua conta. Você será registrado com o perfil padrão 'Analista'.
       </p>
 
       <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
@@ -50,7 +61,7 @@ export default function Cadastro() {
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Senha</label>
+          <label className="block text-sm text-gray-600 mb-1">Senha (mínimo 6 caracteres)</label>
           <input
             type="password"
             className="w-full rounded-md border px-3 py-2"
