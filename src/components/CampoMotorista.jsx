@@ -78,3 +78,6 @@ export default function CampoMotorista({ value, onChange, label = 'Motorista' })
           ))}
         </div>
       )}
+    </div>
+  )
+}
