@@ -1,103 +1,81 @@
-import React, { useState } from "react";
-import { supabase } from "../supabase";
-import { Link, useNavigate } from "react-router-dom";
+// src/pages/Cadastro.jsx
+
+import { useState } from 'react'
+import { supabase } from '../supabase'
+import { Link, useNavigate } from 'react-router-dom'
 
 export default function Cadastro() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [confirmarSenha, setConfirmarSenha] = useState("");
-  const [erro, setErro] = useState("");
-  const [mensagem, setMensagem] = useState("");
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+  const navigate = useNavigate()
 
-  const handleCadastro = async (e) => {
-    e.preventDefault();
-    if (senha !== confirmarSenha) {
-      setErro("As senhas não coincidem.");
-      return;
-    }
-
-    const redirectUrl =
-      window.location.hostname === "localhost"
-        ? "http://localhost:3000"
-        : "https://inovequatai.onrender.com";
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: senha,
-      options: { emailRedirectTo: redirectUrl },
-    });
+  async function handleCadastro() {
+    setLoading(true)
+    setErr('')
+    
+    const { data, error } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+    })
 
     if (error) {
-      setErro(error.message);
+      setErr(error.message)
     } else {
-      setMensagem("✅ Conta criada! Verifique seu e-mail.");
-      setTimeout(() => navigate("/login"), 3000);
+      // O Gatilho SQL cuidará de criar o 'profile'
+      alert('Cadastro realizado! Redirecionando para o Login.')
+      navigate('/login')
     }
-  };
+    setLoading(false)
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form
-        onSubmit={handleCadastro}
-        className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm"
-      >
-        <h2 className="text-2xl font-bold mb-4 text-center text-blue-700">
-          Criar Conta
-        </h2>
+    <div className="mx-auto max-w-md p-6 mt-10">
+      <h1 className="text-2xl font-bold mb-3">Cadastro de Novo Usuário</h1>
+      <p className="text-gray-600 mb-4">
+        Crie sua conta. Você será registrado com o perfil padrão.
+      </p>
 
-        {erro && (
-          <div className="bg-red-100 border border-red-400 text-red-700 p-2 rounded mb-3 text-sm">
-            {erro}
-          </div>
-        )}
-        {mensagem && (
-          <div className="bg-green-100 border border-green-400 text-green-700 p-2 rounded mb-3 text-sm">
-            {mensagem}
-          </div>
-        )}
+      <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">E-mail</label>
+          <input
+            type="email"
+            className="w-full rounded-md border px-3 py-2"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="seunome@grupocsc.com.br"
+          />
+        </div>
 
-        <input
-          type="email"
-          placeholder="seuemail@exemplo.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-blue-500"
-          required
-        />
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Senha</label>
+          <input
+            type="password"
+            className="w-full rounded-md border px-3 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+        </div>
 
-        <input
-          type="password"
-          placeholder="Digite sua senha"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          className="w-full p-2 mb-3 border rounded focus:ring-2 focus:ring-blue-500"
-          required
-        />
+        {err && <div className="text-red-600 text-sm">{err}</div>}
 
-        <input
-          type="password"
-          placeholder="Confirme sua senha"
-          value={confirmarSenha}
-          onChange={(e) => setConfirmarSenha(e.target.value)}
-          className="w-full p-2 mb-5 border rounded focus:ring-2 focus:ring-blue-500"
-          required
-        />
-
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition"
+        <button 
+          onClick={handleCadastro} 
+          disabled={loading}
+          className="w-full mt-3 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
         >
-          Cadastrar
+          {loading ? 'Cadastrando...' : 'Criar Conta'}
         </button>
-
-        <p className="text-sm text-center mt-3">
-          Já possui conta?{" "}
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Faça login
-          </Link>
-        </p>
-      </form>
+      </div>
+      
+      <div className="mt-4 text-center">
+        <Link to="/login" className="text-sm text-blue-600 hover:underline">
+          Já tem uma conta? Fazer Login
+        </Link>
+      </div>
     </div>
-  );
+  )
 }
