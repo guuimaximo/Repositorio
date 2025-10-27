@@ -25,7 +25,12 @@ function CardResumo({ titulo, valor, cor, subValor = null, subValor2 = null }) {
 
 
 export default function Dashboard() {
-  const [resumo, setResumo] = useState({ /* ... */ });
+  const [resumo, setResumo] = useState({ 
+    tratativasTotal: 0, tratativasPendentes: 0, tratativasConcluidas: 0,
+    avariasAprovadas: 0, avariasAprovadasValor: 0, 
+    cobrancasRealizadas: 0, cobrancasRealizadasValor: 0,
+    canceladasCount: 0, canceladasValor: 0,
+  });
   const [evolucao, setEvolucao] = useState([]);
   const [topMotoristas, setTopMotoristas] = useState([]);
   
@@ -58,30 +63,28 @@ export default function Dashboard() {
       return query;
   }
 
-  // === Resumo geral (REVISADO PARA CONTAGEM TOTAL E SOMA CORRETA) ===
+  // === Resumo geral (CORRIGIDO PARA LIMITE E SOMA) ===
   const carregarResumo = async () => {
     try {
-        // --- 1. CONTAGEM TOTAL DE TRATATIVAS (CORREÇÃO DE LIMITE) ---
+        // 1. Contagem Total de Tratativas (USANDO COUNT:EXACT)
         let totalTratQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
         totalTratQuery = applyDateFilters(totalTratQuery);
         const { count: tratativasTotalCount } = await totalTratQuery;
-        // --- FIM CORREÇÃO LIMITE ---
         
-        // 2. Busca dados para os outros cálculos (Contagens de Status)
-        let avsQuery = supabase.from("avarias").select("status, status_cobranca, valor_total_orcamento, valor_cobrado, created_at");
+        // 2. Busca Tratativas (para contagens por status)
+        let tratQuery = supabase.from("tratativas").select("status, created_at").limit(100000); // ALTO LIMITE
+        tratQuery = applyDateFilters(tratQuery);
+        const { data: tratData } = await tratQuery;
+
+        // 3. Busca Avarias (para contagens e valores)
+        let avsQuery = supabase.from("avarias").select("status, status_cobranca, valor_total_orcamento, valor_cobrado, created_at").limit(100000); // ALTO LIMITE
         avsQuery = applyDateFilters(avsQuery);
         const { data: avsData } = await avsQuery;
 
-        // 3. Busca Tratativas (Contagem por Status)
-        let tratQuery = supabase.from("tratativas").select("status, created_at");
-        tratQuery = applyDateFilters(tratQuery);
-        const { data: tratData } = await tratQuery;
-        
         const tratativas = tratData || [];
         const avarias = avsData || [];
 
-        // Cálculos de Tratativas (usando o data já filtrado)
-        // O Total agora vem do count: "exact"
+        // Cálculos de Tratativas
         const tratativasPendentes = tratativas.filter(t => t.status?.toLowerCase().includes('pendente')).length;
         const tratativasConcluidas = tratativas.filter(t => t.status?.toLowerCase().includes('concluí')).length; 
 
@@ -92,7 +95,7 @@ export default function Dashboard() {
 
         const avariasAprovadasValor = avariasAprovadasList.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0);
         
-        // --- CORREÇÃO DE VALOR REALIZADO: Acessando o valor_cobrado com fallback seguro ---
+        // --- CORREÇÃO SOMA VALOR COBRADO ---
         const cobrancasRealizadasValor = cobrancasRealizadasList.reduce((sum, a) => sum + (Number(a.valor_cobrado) || 0), 0);
         // --- FIM CORREÇÃO ---
         
@@ -100,7 +103,7 @@ export default function Dashboard() {
 
 
         setResumo({
-          tratativasTotal: tratativasTotalCount || 0, // Usando a contagem exata
+          tratativasTotal: tratativasTotalCount || 0, // Contagem exata
           tratativasPendentes: tratativasPendentes,
           tratativasConcluidas: tratativasConcluidas,
           
@@ -120,11 +123,92 @@ export default function Dashboard() {
   };
 
 
-  // === Evolução 30 dias (Igual - requer apenas os nomes das chaves corretas) ===
-  const carregarEvolucao = async () => { /* ... (código igual) ... */ };
+  // === Evolução 30 dias (Igual) ===
+  const carregarEvolucao = async () => {
+    let dateFilterStart = dataFiltro.dataInicio;
+    
+    if (!dateFilterStart) {
+        const dataInicio = new Date();
+        dataInicio.setDate(dataInicio.getDate() - 30);
+        dateFilterStart = dataInicio.toISOString();
+    }
+
+    // Busca Tratativas
+    let tratQuery = supabase.from("tratativas").select("created_at").limit(100000); // ALTO LIMITE
+    tratQuery = tratQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { tratQuery = tratQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: tratData } = await tratQuery;
+        
+    // Busca Avarias APROVADAS
+    let avQuery = supabase.from("avarias").select("created_at").ilike("status", "Aprovado").limit(100000); // ALTO LIMITE
+    avQuery = avQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { avQuery = avQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: avData } = await avQuery;
+
+    // Busca Cobranças REALIZADAS
+    let cobQuery = supabase.from("avarias").select("created_at").ilike("status_cobranca", "Cobrada").limit(100000); // ALTO LIMITE
+    cobQuery = cobQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { cobQuery = cobQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: cobData } = await cobQuery;
+
+    const contagem = {};
+
+    const somar = (dados, chave) => {
+      dados?.forEach((item) => {
+        const dia = new Date(item.created_at).toLocaleDateString("pt-BR");
+        contagem[dia] = contagem[dia] || { dia, tratativas: 0, avariasAprovadas: 0, cobrancasRealizadas: 0 };
+        contagem[dia][chave]++;
+      });
+    };
+
+    somar(tratData, "tratativas");
+    somar(avData, "avariasAprovadas");
+    somar(cobData, "cobrancasRealizadas");
+
+    const resultado = Object.values(contagem).sort(
+      (a, b) => new Date(a.dia.split("/").reverse().join("-")) - new Date(b.dia.split("/").reverse().join("-"))
+    );
+
+    setEvolucao(resultado);
+  };
 
   // === Motoristas com mais tratativas (Igual) ===
-  const carregarTopMotoristas = async () => { /* ... (código igual) ... */ };
+  const carregarTopMotoristas = async () => {
+    // 1. Busca Tratativas (para a contagem)
+    let tratQuery = supabase.from("tratativas").select("motorista_nome").not("motorista_nome", "is", null).limit(100000); // ALTO LIMITE
+    tratQuery = applyDateFilters(tratQuery);
+    const { data: tratData } = await tratQuery;
+
+    // 2. Busca Avarias Aprovadas/Cobradas (para o valor acumulado)
+    let avQuery = supabase.from("avarias").select('"motoristaId"', "valor_cobrado", "valor_total_orcamento")
+                       .or('status_cobranca.eq.Cobrada,status_cobranca.eq.Pendente').limit(100000); // ALTO LIMITE
+    avQuery = applyDateFilters(avQuery);
+    const { data: avData } = await avQuery;
+
+    if (!tratData || !avData) return;
+
+    const contador = {};
+    
+    // Contagem de Tratativas
+    tratData.forEach((t) => {
+      contador[t.motorista_nome] = (contador[t.motorista_nome] || 0) + 1;
+    });
+
+    // Combina os dados para a tabela
+    const top = Object.entries(contador)
+      .map(([nome, qtd]) => {
+          // Calcula valor total de avarias para o motorista pelo nome
+          const valorAvs = avData
+              .filter(av => av.motoristaId?.includes(nome)) // Busca por inclusão de nome
+              .reduce((sum, av) => sum + (Number(av.valor_cobrado) || av.valor_total_orcamento || 0), 0); // Correção de soma
+          
+          return { nome, qtd, valorAvs };
+      })
+      .sort((a, b) => b.qtd - a.qtd)
+      .slice(0, 5);
+
+    setTopMotoristas(top);
+  };
   
   const carregarTudo = () => {
       carregarResumo();
@@ -136,7 +220,7 @@ export default function Dashboard() {
   return (
     <div className="p-6">
         
-      {/* --- FILTROS DE DATA (Igual) --- */}
+      {/* --- FILTROS DE DATA --- */}
       <div className="bg-white shadow rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-center justify-start text-gray-700">
           <h2 className="text-lg font-semibold">Filtro de Período</h2>
           
@@ -162,7 +246,6 @@ export default function Dashboard() {
               />
           </div>
 
-          {/* Botão Limpar Filtro de Data */}
           <button
               onClick={() => setDataFiltro({ dataInicio: '', dataFim: '' })}
               className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2 mt-4"
@@ -175,7 +258,7 @@ export default function Dashboard() {
         Painel de Gestão Integrada
       </h1>
 
-      {/* === CARDS DE RESUMO (6 CARDS - GRID 3x2) (Igual) === */}
+      {/* === CARDS DE RESUMO (6 CARDS) === */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* LINHA 1: TRATATIVAS */}
         <CardResumo titulo="Total Tratativas" valor={resumo.tratativasTotal} cor="bg-blue-100 text-blue-700" />
@@ -199,7 +282,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* === CONTEÚDO ALINHADO (2 COLUNAS) (Igual) === */}
+      {/* === CONTEÚDO ALINHADO (2 COLUNAS) === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* COLUNA 1: GRÁFICO */}
