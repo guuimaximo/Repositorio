@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-// (Código revisado para resolver bugs de contagem e soma)
+// (Corrigido o limite de contagem para Tratativas Pendentes/Concluídas e soma de Valor Cobrado)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
@@ -70,24 +70,27 @@ export default function Dashboard() {
         totalTratQuery = applyDateFilters(totalTratQuery);
         const { count: tratativasTotalCount } = await totalTratQuery;
         
-        // 2. Busca Tratativas (para contagens por status)
-        let tratQuery = supabase.from("tratativas").select("status, created_at").limit(100000); 
-        tratQuery = applyDateFilters(tratQuery);
-        const { data: tratData } = await tratQuery;
+        // --- 2. Contagem Tratativas Pendentes (NOVO MÉTODO) ---
+        let pendentesQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        pendentesQuery = applyDateFilters(pendentesQuery);
+        pendentesQuery = pendentesQuery.ilike("status", "%pendente%"); // Filtra por 'pendente' (case-insensitive)
+        const { count: tratativasPendentesCount } = await pendentesQuery;
+        // --- FIM CORREÇÃO ---
 
-        // 3. Busca Avarias (para contagens e valores)
+        // --- 3. Contagem Tratativas Concluídas (NOVO MÉTODO) ---
+        let concluidasQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        concluidasQuery = applyDateFilters(concluidasQuery);
+        // Filtra por 'concluído' OU 'resolvido' (case-insensitive)
+        concluidasQuery = concluidasQuery.or("status.ilike.%conclu%, status.ilike.%resolvid%"); 
+        const { count: tratativasConcluidasCount } = await concluidasQuery;
+        // --- FIM CORREÇÃO ---
+
+        // 4. Busca Avarias (para contagens e valores) - ALTO LIMITE
         let avsQuery = supabase.from("avarias").select("status, status_cobranca, valor_total_orcamento, valor_cobrado, created_at").limit(100000); 
         avsQuery = applyDateFilters(avsQuery);
         const { data: avsData } = await avsQuery;
 
-        const tratativas = tratData || [];
         const avarias = avsData || [];
-
-        // Cálculos de Tratativas
-        // --- CORREÇÃO PENDENTES ---
-        const tratativasPendentes = tratativas.filter(t => t.status?.toLowerCase().includes('pendente')).length;
-        const tratativasConcluidas = tratativas.filter(t => t.status?.toLowerCase().includes('concluí') || t.status?.toLowerCase().includes('resolvido')).length; 
-        // --- FIM CORREÇÃO ---
 
         // Cálculos de Avarias/Cobranças
         const avariasAprovadasList = avarias.filter(a => a.status === 'Aprovado');
@@ -96,7 +99,7 @@ export default function Dashboard() {
 
         const avariasAprovadasValor = avariasAprovadasList.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0);
         
-        // --- CORREÇÃO VALOR COBRADO: Garantindo que o valor seja tratado como numérico ---
+        // --- CORREÇÃO VALOR COBRADO: Usando Number() e acesso ao valor ---
         const cobrancasRealizadasValor = cobrancasRealizadasList.reduce((sum, a) => sum + (Number(a.valor_cobrado) || 0), 0);
         // --- FIM CORREÇÃO ---
         
@@ -105,8 +108,8 @@ export default function Dashboard() {
 
         setResumo({
           tratativasTotal: tratativasTotalCount || 0,
-          tratativasPendentes: tratativasPendentes,
-          tratativasConcluidas: tratativasConcluidas,
+          tratativasPendentes: tratativasPendentesCount || 0, // Contagem exata
+          tratativasConcluidas: tratativasConcluidasCount || 0, // Contagem exata
           
           avariasAprovadas: avariasAprovadasList.length,
           avariasAprovadasValor: avariasAprovadasValor,
@@ -124,7 +127,7 @@ export default function Dashboard() {
   };
 
 
-  // === Evolução 30 dias (Igual) ===
+  // === Evolução 30 dias (Igual - adiciona alto limite) ===
   const carregarEvolucao = async () => {
     let dateFilterStart = dataFiltro.dataInicio;
     
@@ -173,7 +176,7 @@ export default function Dashboard() {
     setEvolucao(resultado);
   };
 
-  // === Motoristas com mais tratativas (Igual) ===
+  // === Motoristas com mais tratativas (Igual - adiciona alto limite) ===
   const carregarTopMotoristas = async () => {
     // 1. Busca Tratativas (para a contagem)
     let tratQuery = supabase.from("tratativas").select("motorista_nome").not("motorista_nome", "is", null).limit(100000); 
