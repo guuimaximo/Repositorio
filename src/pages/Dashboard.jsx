@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-// (Ajuste de Layout dos Cards para manter alinhamento em grid de 4 colunas)
+// (Código revisado para resolver Tratativas Pendentes/Concluídas com COUNT:EXACT e soma de Valor Cobrado)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
@@ -63,10 +63,166 @@ export default function Dashboard() {
       return query;
   }
 
-  // === Funções de Carregamento (Sem alteração na lógica) ===
-  const carregarResumo = async () => { /* ... */ };
-  const carregarEvolucao = async () => { /* ... */ };
-  const carregarTopMotoristas = async () => { /* ... */ };
+  // === Resumo geral (CORRIGIDO) ===
+  const carregarResumo = async () => {
+    try {
+        // --- CONTAGEM TOTAL E POR STATUS (USANDO COUNT:EXACT) ---
+        let totalTratQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        totalTratQuery = applyDateFilters(totalTratQuery);
+        const { count: tratativasTotalCount } = await totalTratQuery;
+        
+        // Contagem Tratativas Pendentes (Exata)
+        let pendentesQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        pendentesQuery = applyDateFilters(pendentesQuery);
+        pendentesQuery = pendentesQuery.ilike("status", "%pendente%"); 
+        const { count: tratativasPendentesCount } = await pendentesQuery;
+
+        // Contagem Tratativas Concluídas (Exata)
+        let concluidasQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        concluidasQuery = applyDateFilters(concluidasQuery);
+        concluidasQuery = concluidasQuery.or("status.ilike.%conclu%, status.ilike.%resolvid%"); 
+        const { count: tratativasConcluidasCount } = await concluidasQuery;
+        
+        // Contagem Tratativas Atrasadas (Exata)
+        const date10DaysAgo = new Date();
+        date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
+        let atrasadasQuery = supabase.from("tratativas").select("id", { count: "exact", head: true });
+        atrasadasQuery = applyDateFilters(atrasadasQuery); 
+        atrasadasQuery = atrasadasQuery
+            .ilike("status", "%pendente%")
+            .lt("created_at", date10DaysAgo.toISOString()); 
+        const { count: tratativasAtrasadasCount } = await atrasadasQuery;
+        // --- FIM CORREÇÃO DAS TRATATIVAS ---
+
+
+        // 4. Busca Avarias (para contagens e valores)
+        let avsQuery = supabase.from("avarias").select("status, status_cobranca, valor_total_orcamento, valor_cobrado, created_at").limit(100000); 
+        avsQuery = applyDateFilters(avsQuery);
+        const { data: avsData } = await avsQuery;
+
+        const avarias = avsData || [];
+
+        // Cálculos de Avarias/Cobranças
+        const avariasAprovadasList = avarias.filter(a => a.status === 'Aprovado');
+        const cobrancasRealizadasList = avarias.filter(a => a.status_cobranca === 'Cobrada');
+        const canceladasList = avarias.filter(a => a.status_cobranca === 'Cancelada');
+
+        const avariasAprovadasValor = avariasAprovadasList.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0);
+        
+        // --- CORREÇÃO VALOR COBRADO: Reforço na conversão numérica ---
+        const cobrancasRealizadasValor = cobrancasRealizadasList.reduce((sum, a) => sum + (Number(a.valor_cobrado) || 0), 0);
+        // --- FIM CORREÇÃO ---
+        
+        const canceladasValor = canceladasList.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0);
+
+
+        setResumo({
+          tratativasTotal: tratativasTotalCount || 0,
+          tratativasPendentes: tratativasPendentesCount || 0,
+          tratativasConcluidas: tratativasConcluidasCount || 0,
+          tratativasAtrasadas: tratativasAtrasadasCount || 0,
+          
+          avariasAprovadas: avariasAprovadasList.length,
+          avariasAprovadasValor: avariasAprovadasValor,
+          
+          cobrancasRealizadas: cobrancasRealizadasList.length,
+          cobrancasRealizadasValor: cobrancasRealizadasValor,
+
+          canceladasCount: canceladasList.length,
+          canceladasValor: canceladasValor,
+        });
+
+    } catch (e) {
+        console.error("Erro fatal ao carregar resumo:", e);
+    }
+  };
+
+
+  // === Evolução 30 dias (Igual) ===
+  const carregarEvolucao = async () => {
+    let dateFilterStart = dataFiltro.dataInicio;
+    
+    if (!dateFilterStart) {
+        const dataInicio = new Date();
+        dataInicio.setDate(dataInicio.getDate() - 30);
+        dateFilterStart = dataInicio.toISOString();
+    }
+
+    // Busca Tratativas
+    let tratQuery = supabase.from("tratativas").select("created_at").limit(100000); 
+    tratQuery = tratQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { tratQuery = tratQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: tratData } = await tratQuery;
+        
+    // Busca Avarias APROVADAS
+    let avQuery = supabase.from("avarias").select("created_at").ilike("status", "Aprovado").limit(100000); 
+    avQuery = avQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { avQuery = avQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: avData } = await avQuery;
+
+    // Busca Cobranças REALIZADAS
+    let cobQuery = supabase.from("avarias").select("created_at").ilike("status_cobranca", "Cobrada").limit(100000); 
+    cobQuery = cobQuery.gte("created_at", dateFilterStart);
+    if (dataFiltro.dataFim) { cobQuery = cobQuery.lte("created_at", dataFiltro.dataFim); }
+    const { data: cobData } = await cobQuery;
+
+    const contagem = {};
+
+    const somar = (dados, chave) => {
+      dados?.forEach((item) => {
+        const dia = new Date(item.created_at).toLocaleDateString("pt-BR");
+        contagem[dia] = contagem[dia] || { dia, tratativas: 0, avariasAprovadas: 0, cobrancasRealizadas: 0 };
+        contagem[dia][chave]++;
+      });
+    };
+
+    somar(tratData, "tratativas");
+    somar(avData, "avariasAprovadas");
+    somar(cobData, "cobrancasRealizadas");
+
+    const resultado = Object.values(contagem).sort(
+      (a, b) => new Date(a.dia.split("/").reverse().join("-")) - new Date(b.dia.split("/").reverse().join("-"))
+    );
+
+    setEvolucao(resultado);
+  };
+
+  // === Motoristas com mais tratativas (Igual) ===
+  const carregarTopMotoristas = async () => {
+    // 1. Busca Tratativas (para a contagem)
+    let tratQuery = supabase.from("tratativas").select("motorista_nome").not("motorista_nome", "is", null).limit(100000); 
+    tratQuery = applyDateFilters(tratQuery);
+    const { data: tratData } = await tratQuery;
+
+    // 2. Busca Avarias Aprovadas/Cobradas (para o valor acumulado)
+    let avQuery = supabase.from("avarias").select('"motoristaId"', "valor_cobrado", "valor_total_orcamento")
+                       .or('status_cobranca.eq.Cobrada,status_cobranca.eq.Pendente').limit(100000); 
+    avQuery = applyDateFilters(avQuery);
+    const { data: avData } = await avQuery;
+
+    if (!tratData || !avData) return;
+
+    const contador = {};
+    
+    // Contagem de Tratativas
+    tratData.forEach((t) => {
+      contador[t.motorista_nome] = (contador[t.motorista_nome] || 0) + 1;
+    });
+
+    // Combina os dados para a tabela
+    const top = Object.entries(contador)
+      .map(([nome, qtd]) => {
+          const valorAvs = avData
+              .filter(av => av.motoristaId?.includes(nome))
+              .reduce((sum, av) => sum + (Number(av.valor_cobrado) || av.valor_total_orcamento || 0), 0);
+          
+          return { nome, qtd, valorAvs };
+      })
+      .sort((a, b) => b.qtd - a.qtd)
+      .slice(0, 5);
+
+    setTopMotoristas(top);
+  };
   
   const carregarTudo = () => {
       carregarResumo();
@@ -78,27 +234,52 @@ export default function Dashboard() {
   return (
     <div className="p-6">
         
-      {/* --- FILTROS DE DATA (Igual) --- */}
+      {/* --- FILTROS DE DATA --- */}
       <div className="bg-white shadow rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-center justify-start text-gray-700">
-        {/* ... código do filtro ... */}
+          <h2 className="text-lg font-semibold">Filtro de Período</h2>
+          
+          <div className="flex flex-col">
+              <label htmlFor="dataInicio" className="text-sm font-medium">Data Início</label>
+              <input
+                  type="date"
+                  id="dataInicio"
+                  value={dataFiltro.dataInicio}
+                  onChange={(e) => setDataFiltro({ ...dataFiltro, dataInicio: e.target.value })}
+                  className="border rounded-md px-3 py-2 text-gray-700"
+              />
+          </div>
+
+          <div className="flex flex-col">
+              <label htmlFor="dataFim" className="text-sm font-medium">Data Fim</label>
+              <input
+                  type="date"
+                  id="dataFim"
+                  value={dataFiltro.dataFim}
+                  onChange={(e) => setDataFiltro({ ...dataFiltro, dataFim: e.target.value })}
+                  className="border rounded-md px-3 py-2 text-gray-700"
+              />
+          </div>
+
+          <button
+              onClick={() => setDataFiltro({ dataInicio: '', dataFim: '' })}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2 mt-4"
+          >
+              Limpar Filtro
+          </button>
       </div>
         
       <h1 className="text-2xl font-semibold mb-6 text-gray-700">
         Painel de Gestão Integrada
       </h1>
 
-      {/* === CARDS DE RESUMO (GRID DE 4 COLUNAS PRINCIPAL) === */}
-      {/* A linha de Tratativas já está com 4 colunas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"> 
-        {/* LINHA 1: TRATATIVAS (4 CARDS) */}
+      {/* === CARDS DE RESUMO (6 CARDS) === */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* LINHA 1: TRATATIVAS */}
         <CardResumo titulo="Total Tratativas" valor={resumo.tratativasTotal} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Tratativas Pendentes" valor={resumo.tratativasPendentes} cor="bg-yellow-100 text-yellow-700" />
         <CardResumo titulo="Tratativas Concluídas" valor={resumo.tratativasConcluidas} cor="bg-green-100 text-green-700" />
         <CardResumo titulo="Tratativas Atrasadas" valor={resumo.tratativasAtrasadas} cor="bg-red-200 text-red-700" /> 
-      </div>
-
-      {/* LINHA 2: AVARIAS/COBRANÇAS (GRID DE 4 COLUNAS, COM 1 ESPAÇO VAZIO) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* LINHA 2: AVARIAS/COBRANÇAS */}
         <CardResumo 
           titulo="Avarias Aprovadas" valor={resumo.avariasAprovadas} 
           subValor={formatCurrency(resumo.avariasAprovadasValor)} subValor2="Valor Orçado"
@@ -114,12 +295,9 @@ export default function Dashboard() {
           subValor={formatCurrency(resumo.canceladasValor)} subValor2="Valor Orçado Cancelado"
           cor="bg-red-100 text-red-700" 
         />
-        {/* --- NOVO ESPAÇO VAZIO PARA ALINHAMENTO --- */}
-        <div className="hidden md:block"></div> 
-        {/* --- FIM NOVO ESPAÇO VAZIO --- */}
       </div>
 
-      {/* === CONTEÚDO ALINHADO (2 COLUNAS) (Igual) === */}
+      {/* === CONTEÚDO ALINHADO (2 COLUNAS) === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* COLUNA 1: GRÁFICO */}
