@@ -1,20 +1,33 @@
 /* src/index.css */
 
-/* ... (seu @tailwind base, components, utilities) ... */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* Você pode adicionar estilos globais personalizados aqui, se necessário.
+   Exemplo: 
+*/
+body {
+  font-family: 'Inter', sans-serif; /* Exemplo de fonte */
+  background-color: #f9fafb; /* Cor de fundo padrão (claro) */
+  color: #1f2937; /* Cor de texto padrão (escuro) */
+  -webkit-font-smoothing: antialiased; /* Melhora a renderização da fonte */
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Adiciona estilos específicos para impressão (já fornecidos anteriormente) */
 @media print {
   /* Esconde elementos que não devem ser impressos */
   .no-print, 
-  nav, /* Esconde a sidebar */
-  aside, /* Garante que a sidebar está escondida */
-  header /* Esconde cabeçalhos genéricos, ajuste se necessário */
+  nav, 
+  aside, 
+  header
   {
     display: none !important;
   }
 
-  /* Faz a área de impressão ocupar a página inteira */
   body {
-    background-color: white; /* Fundo branco para impressão */
+    background-color: white;
     padding: 0;
     margin: 0;
   }
@@ -25,63 +38,32 @@
     top: 0;
     width: 100%;
     height: auto;
-    box-shadow: none; /* Remove sombra */
-    border: none; /* Remove bordas */
-    overflow: visible !important; /* Remove scroll */
-    max-height: none !important; /* Remove altura máxima */
+    box-shadow: none;
+    border: none;
+    overflow: visible !important;
+    max-height: none !important;
   }
 
-  /* Ajustes finos para o layout do orçamento */
   .printable-area h1, 
   .printable-area h2, 
   .printable-area h3 {
-    color: black; /* Garante texto preto */
-  }
-  
-  .printable-area a {
-    text-decoration: none; /* Remove sublinhado de links */
     color: black;
   }
   
-  /* Garante que imagens/vídeos de evidência não imprimam (opcional) */
-  /* .printable-area img, 
-  .printable-area video {
-     display: none; 
-  } */
+  .printable-area a {
+    text-decoration: none;
+    color: black;
+  }
 
    /* Garante que a assinatura apareça */
-   .print\:block {
-        display: block !important;
-   }
-   .print\:pt-16 {
-        padding-top: 4rem /* 64px */;
-   }
-   .print\:mt-10 {
-       margin-top: 2.5rem /* 40px */;
-   }
-   .print\:mx-auto {
-        margin-left: auto;
-        margin-right: auto;
-   }
-   .print\:border-t {
-       border-top-width: 1px;
-   }
-    .print\:border-black {
-       --tw-border-opacity: 1;
-       border-color: rgb(0 0 0 / var(--tw-border-opacity));
-   }
-   .print\:w-64 {
-       width: 16rem /* 256px */;
-   }
-    .print\:text-center {
-       text-align: center;
-   }
-   .print\:text-sm {
-       font-size: 0.875rem /* 14px */;
-       line-height: 1.25rem /* 20px */;
-   }
-    .print\:pt-1 {
-       padding-top: 0.25rem /* 4px */;
-   }
-
+   .print\:block { display: block !important; }
+   .print\:pt-16 { padding-top: 4rem; }
+   .print\:mt-10 { margin-top: 2.5rem; }
+   .print\:mx-auto { margin-left: auto; margin-right: auto; }
+   .print\:border-t { border-top-width: 1px; }
+   .print\:border-black { border-color: black; }
+   .print\:w-64 { width: 16rem; }
+   .print\:text-center { text-align: center; }
+   .print\:text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+   .print\:pt-1 { padding-top: 0.25rem; }
 }
