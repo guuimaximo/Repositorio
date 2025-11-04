@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão com impressão em nova aba
+// Versão com impressão em nova aba, correção de logos e layout de impressão melhorado
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -37,7 +37,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       setMotivoCancelamento(avaria.motivo_cancelamento_cobranca || '');
 
       if (avaria.motoristaId) {
-        setNeedsMotoristaSelection(false);
+    t   setNeedsMotoristaSelection(false);
         const parts = String(avaria.motoristaId).split(' - ');
         setSelectedMotorista({ chapa: parts[0] || '', nome: parts[1] || avaria.motoristaId });
       } else {
@@ -63,43 +63,59 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const formatCurrency = (v) =>
     v === null || v === undefined ? '-' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // --- NOVA FUNÇÃO DE IMPRESSÃO ---
+  // --- FUNÇÃO DE IMPRESSÃO ATUALIZADA ---
   const handlePrint = () => {
-    // 1. Obter o HTML da área de impressão
-    const printContents = document.getElementById('printable-area').innerHTML;
+    // 1. Obter a URL base (ex: https://meu-app.onrender.com)
+    const baseUrl = window.location.origin;
+
+    // 2. Obter o HTML da área de impressão
+    let printContents = document.getElementById('printable-area').innerHTML;
     
-    // 2. Obter todos os links de estilo e tags de estilo da página principal
+    // 3. Corrigir os caminhos das imagens para caminhos absolutos
+    printContents = printContents.replace(/src="(\/[^"]+)"/g, (match, path) => {
+      return `src="${baseUrl}${path}"`;
+    });
+    
+    // 4. Obter os estilos
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
       .map(el => el.outerHTML)
       .join('\n');
 
-    // 3. Abrir uma nova aba
+    // 5. Abrir uma nova aba
     const printWindow = window.open('', '_blank');
     
-    // 4. Escrever o HTML completo na nova aba
+    // 6. Escrever o HTML completo na nova aba
     printWindow.document.write(`
       <html>
         <head>
-          <title>Imprimir Cobrança</title>
+          <title>Imprimir Cobrança - ${avaria.prefixo}</title>
           ${styles}
+          <style>
+            /* Garante que o conteúdo de impressão ocupe a página */
+            body { 
+              -webkit-print-color-adjust: exact !important; 
+              color-adjust: exact !important; 
+            }
+          </style>
         </head>
-        <body>
-          ${printContents}
+        <body class="bg-gray-100 p-8">
+          <div class="max-w-4xl mx-auto bg-white p-12 shadow-lg rounded-lg">
+            ${printContents}
+          </div>
         </body>
       </html>
     `);
     
     printWindow.document.close();
     
-    // 5. Acionar a impressão e fechar a aba
-    // Usar setTimeout para garantir que o conteúdo e estilos carreguem
+    // 7. Acionar a impressão e fechar a aba
     printWindow.setTimeout(() => {
-      printWindow.focus(); // Necessário para alguns navegadores
+      printWindow.focus();
       printWindow.print();
       printWindow.close();
-    }, 500); // 500ms de espera
+    }, 500);
   };
-  // --- FIM DA NOVA FUNÇÃO ---
+  // --- FIM DA FUNÇÃO DE IMPRESSÃO ---
 
   const handleSalvarStatus = (novoStatus) => {
     if (novoStatus === 'Cancelada' && !motivoCancelamento.trim()) {
@@ -142,7 +158,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
 
   return (
     <>
-      {/* === Modal Principal (Adicionado print:hidden) === */}
+      {/* === Modal Principal === */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4 print:hidden">
         <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
           {/* Cabeçalho */}
@@ -211,7 +227,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         	  {/* Operação */}
         	  <div className="border-t pt-4">
           	  <h3 className="text-xl font-semibold mb-2">🧮 Detalhes da Operação</h3>
-
           	  <label className="block text-sm font-medium">Observações</label>
           	  <textarea
           	 	 value={observacaoOperacao}
@@ -219,7 +234,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
           	 	 className="w-full border rounded-md p-2 mb-3"
           	  ></textarea>
-
           	  <label className="block text-sm font-medium">Motivo do Cancelamento</label>
           	  <textarea
           	 	 value={motivoCancelamento}
@@ -227,14 +241,11 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
   	       	 	 className="w-full border rounded-md p-2 mb-3"
           	  ></textarea>
-
           	  <div className="grid grid-cols-2 gap-4">
           	 	 <div>
             	 	 <label>Nº de Parcelas</label>
             	 	 <input
-            	 	 	 type="number"
-            	 	 	 min="1"
-            	 	 	 value={numParcelas}
+            	 	 	 type="number" min="1" value={numParcelas}
             	 	 	 onChange={(e) => setNumParcelas(e.target.value)}
             	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
             	 	 	 className="w-full border rounded-md p-2"
@@ -243,9 +254,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 <div>
             	 	 <label>Valor Cobrado (R$)</label>
             	 	 <input
-            	 	 	 type="text"
-            	 	 	 placeholder="Ex: 1234,56"
-            	 	 	 value={valorCobrado}
+            	 	 	 type="text" placeholder="Ex: 1234,56" value={valorCobrado}
             	 	 	 onChange={(e) => setValorCobrado(e.target.value)}
             	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
             	 	 	 className="w-full border rounded-md p-2"
@@ -256,14 +265,13 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       	  </div>
 
       	  {/* Rodapé */}
-      	  <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+  	   	  <div className="flex justify-between items-center p-4 border-t bg-gray-50">
         	  <button
         	 	 onClick={handlePrint}
         	 	 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
         	  >
         	 	 🖨️ Imprimir
         	  </button>
-
         	  <div className="flex gap-3">
         	 	 {avaria.status_cobranca === 'Pendente' && (
           	 	 <>
@@ -281,7 +289,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             	 	 	 </button>
           	 	 </>
         	 	 )}
-
         	 	 {avaria.status_cobranca === 'Cobrada' && !isEditing && (
           	 	 <button
           	 	 	 onClick={() => {
@@ -293,7 +300,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 	 ✏️ Editar Cobrança
           	 	 </button>
         	 	 )}
-
         	 	 {isEditing && (
           	 	 <button
           	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
@@ -302,7 +308,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 	 💾 Salvar Alterações
           	 	 </button>
         	 	 )}
-
         	 	 <button
         	 	 	 onClick={onClose}
         	 	 	 className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
@@ -314,127 +319,147 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     	  </div>
   	  </div>
 
-  	  {/* === Layout de Impressão com Papel Timbrado (ID ADICIONADO) === */}
-  	  <div
-  		 	 id="printable-area" 
-  		 	 className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
-  		 	 style={{
-    		 	 minHeight: "100vh",
-    		 	 padding: "100px 60px 80px 60px", // Margens internas
-    		 	 boxSizing: "border-box",
-    		 	 position: "relative",
-  		 	 }}
-  	  >
+  	  {/* ====================================================================
+  	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
+  	  ====================================================================
+  	  */}
+  	  <div id="printable-area" className="hidden font-sans text-sm">
   		 	 {/* Cabeçalho com Logos */}
-  		 	 <div className="absolute top-8 left-8 right-8 flex justify-between items-center">
+  		 	 <header className="flex justify-between items-center pb-8 border-b border-gray-200 mb-10">
     		 	 <img
-      		 	 src="/assets/logo-csc.png"
+      		 	 src="/assets/logo-csc.png" // Caminho relativo (será corrigido pela função)
       		 	 alt="Grupo CSC"
-      		 	 className="h-10 object-contain"
+      		 	 className="h-12 object-contain"
     		 	 />
     		 	 <img
-      		 	 src="/assets/logo-planalto.jpg"
+      		 	 src="/assets/logo-planalto.jpg" // Caminho relativo (será corrigido pela função)
       		 	 alt="Expresso Planalto S/A"
-      		 	 className="h-10 object-contain"
+      		 	 className="h-12 object-contain"
     		 	 />
-  		 	 </div>
+  		 	 </header>
 
   		 	 {/* Conteúdo Central */}
-  		 	 <div className="mt-24">
-    		 	 <div className="text-center mb-8">
-      		 	 <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
-    		 	 </div>
+  		 	 <main>
+    		 	 <h1 className="text-3xl font-bold text-gray-900 text-center mb-10">
+      		 	 RELATÓRIO DE COBRANÇA DE AVARIA
+    		 	 </h1>
 
     		 	 {/* Identificação */}
-    		 	 <div className="space-y-1 mb-6">
-      		 	 <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
-      		 	 <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
-      		 	 <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
-      		 	 <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
-    		 	 </div>
+    		 	 <section className="mb-8 p-4 border border-gray-200 rounded-lg">
+      		 	 <h2 className="text-lg font-semibold text-gray-700 mb-4">Detalhes da Avaria</h2>
+      		 	 <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+        		 	 <div>
+          		 	 <label className="text-xs font-medium text-gray-500 block">Prefixo</label>
+          		 	 <p className="font-medium text-gray-900">{avaria.prefixo}</p>
+        		 	 </div>
+        		 	 <div>
+          		 	 <label className="text-xs font-medium text-gray-500 block">Motorista</label>
+          		 	 <p className="font-medium text-gray-900">{selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
+        		 	 </div>
+        		 	 <div>
+          		 	 <label className="text-xs font-medium text-gray-500 block">Data da Avaria</label>
+          		 	 <p className="font-medium text-gray-900">{new Date(avaria.dataAvaria).toLocaleDateString()}</p>
+        		 	 </div>
+        		 	 <div className="col-span-3">
+          		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
+          		 	 <p className="font-medium text-gray-900">{avaria.descricao || 'Não informada'}</p>
+        		 	 </div>
+      		 	 </div>
+    		 	 </section>
 
     		 	 {/* Peças */}
     		 	 {pecas.length > 0 && (
-      		 	 <>
-        		 	 <h3 className="text-lg font-semibold mb-2">Peças</h3>
-        		 	 <table className="w-full border-collapse text-sm mb-6">
+      		 	 <section className="mb-6">
+        		 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Peças</h3>
+        		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
-          	 		 	 <tr className="bg-gray-100">
-            	 		 	 <th className="text-left border p-2">Descrição</th>
-            	 		 	 <th className="text-center border p-2">Qtd</th>
-            	 		 	 <th className="text-right border p-2">Valor Unitário</th>
-            	 		 	 <th className="text-right border p-2">Total</th>
+          	 		 	 <tr className="bg-gray-50">
+            	 		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
+            	 		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
+            	 		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
+            	 		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
           	 		 	 </tr>
           		 	 </thead>
           		 	 <tbody>
             		 	 {pecas.map((item) => (
-              		 	 <tr key={item.id}>
-              	 		 	 <td className="border p-2">{item.descricao}</td>
-              	 		 	 <td className="border p-2 text-center">{item.qtd}</td>
-              	 		 	 <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-              	 		 	 <td className="border p-2 text-right font-medium">
+              		 	 <tr key={item.id} className="border-b">
+              	 		 	 <td className="border-x p-2">{item.descricao}</td>
+              	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
+              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+              	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
               		 	 </tr>
             		 	 ))}
           		 	 </tbody>
         		 	 </table>
-      		 	 </>
+      		 	 </section>
     		 	 )}
 
     		 	 {/* Serviços */}
     		 	 {servicos.length > 0 && (
-      		 	 <>
-        		 	 <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
-        		 	 <table className="w-full border-collapse text-sm mb-6">
+      		 	 <section className="mb-8">
+        		 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Mão de Obra / Serviços</h3>
+        		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
-    	       		 	 <tr className="bg-gray-100">
-              		 	 <th className="text-left border p-2">Descrição</th>
-              		 	 <th className="text-center border p-2">Qtd</th>
-              		 	 <th className="text-right border p-2">Valor Unitário</th>
-              		 	 <th className="text-right border p-2">Total</th>
+    	       		 	 <tr className="bg-gray-50">
+              		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
+              		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
+              		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
+              		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
             		 	 </tr>
           		 	 </thead>
           		 	 <tbody>
-            		 	 {servicos.map((item) => (
-              		 	 <tr key={item.id}>
-              	 		 	 <td className="border p-2">{item.descricao}</td>
-              	 		 	 <td className="border p-2 text-center">{item.qtd}</td>
-              	 		 	 <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-              	 		 	 <td className="border p-2 text-right font-medium">
+  code:         		 	 {servicos.map((item) => (
+              		 	 <tr key={item.id} className="border-b">
+              	 		 	 <td className="border-x p-2">{item.descricao}</td>
+              	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
+              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+              	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
       	       		 	 </tr>
             		 	 ))}
           		 	 </tbody>
         		 	 </table>
-      		 	 </>
+      		 	 </section>
     		 	 )}
-
+  
     		 	 {/* Totais */}
-  	 	 	 <div className="text-right mb-8">
-      		 	 <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
-      		 	 <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
-      		 	 <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
-    		 	 </div>
+  	 	 	 <section className="flex justify-end mb-16">
+      		 	 <div className="w-1/2 md:w-1/3 space-y-2 text-right">
+        		 	 <div className="flex justify-between">
+          		 	 <span className="text-gray-600">Valor Total Orçado:</span>
+          		 	 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
+        		 	 </div>
+        		 	 <div className="flex justify-between">
+          		 	 <span className="text-gray-600">Nº de Parcelas:</span>
+          		 	 <span className="font-medium text-gray-900">{numParcelas || 1}</span>
+        		 	 </div>
+        		 	 <div className="flex justify-between border-t pt-2 mt-2">
+          		 	 <span className="font-bold text-lg text-gray-900">Valor Cobrado:</span>
+          		 	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
+        		 	 </div>
+      		 	 </div>
+    		 	 </section>
 
     		 	 {/* Assinaturas */}
-    		 	 <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
+    		 	 <section className="flex justify-around text-center mt-16 pt-12 border-t border-gray-300">
       		 	 <div className="w-1/3">
-        		 	 <p className="font-medium">__________________________</p>
+        		 	 <p className="font-medium pt-8">__________________________</p>
   	       		 	 <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
       		 	 </div>
       		 	 <div className="w-1/3">
-        		 	 <p className="font-medium">__________________________</p>
+        		 	 <p className="font-medium pt-8">__________________________</p>
         		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
       		 	 </div>
-    		 	 </div>
-  		 	 </div>
+    		 	 </section>
+  		 	 </main>
 
   		 	 {/* Rodapé */}
-  		 	 <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
+  		 	 <footer className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
     		 	 	 Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
-  		 	 </div>
+  		 	 </footer>
   	  </div>
   	</>
   );
