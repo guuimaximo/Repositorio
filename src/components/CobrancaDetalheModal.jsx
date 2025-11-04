@@ -332,7 +332,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       </div>
 
 {/* ====================================================================
-    LAYOUT DE IMPRESSÃO — BÁSICO (1 página)
+    LAYOUT DE IMPRESSÃO — BÁSICO (1 página) — com título e nome do motorista
 ==================================================================== */}
 <div id="printable-area" className="hidden font-sans text-[11px] leading-tight text-gray-900">
   <style>{`
@@ -345,7 +345,9 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
 
   {/* Cabeçalho simples */}
   <header className="mb-2">
-    <h1 className="text-center text-[14px] font-extrabold">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
+    <h1 className="text-center text-[14px] font-extrabold">
+      ORÇAMENTO PARA COBRANÇA DE AVARIA
+    </h1>
   </header>
 
   {/* Identificação */}
@@ -353,8 +355,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     <div className="grid grid-cols-3 gap-2">
       <div><span className="text-gray-600">Prefixo:</span> <strong>{avaria.prefixo}</strong></div>
       <div>
-        <span className="text-gray-600">Motorista:</span>{' '}
-        <strong>{selectedMotorista?.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</strong>
+        <span className="text-gray-600">Nome do Motorista:</span>{' '}
+        <strong>{selectedMotorista?.nome || 'N/A'}</strong>
       </div>
       <div>
         <span className="text-gray-600">Data da Avaria:</span>{' '}
@@ -473,7 +475,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     </div>
   </section>
 
-  {/* Assinaturas — 3 linhas */}
+  {/* Assinaturas — 3 linhas (Gerente, Cobrança, Motorista = nome) */}
   <section className="mt-4 nobreak">
     <div className="grid grid-cols-3 gap-4">
       <div className="text-center">
@@ -491,7 +493,9 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       <div className="text-center">
         <div className="h-12" />
         <div className="border-t pt-1">
-          <p className="text-[11px] font-medium">Motorista</p>
+          <p className="text-[11px] font-medium">
+            {selectedMotorista?.nome || 'Motorista'}
+          </p>
         </div>
       </div>
     </div>
