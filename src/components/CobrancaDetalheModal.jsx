@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão com impressão em nova aba, correção de logos e layout de impressão melhorado
+// Versão 100% limpa, com impressão em nova aba, correção de logos e layout melhorado
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -37,7 +37,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       setMotivoCancelamento(avaria.motivo_cancelamento_cobranca || '');
 
       if (avaria.motoristaId) {
-    t   setNeedsMotoristaSelection(false);
+        setNeedsMotoristaSelection(false);
         const parts = String(avaria.motoristaId).split(' - ');
         setSelectedMotorista({ chapa: parts[0] || '', nome: parts[1] || avaria.motoristaId });
       } else {
@@ -250,7 +250,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
             	 	 	 className="w-full border rounded-md p-2"
             	 	 />
-          	 	 </div>
+  V       	 	 </div>
           	 	 <div>
             	 	 <label>Valor Cobrado (R$)</label>
             	 	 <input
@@ -304,7 +304,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 <button
           	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
   	       	 	 	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-          	 	 >
+":         	 	 >
           	 	 	 💾 Salvar Alterações
           	 	 </button>
         	 	 )}
@@ -348,7 +348,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     		 	 <section className="mb-8 p-4 border border-gray-200 rounded-lg">
       		 	 <h2 className="text-lg font-semibold text-gray-700 mb-4">Detalhes da Avaria</h2>
       		 	 <div className="grid grid-cols-3 gap-x-4 gap-y-2">
-        		 	 <div>
+  sv       	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Prefixo</label>
           		 	 <p className="font-medium text-gray-900">{avaria.prefixo}</p>
         		 	 </div>
@@ -361,7 +361,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           		 	 <p className="font-medium text-gray-900">{new Date(avaria.dataAvaria).toLocaleDateString()}</p>
         		 	 </div>
         		 	 <div className="col-span-3">
-          		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
+      nbsp;     		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
           		 	 <p className="font-medium text-gray-900">{avaria.descricao || 'Não informada'}</p>
         		 	 </div>
       		 	 </div>
@@ -390,7 +390,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
               		 	 </tr>
-            		 	 ))}
+SA         		 	 ))}
           		 	 </tbody>
         		 	 </table>
       		 	 </section>
@@ -406,15 +406,15 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
               		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
               		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
-              		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
+C             		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
             		 	 </tr>
           		 	 </thead>
           		 	 <tbody>
-  code:         		 	 {servicos.map((item) => (
+  D         		 	 {servicos.map((item) => (
               		 	 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
-              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+            ci 	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
               	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
@@ -423,7 +423,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           		 	 </tbody>
         		 	 </table>
       		 	 </section>
-    		 	 )}
+    		   )}
   
     		 	 {/* Totais */}
   	 	 	 <section className="flex justify-end mb-16">
