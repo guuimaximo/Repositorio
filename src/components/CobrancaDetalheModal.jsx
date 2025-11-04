@@ -264,7 +264,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         	  </div>
       	  </div>
 
-      	  {/* Rodapé */}
+V   	  {/* Rodapé */}
   	   	  <div className="flex justify-between items-center p-4 border-t bg-gray-50">
         	  <button
         	 	 onClick={handlePrint}
@@ -283,7 +283,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             	 	 	 </button>
           	 	 	 <button
             	 	 	 onClick={() => handleSalvarStatus('Cancelada')}
-            	 	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+CSS           	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
             	 	 	 >
             	 	 	 ❌ Cancelar Cobrança
             	 	 	 </button>
@@ -294,7 +294,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 	 onClick={() => {
             	 	 	 setIsEditing(true);
             	 	 	 alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
-            	 	 	 }}
+SAP         	 	 }}
           	 	 	 className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
           	 	 >
           	 	 	 ✏️ Editar Cobrança
@@ -304,13 +304,13 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 <button
           	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
   	       	 	 	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-a         	 	 >
+          	 	 >
           	 	 	 💾 Salvar Alterações
-          	 	 </button>
+    	     	 </button>
         	 	 )}
         	 	 <button
         	 	 	 onClick={onClose}
-className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
+        	 	 	 className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
         	 	 >
         	 	 	 🚪 Fechar
         	 	 </button>
@@ -320,7 +320,7 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
   	  </div>
 
   	  {/* ====================================================================
-  	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
+D   	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
   	  ====================================================================
   	  */}
   	  <div id="printable-area" className="hidden font-sans text-sm">
@@ -341,7 +341,7 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
   		 	 {/* Conteúdo Central */}
   		 	 <main>
     		 	 <h1 className="text-3xl font-bold text-gray-900 text-center mb-10">
-      		 	 RELATÓRIO DE COBRANÇA DE AVARIA
+S     		 	 RELATÓRIO DE COBRANÇA DE AVARIA
     		 	 </h1>
 
     		 	 {/* Identificação */}
@@ -354,7 +354,7 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
         		 	 </div>
         		 	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Motorista</label>
-          		 	 <p className="font-medium text-gray-900">{selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
+SAP       		 <p className="font-medium text-gray-900">{selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
         		 	 </div>
         		 	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Data da Avaria</label>
@@ -364,13 +364,13 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
           		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
           		 	 <p className="font-medium text-gray-900">{avaria.descricao || 'Não informada'}</p>
         		 	 </div>
-      		 	 </div>
+    CSS 		 	 </div>
     		 	 </section>
 
     		 	 {/* Peças */}
     		 	 {pecas.length > 0 && (
       		 	 <section className="mb-6">
-        		 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Peças</h3>
+  CSS     	 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Peças</h3>
         		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
           	 		 	 <tr className="bg-gray-50">
@@ -382,13 +382,13 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
           		 	 </thead>
           		 	 <tbody>
             		 	 {pecas.map((item) => (
-              		 	 <tr key={item.id} className="border-b">
+S           	 	 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
               	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-              	 		 	 <td className="border-x p-2 text-right font-medium">
+sv           	 		 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-  css         	 		 	 </td>
+                	 		 	 </td>
               		 	 </tr>
             		 	 ))}
           		 	 </tbody>
@@ -403,19 +403,19 @@ className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex it
         		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
     	       		 	 <tr className="bg-gray-50">
-T             		 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
+              		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
               		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
               		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
               		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
             		 	 </tr>
-A       		 	 </thead>
+          		 	 </thead>
           		 	 <tbody>
-            		 	 {servicos.map((item) => (
-sv           		 <tr key={item.id} className="border-b">
+content:       		 	 {servicos.map((item) => (
+              		 	 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
-              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-S             	 		 <td className="border-x p-2 text-right font-medium">
+            s 	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+              	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
       	       		 	 </tr>
@@ -430,16 +430,16 @@ S             	 		 <td className="border-x p-2 text-right font-medium">
       		 	 <div className="w-1/2 md:w-1/3 space-y-2 text-right">
         		 	 <div className="flex justify-between">
           		 	 <span className="text-gray-600">Valor Total Orçado:</span>
-CSS         		 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
+          		 	 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
         		 	 </div>
         		 	 <div className="flex justify-between">
-          		 	 <span className="text-gray-600">Nº de Parcelas:</span>
+  Name:     		 	 <span className="text-gray-600">Nº de Parcelas:</span>
           		 	 <span className="font-medium text-gray-900">{numParcelas || 1}</span>
-D       		 	 </div>
+        		 	 </div>
         		 	 <div className="flex justify-between border-t pt-2 mt-2">
           		 	 <span className="font-bold text-lg text-gray-900">Valor Cobrado:</span>
-          		 	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
-    C   		 	 </div>
+Assinaturas       	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
+        		 	 </div>
       		 	 </div>
     		 	 </section>
 
@@ -447,18 +447,18 @@ D       		 	 </div>
     		 	 <section className="flex justify-around text-center mt-16 pt-12 border-t border-gray-300">
       		 	 <div className="w-1/3">
         		 	 <p className="font-medium pt-8">__________________________</p>
-  	       		 	 <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
-S     		 	 </div>
+  	     	 		 <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
+      		 	 </div>
       		 	 <div className="w-1/3">
         		 	 <p className="font-medium pt-8">__________________________</p>
         		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
       		 	 </div>
-    		 	 </section>
+CSS   	 	 </section>
   		 	 </main>
 
   		 	 {/* Rodapé */}
   		 	 <footer className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
-    		 	 	 Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
+s   		 	 	 Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
   		 	 </footer>
   	  </div>
   	</>
