@@ -199,7 +199,7 @@ export default function SolicitacaoTratativa() {
           >
             <option value="">Selecione</option>
             {linhas.map((l) => (
-              <option key={l.id} value={l.codigo}>{l.nome}</option>
+              <option key={l.id} value={l.codigo}>{l.codigo}</option>
             ))}
           </select>
         </div>
