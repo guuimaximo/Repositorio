@@ -180,7 +180,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   <CampoMotorista
                     onSelect={(motorista) => setSelectedMotorista(motorista)}
                     initialValue={selectedMotorista}
-                  />
+                t />
                 ) : (
                   <p>{selectedMotorista.nome || 'N/A'}</p>
                 )}
@@ -264,7 +264,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         	  </div>
       	  </div>
 
-V   	  {/* Rodapé */}
+  	   	  {/* Rodapé */}
   	   	  <div className="flex justify-between items-center p-4 border-t bg-gray-50">
         	  <button
         	 	 onClick={handlePrint}
@@ -283,10 +283,10 @@ V   	  {/* Rodapé */}
             	 	 	 </button>
           	 	 	 <button
             	 	 	 onClick={() => handleSalvarStatus('Cancelada')}
-CSS           	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+            	 	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
             	 	 	 >
             	 	 	 ❌ Cancelar Cobrança
-            	 	 	 </button>
+  nbsp;       	 	 </button>
           	 	 </>
         	 	 )}
         	 	 {avaria.status_cobranca === 'Cobrada' && !isEditing && (
@@ -294,7 +294,7 @@ CSS           	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py
           	 	 	 onClick={() => {
             	 	 	 setIsEditing(true);
             	 	 	 alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
-SAP         	 	 }}
+            	 	 	 }}
           	 	 	 className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
           	 	 >
           	 	 	 ✏️ Editar Cobrança
@@ -320,7 +320,7 @@ SAP         	 	 }}
   	  </div>
 
   	  {/* ====================================================================
-D   	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
+  	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
   	  ====================================================================
   	  */}
   	  <div id="printable-area" className="hidden font-sans text-sm">
@@ -341,7 +341,7 @@ D   	 	  LAYOUT DE IMPRESSÃO MELHORADO (OCULTO NA TELA NORMAL)
   		 	 {/* Conteúdo Central */}
   		 	 <main>
     		 	 <h1 className="text-3xl font-bold text-gray-900 text-center mb-10">
-S     		 	 RELATÓRIO DE COBRANÇA DE AVARIA
+      		 	 RELATÓRIO DE COBRANÇA DE AVARIA
     		 	 </h1>
 
     		 	 {/* Identificação */}
@@ -354,7 +354,7 @@ S     		 	 RELATÓRIO DE COBRANÇA DE AVARIA
         		 	 </div>
         		 	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Motorista</label>
-SAP       		 <p className="font-medium text-gray-900">{selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
+          		 	 <p className="font-medium text-gray-900">{selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
         		 	 </div>
         		 	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Data da Avaria</label>
@@ -364,13 +364,13 @@ SAP       		 <p className="font-medium text-gray-900">{selectedMotorista.nome
           		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
           		 	 <p className="font-medium text-gray-900">{avaria.descricao || 'Não informada'}</p>
         		 	 </div>
-    CSS 		 	 </div>
+      		 	 </div>
     		 	 </section>
 
     		 	 {/* Peças */}
     		 	 {pecas.length > 0 && (
       		 	 <section className="mb-6">
-  CSS     	 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Peças</h3>
+        		 	 <h3 className="text-lg font-semibold mb-2 text-gray-700">Peças</h3>
         		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
           	 		 	 <tr className="bg-gray-50">
@@ -382,15 +382,15 @@ SAP       		 <p className="font-medium text-gray-900">{selectedMotorista.nome
           		 	 </thead>
           		 	 <tbody>
             		 	 {pecas.map((item) => (
-S           	 	 <tr key={item.id} className="border-b">
+              		 	 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
               	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-sv           	 		 <td className="border-x p-2 text-right font-medium">
+              	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
               		 	 </tr>
-            		 	 ))}
+s         		 	 ))}
           		 	 </tbody>
         		 	 </table>
       		 	 </section>
@@ -403,19 +403,19 @@ sv           	 		 <td className="border-x p-2 text-right font-medium">
         		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
     	       		 	 <tr className="bg-gray-50">
-              		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
+section         	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
               		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
               		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
-              		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
+Â             	 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
             		 	 </tr>
           		 	 </thead>
           		 	 <tbody>
-content:       		 	 {servicos.map((item) => (
-              		 	 <tr key={item.id} className="border-b">
+            		 	 {servicos.map((item) => (
+sv           		 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
-            s 	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-              	 		 	 <td className="border-x p-2 text-right font-medium">
+              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+section         	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
       	       		 	 </tr>
@@ -427,19 +427,19 @@ content:       		 	 {servicos.map((item) => (
   
     		 	 {/* Totais */}
   	 	 	 <section className="flex justify-end mb-16">
-      		 	 <div className="w-1/2 md:w-1/3 space-y-2 text-right">
+CSS     		 	 <div className="w-1/2 md:w-1/3 space-y-2 text-right">
         		 	 <div className="flex justify-between">
           		 	 <span className="text-gray-600">Valor Total Orçado:</span>
-          		 	 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
+Ã         		 	 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
         		 	 </div>
         		 	 <div className="flex justify-between">
-  Name:     		 	 <span className="text-gray-600">Nº de Parcelas:</span>
+          		 	 <span className="text-gray-600">Nº de Parcelas:</span>
           		 	 <span className="font-medium text-gray-900">{numParcelas || 1}</span>
         		 	 </div>
         		 	 <div className="flex justify-between border-t pt-2 mt-2">
           		 	 <span className="font-bold text-lg text-gray-900">Valor Cobrado:</span>
-Assinaturas       	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
-        		 	 </div>
+          		 	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
+    s 		 	 </div>
       		 	 </div>
     		 	 </section>
 
@@ -451,9 +451,9 @@ Assinaturas       	 <span className="font-bold text-lg text-gray-900">{format
       		 	 </div>
       		 	 <div className="w-1/3">
         		 	 <p className="font-medium pt-8">__________________________</p>
-        		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
+D       		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
       		 	 </div>
-CSS   	 	 </section>
+    		 	 </section>
   		 	 </main>
 
   		 	 {/* Rodapé */}
