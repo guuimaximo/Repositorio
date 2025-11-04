@@ -61,7 +61,7 @@ export default function TratarTratativa() {
     return d
   }
 
-  // Início, fim e retorno (dias corridos; fim = início + (dias - 1); retorno = fim + 1)
+  // Início, fim e retorno (dias corridos: fim = início + (dias - 1), retorno = fim + 1)
   const inicioSusp = useMemo(() => new Date(dataSuspensao), [dataSuspensao])
   const fimSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp) - 1, 0)), [dataSuspensao, diasSusp])
   const retornoSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)), [dataSuspensao, diasSusp])
@@ -154,7 +154,7 @@ export default function TratarTratativa() {
         imagem_tratativa = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
       }
 
-      // detalhe/histórico (sem criar novas colunas por enquanto)
+      // detalhe/histórico
       await supabase.from('tratativas_detalhes').insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
@@ -194,7 +194,6 @@ export default function TratarTratativa() {
         .content { padding: 0; }
         .linha { display:flex; justify-content:space-between; gap:16px; }
         .mt { margin-top: 16px; }
-        .mb { margin-bottom: 10px; }
         .center { text-align: center; font-weight: bold; }
         .right { text-align: right; }
         .bl { white-space: pre-wrap; }
@@ -203,13 +202,17 @@ export default function TratarTratativa() {
         .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
         .ass { text-align: center; }
         .ass-line { margin-top: 34px; border-top: 1px solid #000; height:1px; }
-        .pill { display:inline-block; border:1px solid #000; padding:2px 8px; border-radius:14px; }
       </style>
     `
   }
 
   function renderSuspensaoHtml({ nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc, dias, inicio, fim, retorno }) {
-    // Texto baseado no modelo de referência.  — (citação colocada fora do HTML no chat)
+    const diasFmt = String(dias).padStart(2, '0')
+    const brLocal = (d) => {
+      const dt = (d instanceof Date) ? d : new Date(d)
+      return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR')
+    }
+
     return `
       <html>
         <head>
@@ -229,17 +232,16 @@ export default function TratarTratativa() {
               </div>
 
               <p class="mt bl">
-                Pelo presente, notificamos que por ter o(a) senhor(a) cometido a falta abaixo descrita,
-                encontra-se <span class="label">suspenso(a) do serviço por ${String(dias).padStart(2,'0')} dia(s)</span>,
-                <span class="label">a partir de ${br(inicio)}</span>, devendo, portanto, apresentar-se ao serviço
-                no dia <span class="label">${br(retorno)}</span>, salvo outra resolução.
+                Pelo presente, notificamos que por ter o senhor cometido à falta abaixo descrita, encontra-se
+                suspenso do serviço por <span class="label">${diasFmt} dias</span>, a partir de
+                <span class="label">${brLocal(inicio)}</span>, devendo, portanto, apresenta-se ao mesmo, no horário usual, no dia
+                <span class="label">${brLocal(retorno)}</span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim
+                pedimos a devolução do presente com o seu “ciente”.
               </p>
 
               <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
               <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-
-              <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(fim)} (retorno: ${br(retorno)})</div>
-
+              <div class="mt"><span class="label">Período da Suspensão:</span> ${brLocal(inicio)} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
               <div class="mt"><span class="label">Observação:</span> ${observ}</div>
 
               <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
@@ -527,7 +529,6 @@ export default function TratarTratativa() {
             </select>
           </div>
 
-          {/* Só mostra os controles de suspensão quando a ação for Suspensão */}
           {acao === 'Suspensão' && (
             <>
               <div>
