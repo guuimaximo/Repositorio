@@ -1,5 +1,5 @@
 // src/pages/ConsultarTratativa.jsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -22,15 +22,15 @@ export default function ConsultarTratativa() {
       if (error) console.error(error)
       setT(data || null)
 
-      // Histórico
+      // Histórico (mais recente primeiro)
       const h = await supabase
         .from('tratativas_detalhes')
-        .select('*')
+        .select('id, created_at, acao_aplicada, observacoes, imagem_tratativa, assinatura_url')
         .eq('tratativa_id', id)
-        .order('created_at')
+        .order('created_at', { ascending: false })
       setHistorico(h.data || [])
 
-      // Descrição da linha (se houver código)
+      // Descrição da linha
       if (data?.linha) {
         const { data: row } = await supabase
           .from('linhas')
@@ -44,18 +44,17 @@ export default function ConsultarTratativa() {
     })()
   }, [id])
 
+  const ultima = useMemo(() => (historico && historico.length > 0 ? historico[0] : null), [historico])
+
   if (!t) return <div className="p-6">Carregando…</div>
 
-  // Campo data/hora: tolera nomes diferentes usados em telas antigas
+  // Campos tolerando nomes antigos
   const dataOcorr = t.data_ocorrido || t.data_ocorrida || '-'
   const horaOcorr = t.hora_ocorrido || t.hora_ocorrida || ''
 
-  // Suspensões no histórico
-  const suspensoes = (historico || []).filter(h => (h.acao_aplicada || '').toLowerCase() === 'suspensão')
-
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Consultar</h1>
         <button
           onClick={() => nav(`/tratar/${id}`)}
@@ -65,36 +64,55 @@ export default function ConsultarTratativa() {
         </button>
       </div>
 
+      {/* Resumo da última ação aplicada */}
+      <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Resumo da última ação</h2>
+          <span className="text-sm opacity-80">
+            {ultima?.created_at ? new Date(ultima.created_at).toLocaleString('pt-BR') : '—'}
+          </span>
+        </div>
+        <div className="mt-1 font-medium">
+          {ultima?.acao_aplicada || '—'}
+        </div>
+        <div className="mt-1 whitespace-pre-wrap">
+          {ultima?.observacoes || 'Sem observações registradas.'}
+        </div>
+      </div>
+
       {/* Dados da tratativa */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item
-            titulo="Motorista"
-            valor={`${t.motorista_nome || '-'}`}
-          />
-          <Item
-            titulo="Registro"
-            valor={t.motorista_chapa || '-'}
-          />
+          <Item titulo="Motorista" valor={t.motorista_nome || '-'} />
+          <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
           <Item titulo="Ocorrência" valor={t.tipo_ocorrencia || '-'} />
           <Item titulo="Prioridade" valor={t.prioridade || '-'} />
           <Item titulo="Setor" valor={t.setor_origem || '-'} />
           <Item
             titulo="Linha"
-            valor={
-              t.linha
-                ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}`
-                : '-'
-            }
+            valor={t.linha ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}` : '-'}
           />
           <Item titulo="Status" valor={t.status || '-'} />
           <Item titulo="Data/Hora" valor={`${dataOcorr} ${horaOcorr}`} />
-          <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
+          {/* Destaques do que foi tratado (última ação) */}
+          <Item titulo="Última ação" valor={ultima?.acao_aplicada || '—'} />
+          <Item
+            titulo="Resumo da ação"
+            valor={ultima?.observacoes || '—'}
+            className="md:col-span-2"
+          />
+          <Item
+            titulo="Descrição (abertura)"
+            valor={t.descricao || '-'}
+            className="md:col-span-2"
+          />
 
           {/* Imagem enviada na abertura (se existir) */}
           {t.imagem_url && (
             <div className="md:col-span-2">
-              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
+              <span className="block text-sm text-gray-600 mb-1">
+                Imagem enviada (clique para ampliar)
+              </span>
               <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
                 <img
                   src={t.imagem_url}
@@ -107,7 +125,7 @@ export default function ConsultarTratativa() {
         </dl>
       </div>
 
-      {/* Histórico geral */}
+      {/* Histórico completo */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <h2 className="font-semibold mb-3">Histórico / Ações aplicadas</h2>
         {historico.length === 0 ? (
@@ -117,12 +135,12 @@ export default function ConsultarTratativa() {
             {historico.map(h => (
               <li key={h.id} className="rounded border p-3">
                 <div className="text-sm text-gray-600">
-                  {h.created_at ? new Date(h.created_at).toLocaleString('pt-BR') : '-'}
+                  {h.created_at ? new Date(h.created_at).toLocaleString('pt-BR') : '—'}
                 </div>
-                <div className="font-medium">{h.acao_aplicada || '-'}</div>
-                {h.observacoes && <div className="text-gray-700 whitespace-pre-wrap">{h.observacoes}</div>}
-
-                {/* Imagens anexadas naquele atendimento */}
+                <div className="font-medium">{h.acao_aplicada || '—'}</div>
+                {h.observacoes && (
+                  <div className="text-gray-700 whitespace-pre-wrap">{h.observacoes}</div>
+                )}
                 <div className="flex gap-3 mt-2 flex-wrap">
                   {h.imagem_tratativa && (
                     <a href={h.imagem_tratativa} target="_blank" rel="noopener noreferrer">
@@ -134,7 +152,12 @@ export default function ConsultarTratativa() {
                     </a>
                   )}
                   {h.assinatura_url && (
-                    <a className="text-blue-600 underline self-end" href={h.assinatura_url} target="_blank" rel="noreferrer">
+                    <a
+                      className="text-blue-600 underline self-end"
+                      href={h.assinatura_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Ver assinatura
                     </a>
                   )}
@@ -145,33 +168,35 @@ export default function ConsultarTratativa() {
         )}
       </div>
 
-      {/* Histórico de Suspensão (recorte) */}
+      {/* Recorte apenas de suspensões */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <h2 className="font-semibold mb-3">Histórico de Suspensões</h2>
-        {suspensoes.length === 0 ? (
+        {historico.filter(h => (h.acao_aplicada || '').toLowerCase() === 'suspensão').length === 0 ? (
           <div className="text-gray-500">Sem suspensões registradas nesta tratativa.</div>
         ) : (
           <ul className="space-y-2">
-            {suspensoes.map(s => (
-              <li key={s.id} className="border rounded p-3">
-                <div className="text-sm text-gray-600">
-                  {s.created_at ? new Date(s.created_at).toLocaleString('pt-BR') : '-'}
-                </div>
-                <div className="font-medium">Suspensão aplicada</div>
-                {s.observacoes && <div className="text-gray-700">{s.observacoes}</div>}
-                {s.imagem_tratativa && (
-                  <div className="mt-2">
-                    <a href={s.imagem_tratativa} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={s.imagem_tratativa}
-                        className="h-20 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                        alt="Imagem da suspensão"
-                      />
-                    </a>
+            {historico
+              .filter(h => (h.acao_aplicada || '').toLowerCase() === 'suspensão')
+              .map(s => (
+                <li key={s.id} className="border rounded p-3">
+                  <div className="text-sm text-gray-600">
+                    {s.created_at ? new Date(s.created_at).toLocaleString('pt-BR') : '—'}
                   </div>
-                )}
-              </li>
-            ))}
+                  <div className="font-medium">Suspensão aplicada</div>
+                  {s.observacoes && <div className="text-gray-700">{s.observacoes}</div>}
+                  {s.imagem_tratativa && (
+                    <div className="mt-2">
+                      <a href={s.imagem_tratativa} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={s.imagem_tratativa}
+                          className="h-20 rounded cursor-pointer hover:opacity-80 transition-opacity"
+                          alt="Imagem da suspensão"
+                        />
+                      </a>
+                    </div>
+                  )}
+                </li>
+              ))}
           </ul>
         )}
       </div>
