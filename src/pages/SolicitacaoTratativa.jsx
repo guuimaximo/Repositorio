@@ -11,7 +11,7 @@ export default function SolicitacaoTratativa() {
     tipo_ocorrencia: '',
     prioridade: 'Média',
     setor_origem: '',
-    linha: '', // opcional
+    linha: '',
     descricao: '',
     data_ocorrida: '',
     hora_ocorrida: '',
@@ -79,7 +79,7 @@ export default function SolicitacaoTratativa() {
         tipo_ocorrencia: form.tipo_ocorrencia,
         prioridade: form.prioridade,
         setor_origem: form.setor_origem,
-        linha: form.linha || null, // opcional
+        linha: form.linha || null,
         descricao: form.descricao,
         status: 'Pendente',
         imagem_url,
@@ -154,15 +154,15 @@ export default function SolicitacaoTratativa() {
 
         {/* Linha (Opcional) */}
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Linha (Opcional)</label>
+          <label className="block text-sm text-gray-600 mb-1">Linha </label>
           <select
             className="w-full rounded-md border px-3 py-2"
             value={form.linha}
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
-            <option value="">Selecione (se aplicável)...</option>
+            <option value="">Selecione </option>
             {linhas.map((l) => (
-              <option key={l.id} value={l.nome}>
+              <option key={l.id} value={l.codigo}>
                 {l.nome}
               </option>
             ))}
