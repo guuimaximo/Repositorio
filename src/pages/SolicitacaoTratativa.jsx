@@ -1,5 +1,5 @@
 // src/pages/SolicitacaoTratativa.jsx
-// Versão com Dropzone "Evidências (Fotos e Vídeos)" + múltiplos uploads
+// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao)
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
@@ -11,14 +11,14 @@ export default function SolicitacaoTratativa() {
     tipo_ocorrencia: '',
     prioridade: 'Média',
     setor_origem: '',
-    linha: '',
+    linha: '',            // <- aqui guardamos o CÓDIGO da linha
     descricao: '',
     data_ocorrida: '',
     hora_ocorrida: '',
   });
 
-  // 🔹 Evidências (imagens/vídeos)
-  const [files, setFiles] = useState([]);            // File[]
+  // Evidências (imagens/vídeos)
+  const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -26,7 +26,7 @@ export default function SolicitacaoTratativa() {
 
   const [tiposOcorrencia, setTiposOcorrencia] = useState([]);
   const [setores, setSetores] = useState([]);
-  const [linhas, setLinhas] = useState([]);
+  const [linhas, setLinhas] = useState([]); // [{id, codigo, descricao}]
 
   // Buscar listas dinâmicas
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function SolicitacaoTratativa() {
         ] = await Promise.all([
           supabase.from('tipos_ocorrencia').select('id, nome').order('nome'),
           supabase.from('setores').select('id, nome').order('nome'),
-          supabase.from('linhas').select('id, codigo, nome').order('codigo'),
+          supabase.from('linhas').select('id, codigo, descricao').order('codigo'),
         ]);
         if (e1 || e2 || e3) console.error('Erro carregando listas:', e1 || e2 || e3);
         setTiposOcorrencia(Array.isArray(tipos) ? tipos : []);
@@ -58,30 +58,17 @@ export default function SolicitacaoTratativa() {
     form.setor_origem &&
     form.descricao;
 
-  // ---------- Handlers Dropzone ----------
+  // Dropzone
   const acceptMime = ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime'];
-  const onPickFiles = (evt) => {
-    const picked = Array.from(evt.target.files || []);
-    addFiles(picked);
-  };
-  const onDrop = (evt) => {
-    evt.preventDefault();
-    setIsDragging(false);
-    const dropped = Array.from(evt.dataTransfer.files || []);
-    addFiles(dropped);
-  };
   const addFiles = (list) => {
-    const filtered = list.filter(f => acceptMime.includes(f.type));
-    if (filtered.length === 0) return;
-    // Evita duplicados por nome+size
+    const filtered = Array.from(list).filter(f => acceptMime.includes(f.type));
     const key = (f) => `${f.name}-${f.size}`;
     const existing = new Set(files.map(key));
-    const merged = [...files, ...filtered.filter(f => !existing.has(key(f)))];
-    setFiles(merged);
+    setFiles(prev => [...prev, ...filtered.filter(f => !existing.has(key(f)))]);
   };
-  const removeFile = (idx) => {
-    setFiles(prev => prev.filter((_, i) => i !== idx));
-  };
+  const onPickFiles = (e) => addFiles(e.target.files || []);
+  const onDrop = (e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files || []); };
+  const removeFile = (idx) => setFiles(prev => prev.filter((_, i) => i !== idx));
 
   async function salvar() {
     if (!camposObrigatoriosPreenchidos) {
@@ -91,20 +78,15 @@ export default function SolicitacaoTratativa() {
 
     setLoading(true);
     try {
-      // 🔺 Upload de TODAS as evidências (opcional)
+      // Upload de evidências (opcional)
       let evidenciasUrls = [];
       if (files.length > 0) {
         const folder = `tratativas/${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
-          .toString()
-          .replace(/\s+/g, '_')}`;
-
+          .toString().replace(/\s+/g, '_')}`;
         for (const f of files) {
-          const safeName = f.name.replace(/\s+/g, '_');
-          const path = `${folder}/${safeName}`;
-          const up = await supabase.storage.from('tratativas').upload(path, f, {
-            cacheControl: '3600',
-            upsert: false,
-          });
+          const safe = f.name.replace(/\s+/g, '_');
+          const path = `${folder}/${safe}`;
+          const up = await supabase.storage.from('tratativas').upload(path, f);
           if (up.error) throw up.error;
           const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
           if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
@@ -117,13 +99,11 @@ export default function SolicitacaoTratativa() {
         tipo_ocorrencia: form.tipo_ocorrencia,
         prioridade: form.prioridade,
         setor_origem: form.setor_origem,
-        linha: form.linha || null,
+        linha: form.linha || null,          // <- salvando o CÓDIGO da linha
         descricao: form.descricao,
         status: 'Pendente',
-        // Compatibilidade: mantemos imagem_url = primeira evidência (se houver)
         imagem_url: evidenciasUrls[0] || null,
-        // Se você criar a coluna `evidencias` (JSON ou text[]) na tabela, descomente abaixo:
-        // evidencias: evidenciasUrls,
+        // evidencias: evidenciasUrls, // descomente se criar coluna json/text[]
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
       };
@@ -132,7 +112,6 @@ export default function SolicitacaoTratativa() {
       if (error) throw error;
 
       alert('Solicitação registrada com sucesso!');
-      // reset
       setMotorista({ chapa: '', nome: '' });
       setForm({
         tipo_ocorrencia: '',
@@ -189,7 +168,7 @@ export default function SolicitacaoTratativa() {
           </select>
         </div>
 
-        {/* Linha (Opcional) */}
+        {/* Linha (usa codigo + descricao) */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Linha</label>
           <select
@@ -199,7 +178,9 @@ export default function SolicitacaoTratativa() {
           >
             <option value="">Selecione</option>
             {linhas.map((l) => (
-              <option key={l.id} value={l.codigo}>{l.codigo}</option>
+              <option key={l.id} value={l.codigo}>
+                {l.codigo} - {l.descricao}
+              </option>
             ))}
           </select>
         </div>
@@ -251,7 +232,7 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
-        {/* 🔹 Evidências (Fotos e Vídeos) — DROPZONE */}
+        {/* Evidências (Fotos e Vídeos) — Dropzone */}
         <div className="md:col-span-2">
           <label className="block text-sm text-gray-700 font-medium mb-2">
             Evidências (Fotos e Vídeos)
@@ -279,14 +260,13 @@ export default function SolicitacaoTratativa() {
             <input
               ref={fileInputRef}
               type="file"
-              accept={acceptMime.join(',')}
+              accept="image/png,image/jpeg,video/mp4,video/quicktime"
               multiple
               className="hidden"
               onChange={onPickFiles}
             />
           </div>
 
-          {/* Lista de arquivos selecionados (compacta) */}
           {files.length > 0 && (
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
               {files.map((f, idx) => (
