@@ -25,7 +25,7 @@ export default function TratarTratativa() {
   const [assinatura, setAssinatura] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // Exibição complementar
+  // Complementos
   const [linhaDescricao, setLinhaDescricao] = useState('')
   const [cargoMotorista, setCargoMotorista] = useState('MOTORISTA')
 
@@ -38,6 +38,15 @@ export default function TratarTratativa() {
     linha: '',
     descricao: '',
   })
+
+  // Utilitário data por extenso (maiúsculas)
+  const dataPtCompletaUpper = (d = new Date()) => {
+    const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
+    const dia = String(d.getDate()).padStart(2,'0')
+    const mes = meses[d.getMonth()]
+    const ano = d.getFullYear()
+    return `${dia} de ${mes} de ${ano}`
+  }
 
   useEffect(() => {
     (async () => {
@@ -57,6 +66,7 @@ export default function TratarTratativa() {
         descricao: data?.descricao || '',
       })
 
+      // Linha (código -> descrição)
       if (data?.linha) {
         const { data: row } = await supabase
           .from('linhas')
@@ -64,10 +74,9 @@ export default function TratarTratativa() {
           .eq('codigo', data.linha)
           .maybeSingle()
         setLinhaDescricao(row?.descricao || '')
-      } else {
-        setLinhaDescricao('')
-      }
+      } else setLinhaDescricao('')
 
+      // Cargo (por chapa)
       if (data?.motorista_chapa) {
         const { data: m } = await supabase
           .from('motoristas')
@@ -97,14 +106,7 @@ export default function TratarTratativa() {
         .eq('id', t.id)
       if (error) throw error
 
-      setT(prev => prev ? ({
-        ...prev,
-        tipo_ocorrencia: editForm.tipo_ocorrencia,
-        prioridade: editForm.prioridade,
-        setor_origem: editForm.setor_origem,
-        linha: editForm.linha,
-        descricao: editForm.descricao,
-      }) : prev)
+      setT(prev => prev ? ({ ...prev, ...editForm }) : prev)
 
       if (editForm.linha) {
         const { data: row } = await supabase
@@ -113,9 +115,7 @@ export default function TratarTratativa() {
           .eq('codigo', editForm.linha)
           .maybeSingle()
         setLinhaDescricao(row?.descricao || '')
-      } else {
-        setLinhaDescricao('')
-      }
+      } else setLinhaDescricao('')
 
       setIsEditing(false)
       alert('Dados atualizados!')
@@ -173,104 +173,158 @@ export default function TratarTratativa() {
     }
   }
 
-  // ================== ORIENTAÇÃO — (exatamente o modelo, SEM registro) ==================
-  const podeGerarOrientacao = acao === 'Orientação'
-
-  const dataPtCompletaUpper = (d = new Date()) => {
-    const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
-    const dia = String(d.getDate()).padStart(2,'0')
-    const mes = meses[d.getMonth()]
-    const ano = d.getFullYear()
-    return `${dia} de ${mes} de ${ano}`
-  }
-
-  function gerarOrientacao() {
-    if (!t) return
-
-    const dataDoc = dataPtCompletaUpper(new Date())
-    const nome = (t.motorista_nome || '—').toUpperCase()
-    const cargo = cargoMotorista
-    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido
-      ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR')
-      : '—'
-    const observ = (resumo || t.descricao || '').trim() || '—'
-
-    const estilos = `
+  // ======== Impressão – CSS base ========
+  function baseCssCourier() {
+    return `
       <style>
         @page { size: A4; margin: 25mm; }
         body {
           font-family: "Courier New", Courier, monospace;
-          color:#000; font-size: 14px; line-height: 1.35;
+          color:#000; font-size: 14px; line-height: 1.5;
         }
         .linha { display:flex; justify-content:space-between; gap:12px; }
-        .mt { margin-top: 10px; }
-        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+        .mt { margin-top: 14px; }
+        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
         .ass { text-align: center; }
-        .ass-line { margin-top: 30px; border-top: 1px solid #000; height:1px; }
+        .ass-line { margin-top: 34px; border-top: 1px solid #000; height:1px; }
         .center { text-align: center; font-weight: bold; }
         .right { text-align: right; }
         .bl { white-space: pre-wrap; }
       </style>
     `
+  }
 
-    // Texto igual ao modelo
-    const intro1 = `Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o senhor ter cometido à falta abaixo descrita.`
-    const intro2 = `Pedimos-lhe que tal falta não mais se repita, pois pelo contrário seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.`
+  // ======== Documentos ========
+  function gerarOrientacao() {
+    if (!t) return
+    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+
+    const dataDoc = dataPtCompletaUpper(new Date())
+    const nome = (t.motorista_nome || '—').toUpperCase()
+    const cargo = cargoMotorista
+    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
+    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const observ = (resumo || t.descricao || '').trim() || '—'
+
+    const intro1 = `Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.`
+    const intro2 = `Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.`
 
     const html = `
       <html>
-        <head><meta charset="utf-8" />${estilos}<title>ORIENTAÇÃO DISCIPLINAR - ${nome}</title></head>
+        <head><meta charset="utf-8" />${baseCssCourier()}<title>ORIENTAÇÃO DISCIPLINAR - ${nome}</title></head>
         <body>
           <div class="center">ORIENTAÇÃO DISCIPLINAR</div>
-
           <div class="right mt">${dataDoc}</div>
-
-          <div class="linha mt">
-            <div>SR(A) ${nome}</div>
-            <div>Cargo: ${cargo}</div>
-          </div>
-
+          <div class="linha mt"><div>SR(A) ${nome}</div><div>Cargo: ${cargo}</div></div>
           <p class="mt bl">${intro1}</p>
           <p class="bl">${intro2}</p>
+          <div class="mt">Ocorrência: ${ocorrencia}</div>
+          <div class="mt">Data da Ocorrência: ${dataOcorr}</div>
+          <div className="mt">Observação: ${observ}</div>
+          <div class="mt">Ciente e Concordo: ________/______/__________</div>
+          <div class="ass-grid">
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
+          </div>
+          <div class="ass-grid">
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+          </div>
+          <script>window.onload = () => { window.print(); }</script>
+        </body>
+      </html>`
+    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+  }
 
+  function gerarAdvertencia() {
+    if (!t) return
+    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+
+    const dataDoc = dataPtCompletaUpper(new Date())
+    const nome = (t.motorista_nome || '—').toUpperCase()
+    const cargo = cargoMotorista
+    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
+    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const observ = (resumo || t.descricao || '').trim() || '—'
+
+    const intro1 = `Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.`
+    const intro2 = `Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.`
+
+    const html = `
+      <html>
+        <head><meta charset="utf-8" />${baseCssCourier()}<title>ADVERTÊNCIA DISCIPLINAR - ${nome}</title></head>
+        <body>
+          <div class="center">ADVERTÊNCIA DISCIPLINAR</div>
+          <div class="right mt">${dataDoc}</div>
+          <div class="linha mt"><div>SR(A) ${nome}</div><div>Cargo: ${cargo}</div></div>
+          <p class="mt bl">${intro1}</p>
+          <p class="bl">${intro2}</p>
           <div class="mt">Ocorrência: ${ocorrencia}</div>
           <div class="mt">Data da Ocorrência: ${dataOcorr}</div>
           <div class="mt">Observação: ${observ}</div>
-
           <div class="mt">Ciente e Concordo: ________/______/__________</div>
-
           <div class="ass-grid">
-            <div class="ass">
-              <div class="ass-line"></div>
-              Assinatura do Empregado
-            </div>
-            <div class="ass">
-              <div class="ass-line"></div>
-              Assinatura do Empregador
-            </div>
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
           </div>
-
           <div class="ass-grid">
-            <div class="ass">
-              <div class="ass-line"></div>
-              Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-            </div>
-            <div class="ass">
-              <div class="ass-line"></div>
-              Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-            </div>
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
           </div>
-
           <script>window.onload = () => { window.print(); }</script>
         </body>
-      </html>
-    `
-    const w = window.open('', '_blank')
-    w.document.write(html)
-    w.document.close()
+      </html>`
+    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
-  // ================== FIM ORIENTAÇÃO ==================
+
+  function gerarSuspensao() {
+    if (!t) return
+    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+
+    const dataDoc = dataPtCompletaUpper(new Date())
+    const nome = (t.motorista_nome || '—').toUpperCase()
+    const cargo = cargoMotorista
+    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
+    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const observ = (resumo || t.descricao || '').trim() || '—'
+
+    const intro1 = `Considerando a infração disciplinar abaixo descrita, comunicamos a aplicação da penalidade de SUSPENSÃO DISCIPLINAR.`
+    const intro2 = `Ressaltamos a necessidade de observância rigorosa das normas internas, sob pena de medidas mais severas, conforme legislação vigente.`
+
+    const html = `
+      <html>
+        <head><meta charset="utf-8" />${baseCssCourier()}<title>SUSPENSÃO DISCIPLINAR - ${nome}</title></head>
+        <body>
+          <div class="center">SUSPENSÃO DISCIPLINAR</div>
+          <div class="right mt">${dataDoc}</div>
+          <div class="linha mt"><div>SR(A) ${nome}</div><div>Cargo: ${cargo}</div></div>
+          <p class="mt bl">${intro1}</p>
+          <p class="bl">${intro2}</p>
+          <div class="mt">Ocorrência: ${ocorrencia}</div>
+          <div class="mt">Data da Ocorrência: ${dataOcorr}</div>
+          <div class="mt">Observação: ${observ}</div>
+          <div class="mt">Ciente e Concordo: ________/______/__________</div>
+          <div class="ass-grid">
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
+          </div>
+          <div class="ass-grid">
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+          </div>
+          <script>window.onload = () => { window.print(); }</script>
+        </body>
+      </html>`
+    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+  }
+
+  // Decide e gera conforme a ação
+  function gerarMedida() {
+    if (acao === 'Orientação') return gerarOrientacao()
+    if (acao === 'Advertência') return gerarAdvertencia()
+    if (acao === 'Suspensão') return gerarSuspensao()
+    alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.')
+  }
 
   if (!t) return <div className="p-6">Carregando…</div>
 
@@ -344,7 +398,6 @@ export default function TratarTratativa() {
           )}
         </dl>
 
-        {/* Botões de edição */}
         <div className="mt-4 flex gap-2">
           {!isEditing ? (
             <button
@@ -415,16 +468,14 @@ export default function TratarTratativa() {
             {loading ? 'Salvando…' : 'Concluir'}
           </button>
 
-          {podeGerarOrientacao && (
-            <button
-              type="button"
-              onClick={gerarOrientacao}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-              title="Gerar documento de ORIENTAÇÃO DISCIPLINAR"
-            >
-              GERAR MEDIDA DISCIPLINAR
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={gerarMedida}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+            title="Gerar documento conforme a ação selecionada"
+          >
+            GERAR MEDIDA DISCIPLINAR
+          </button>
         </div>
       </div>
     </div>
