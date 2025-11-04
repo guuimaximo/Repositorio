@@ -250,7 +250,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
             	 	 	 className="w-full border rounded-md p-2"
             	 	 />
-  V       	 	 </div>
+          	 	 </div>
           	 	 <div>
             	 	 <label>Valor Cobrado (R$)</label>
             	 	 <input
@@ -304,13 +304,13 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           	 	 <button
           	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
   	       	 	 	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-":         	 	 >
+a         	 	 >
           	 	 	 💾 Salvar Alterações
           	 	 </button>
         	 	 )}
         	 	 <button
         	 	 	 onClick={onClose}
-        	 	 	 className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
+className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
         	 	 >
         	 	 	 🚪 Fechar
         	 	 </button>
@@ -348,7 +348,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     		 	 <section className="mb-8 p-4 border border-gray-200 rounded-lg">
       		 	 <h2 className="text-lg font-semibold text-gray-700 mb-4">Detalhes da Avaria</h2>
       		 	 <div className="grid grid-cols-3 gap-x-4 gap-y-2">
-  sv       	 <div>
+        		 	 <div>
           		 	 <label className="text-xs font-medium text-gray-500 block">Prefixo</label>
           		 	 <p className="font-medium text-gray-900">{avaria.prefixo}</p>
         		 	 </div>
@@ -361,7 +361,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           		 	 <p className="font-medium text-gray-900">{new Date(avaria.dataAvaria).toLocaleDateString()}</p>
         		 	 </div>
         		 	 <div className="col-span-3">
-      nbsp;     		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
+          		 	 <label className="text-xs font-medium text-gray-500 block">Descrição da Avaria</label>
           		 	 <p className="font-medium text-gray-900">{avaria.descricao || 'Não informada'}</p>
         		 	 </div>
       		 	 </div>
@@ -388,9 +388,9 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
               	 		 	 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                	 		 	 </td>
+  css         	 		 	 </td>
               		 	 </tr>
-SA         		 	 ))}
+            		 	 ))}
           		 	 </tbody>
         		 	 </table>
       		 	 </section>
@@ -403,19 +403,19 @@ SA         		 	 ))}
         		 	 <table className="w-full border-collapse text-sm">
           		 	 <thead>
     	       		 	 <tr className="bg-gray-50">
-              		 	 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
+T             		 <th className="text-left border p-2 font-medium text-gray-600">Descrição</th>
               		 	 <th className="text-center border p-2 font-medium text-gray-600">Qtd</th>
               		 	 <th className="text-right border p-2 font-medium text-gray-600">Valor Unitário</th>
-C             		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
+              		 	 <th className="text-right border p-2 font-medium text-gray-600">Total</th>
             		 	 </tr>
-          		 	 </thead>
+A       		 	 </thead>
           		 	 <tbody>
-  D         		 	 {servicos.map((item) => (
-              		 	 <tr key={item.id} className="border-b">
+            		 	 {servicos.map((item) => (
+sv           		 <tr key={item.id} className="border-b">
               	 		 	 <td className="border-x p-2">{item.descricao}</td>
               	 		 	 <td className="border-x p-2 text-center">{item.qtd}</td>
-            ci 	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-              	 		 	 <td className="border-x p-2 text-right font-medium">
+              	 		 	 <td className="border-x p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+S             	 		 <td className="border-x p-2 text-right font-medium">
                 	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 		 	 </td>
       	       		 	 </tr>
@@ -430,16 +430,16 @@ C             		 	 <th className="text-right border p-2 font-medium text-g
       		 	 <div className="w-1/2 md:w-1/3 space-y-2 text-right">
         		 	 <div className="flex justify-between">
           		 	 <span className="text-gray-600">Valor Total Orçado:</span>
-          		 	 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
+CSS         		 <span className="font-medium text-gray-900">{formatCurrency(avaria.valor_total_orcamento)}</span>
         		 	 </div>
         		 	 <div className="flex justify-between">
           		 	 <span className="text-gray-600">Nº de Parcelas:</span>
           		 	 <span className="font-medium text-gray-900">{numParcelas || 1}</span>
-        		 	 </div>
+D       		 	 </div>
         		 	 <div className="flex justify-between border-t pt-2 mt-2">
           		 	 <span className="font-bold text-lg text-gray-900">Valor Cobrado:</span>
           		 	 <span className="font-bold text-lg text-gray-900">{formatCurrency(parseCurrency(valorCobrado))}</span>
-        		 	 </div>
+    C   		 	 </div>
       		 	 </div>
     		 	 </section>
 
@@ -448,7 +448,7 @@ C             		 	 <th className="text-right border p-2 font-medium text-g
       		 	 <div className="w-1/3">
         		 	 <p className="font-medium pt-8">__________________________</p>
   	       		 	 <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
-      		 	 </div>
+S     		 	 </div>
       		 	 <div className="w-1/3">
         		 	 <p className="font-medium pt-8">__________________________</p>
         		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
