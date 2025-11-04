@@ -206,75 +206,89 @@ export default function TratarTratativa() {
     `
   }
 
-  function renderSuspensaoHtml({ nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc, dias, inicio, fim, retorno }) {
-    const diasFmt = String(dias).padStart(2, '0')
-    const brLocal = (d) => {
-      const dt = (d instanceof Date) ? d : new Date(d)
-      return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR')
-    }
+function renderSuspensaoHtml({
+  nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc,
+  dias, inicio, fim, retorno
+}) {
+  const br = (d) => {
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR');
+  };
+  const diasFmt = String(dias).padStart(2, '0');
+  const rotuloDia = Number(dias) === 1 ? 'dia' : 'dias';
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          ${baseCssCourier()}
-          <title>SUSPENSÃO DISCIPLINAR - ${nome}</title>
-        </head>
-        <body>
-          <div class="page">
-            <div class="content">
-              <div class="center">SUSPENSÃO DISCIPLINAR</div>
-              <div class="right mt">${dataDoc}</div>
+  return `
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: A4; margin: 25mm; }
+        html, body { height: 100%; }
+        body {
+          font-family: "Courier New", Courier, monospace;
+          font-size: 14px; line-height: 1.7; color: #000; margin: 0;
+        }
+        .page { min-height: 100vh; display: flex; flex-direction: column; }
+        .content { max-width: 80ch; margin: 0 auto; }
+        .center { text-align: center; font-weight: bold; }
+        .right { text-align: right; }
+        .linha { display:flex; justify-content:space-between; gap:16px; }
+        .mt { margin-top: 18px; }
+        .label { font-weight: bold; }
+        .bl { white-space: pre-wrap; text-align: left; }
+        .nowrap { white-space: nowrap; }
+        .footer-sign { margin-top: auto; }
+        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+        .ass { text-align:center; }
+        .ass-line { margin-top: 36px; border-top:1px solid #000; height:1px; }
+      </style>
+      <title>SUSPENSÃO DISCIPLINAR - ${nome}</title>
+    </head>
+    <body>
+      <div class="page">
+        <div class="content">
+          <div class="center">SUSPENSÃO DISCIPLINAR</div>
+          <div class="right mt">${dataDoc}</div>
 
-              <div class="linha mt">
-                <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
-                <div><span class="label">Cargo:</span> ${cargo}</div>
-              </div>
-
-              <p class="mt bl">
-                Pelo presente, notificamos que por ter o senhor cometido à falta abaixo descrita, encontra-se
-                suspenso do serviço por <span class="label">${diasFmt} dias</span>, a partir de
-                <span class="label">${brLocal(inicio)}</span>, devendo, portanto, apresenta-se ao mesmo, no horário usual, no dia
-                <span class="label">${brLocal(retorno)}</span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim
-                pedimos a devolução do presente com o seu “ciente”.
-              </p>
-
-              <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
-              <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-              <div class="mt"><span class="label">Período da Suspensão:</span> ${brLocal(inicio)} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
-              <div class="mt"><span class="label">Observação:</span> ${observ}</div>
-
-              <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
-            </div>
-
-            <div class="footer-sign mt">
-              <div class="ass-grid">
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Assinatura do Empregado
-                </div>
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Assinatura do Empregador
-                </div>
-              </div>
-              <div class="ass-grid" style="margin-top:20px">
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-                </div>
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-                </div>
-              </div>
-            </div>
+          <div class="linha mt">
+            <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
+            <div><span class="label">Cargo:</span> ${cargo}</div>
           </div>
-          <script>window.onload = () => { window.print(); }</script>
-        </body>
-      </html>
-    `
-  }
+
+          <p class="mt bl">
+            Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se
+            suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>,
+            <span class="nowrap">a partir de <span class="label">${br(inicio)}</span></span>, devendo, portanto,
+            apresentar-se ao mesmo, no horário usual,
+            <span class="nowrap">no dia <span class="label">${br(retorno)}</span></span>, salvo outra resolução nossa,
+            que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
+          </p>
+
+          <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
+          <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
+          <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(fim)} (retorno: ${br(retorno)})</div>
+          <div class="mt"><span class="label">Observação:</span> ${observ}</div>
+
+          <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
+        </div>
+
+        <div class="footer-sign mt">
+          <div class="ass-grid">
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
+            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
+          </div>
+          <div class="ass-grid" style="margin-top:20px">
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+          </div>
+        </div>
+      </div>
+      <script>window.onload = () => { window.print(); }</script>
+    </body>
+  </html>
+  `;
+}
+
 
   function renderGenericHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
     return `
