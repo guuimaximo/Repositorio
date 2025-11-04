@@ -39,7 +39,6 @@ export default function TratarTratativa() {
     descricao: '',
   })
 
-  // Data por extenso (maiúsculas)
   const dataPtCompletaUpper = (d = new Date()) => {
     const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
     const dia = String(d.getDate()).padStart(2,'0')
@@ -62,7 +61,6 @@ export default function TratarTratativa() {
         descricao: data?.descricao || '',
       })
 
-      // Linha (código -> descrição)
       if (data?.linha) {
         const { data: row } = await supabase
           .from('linhas')
@@ -72,7 +70,7 @@ export default function TratarTratativa() {
         setLinhaDescricao(row?.descricao || '')
       } else setLinhaDescricao('')
 
-      // Cargo (por chapa, se existir)
+      // Cargo (busca por CHAPA no banco, mas exibimos como "Registro")
       if (data?.motorista_chapa) {
         const { data: m } = await supabase
           .from('motoristas')
@@ -195,8 +193,8 @@ export default function TratarTratativa() {
     `
   }
 
-  // ======== Helper de HTML (menos repetição) ========
-  function renderMedidaHtml({ titulo, intro1, intro2, nome, chapa, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
+  // ======== Helper de HTML ========
+  function renderMedidaHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
     return `
       <html>
         <head>
@@ -211,7 +209,7 @@ export default function TratarTratativa() {
               <div class="right mt">${dataDoc}</div>
 
               <div class="linha mt">
-                <div>SR(A) <span class="label">${nome}</span> ${chapa ? `(CHAPA: ${chapa})` : ''}</div>
+                <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
                 <div><span class="label">Cargo:</span> ${cargo}</div>
               </div>
 
@@ -225,7 +223,6 @@ export default function TratarTratativa() {
               <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
             </div>
 
-            <!-- Assinaturas no rodapé -->
             <div class="footer-sign mt">
               <div class="ass-grid">
                 <div class="ass">
@@ -249,11 +246,10 @@ export default function TratarTratativa() {
               </div>
             </div>
           </div>
-
           <script>window.onload = () => { window.print(); }</script>
         </body>
       </html>
-    `;
+    `
   }
 
   // ======== Geradores ========
@@ -263,7 +259,7 @@ export default function TratarTratativa() {
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
-    const chapa = t.motorista_chapa || ''
+    const registro = t.motorista_chapa || '' // origem do banco
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
     const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
@@ -273,9 +269,8 @@ export default function TratarTratativa() {
       titulo: 'ORIENTAÇÃO DISCIPLINAR',
       intro1: 'Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
       intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.',
-      nome, chapa, cargo, ocorrencia, dataOcorr, observ, dataDoc
+      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
     })
-
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -285,7 +280,7 @@ export default function TratarTratativa() {
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
-    const chapa = t.motorista_chapa || ''
+    const registro = t.motorista_chapa || ''
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
     const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
@@ -295,9 +290,8 @@ export default function TratarTratativa() {
       titulo: 'ADVERTÊNCIA DISCIPLINAR',
       intro1: 'Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
       intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.',
-      nome, chapa, cargo, ocorrencia, dataOcorr, observ, dataDoc
+      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
     })
-
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -307,7 +301,7 @@ export default function TratarTratativa() {
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
-    const chapa = t.motorista_chapa || ''
+    const registro = t.motorista_chapa || ''
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
     const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
@@ -317,9 +311,8 @@ export default function TratarTratativa() {
       titulo: 'SUSPENSÃO DISCIPLINAR',
       intro1: 'Considerando a infração disciplinar abaixo descrita, comunicamos a aplicação da penalidade de SUSPENSÃO DISCIPLINAR.',
       intro2: 'Ressaltamos a necessidade de observância rigorosa das normas internas, sob pena de medidas mais severas, conforme legislação vigente.',
-      nome, chapa, cargo, ocorrencia, dataOcorr, observ, dataDoc
+      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
     })
-
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -337,11 +330,10 @@ export default function TratarTratativa() {
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
       <p className="text-gray-600 mb-6">Revise os dados e finalize a tratativa.</p>
 
-      {/* Card: dados + edição */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Item titulo="Motorista" valor={`${t.motorista_nome || '-'}`} />
-          <Item titulo="Chapa" valor={t.motorista_chapa || '-'} />
+          <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
 
           <Item
             titulo="Ocorrência"
@@ -438,7 +430,6 @@ export default function TratarTratativa() {
         </div>
       </div>
 
-      {/* Card: ações */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
