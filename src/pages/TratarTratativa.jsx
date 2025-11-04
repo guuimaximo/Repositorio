@@ -1,15 +1,15 @@
 // src/pages/TratarTratativa.jsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const acoes = [
+  'Orientação',
   'Advertência',
+  'Suspensão',
   'Aviso de última oportunidade',
   'Contato Pessoal',
   'Não aplicada',
-  'Orientação',
-  'Suspensão',
   'Contato via Celular',
   'Elogiado',
 ]
@@ -22,7 +22,6 @@ export default function TratarTratativa() {
   const [resumo, setResumo] = useState('')
   const [acao, setAcao] = useState('Orientação')
   const [img, setImg] = useState(null)
-  const [assinatura, setAssinatura] = useState(null)
   const [loading, setLoading] = useState(false)
 
   // Complementos
@@ -39,6 +38,10 @@ export default function TratarTratativa() {
     descricao: '',
   })
 
+  // ---- Controles de Suspensão ----
+  const [diasSusp, setDiasSusp] = useState(1) // 1,3,5,7
+  const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0,10)) // yyyy-mm-dd
+
   const dataPtCompletaUpper = (d = new Date()) => {
     const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
     const dia = String(d.getDate()).padStart(2,'0')
@@ -46,6 +49,22 @@ export default function TratarTratativa() {
     const ano = d.getFullYear()
     return `${dia} de ${mes} de ${ano}`
   }
+  const br = (d) => {
+    if (!d) return '—'
+    const dt = (d instanceof Date) ? d : new Date(d)
+    if (Number.isNaN(dt.getTime())) return '—'
+    return dt.toLocaleDateString('pt-BR')
+  }
+  const addDays = (dateStr, n) => {
+    const d = new Date(dateStr)
+    d.setDate(d.getDate() + n)
+    return d
+  }
+
+  // Início, fim e retorno (dias corridos; fim = início + (dias - 1); retorno = fim + 1)
+  const inicioSusp = useMemo(() => new Date(dataSuspensao), [dataSuspensao])
+  const fimSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp) - 1, 0)), [dataSuspensao, diasSusp])
+  const retornoSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)), [dataSuspensao, diasSusp])
 
   useEffect(() => {
     (async () => {
@@ -61,6 +80,7 @@ export default function TratarTratativa() {
         descricao: data?.descricao || '',
       })
 
+      // Linha (código -> descrição)
       if (data?.linha) {
         const { data: row } = await supabase
           .from('linhas')
@@ -70,7 +90,7 @@ export default function TratarTratativa() {
         setLinhaDescricao(row?.descricao || '')
       } else setLinhaDescricao('')
 
-      // Cargo (busca por CHAPA no banco, mas exibimos como "Registro")
+      // Cargo (por registro/chapa)
       if (data?.motorista_chapa) {
         const { data: m } = await supabase
           .from('motoristas')
@@ -134,22 +154,15 @@ export default function TratarTratativa() {
         imagem_tratativa = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
       }
 
-      let assinatura_url = null
-      if (assinatura) {
-        const nome = `ass_${Date.now()}_${assinatura.name}`.replace(/\s+/g, '_')
-        const up = await supabase.storage.from('tratativas').upload(nome, assinatura)
-        if (up.error) throw up.error
-        assinatura_url = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
-      }
-
+      // detalhe/histórico (sem criar novas colunas por enquanto)
       await supabase.from('tratativas_detalhes').insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
         observacoes: resumo,
-        imagem_tratativa,
-        assinatura_url
+        imagem_tratativa
       })
 
+      // atualiza status
       await supabase
         .from('tratativas')
         .update({
@@ -175,12 +188,13 @@ export default function TratarTratativa() {
         html, body { height: 100%; }
         body {
           font-family: "Courier New", Courier, monospace;
-          color:#000; font-size: 14px; line-height: 1.5; margin: 0;
+          color:#000; font-size: 14px; line-height: 1.55; margin: 0;
         }
         .page { min-height: 100vh; display: flex; flex-direction: column; }
         .content { padding: 0; }
-        .linha { display:flex; justify-content:space-between; gap:12px; }
-        .mt { margin-top: 14px; }
+        .linha { display:flex; justify-content:space-between; gap:16px; }
+        .mt { margin-top: 16px; }
+        .mb { margin-bottom: 10px; }
         .center { text-align: center; font-weight: bold; }
         .right { text-align: right; }
         .bl { white-space: pre-wrap; }
@@ -189,12 +203,78 @@ export default function TratarTratativa() {
         .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
         .ass { text-align: center; }
         .ass-line { margin-top: 34px; border-top: 1px solid #000; height:1px; }
+        .pill { display:inline-block; border:1px solid #000; padding:2px 8px; border-radius:14px; }
       </style>
     `
   }
 
-  // ======== Helper de HTML ========
-  function renderMedidaHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
+  function renderSuspensaoHtml({ nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc, dias, inicio, fim, retorno }) {
+    // Texto baseado no modelo de referência.  — (citação colocada fora do HTML no chat)
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          ${baseCssCourier()}
+          <title>SUSPENSÃO DISCIPLINAR - ${nome}</title>
+        </head>
+        <body>
+          <div class="page">
+            <div class="content">
+              <div class="center">SUSPENSÃO DISCIPLINAR</div>
+              <div class="right mt">${dataDoc}</div>
+
+              <div class="linha mt">
+                <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
+                <div><span class="label">Cargo:</span> ${cargo}</div>
+              </div>
+
+              <p class="mt bl">
+                Pelo presente, notificamos que por ter o(a) senhor(a) cometido a falta abaixo descrita,
+                encontra-se <span class="label">suspenso(a) do serviço por ${String(dias).padStart(2,'0')} dia(s)</span>,
+                <span class="label">a partir de ${br(inicio)}</span>, devendo, portanto, apresentar-se ao serviço
+                no dia <span class="label">${br(retorno)}</span>, salvo outra resolução.
+              </p>
+
+              <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
+              <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
+
+              <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(fim)} (retorno: ${br(retorno)})</div>
+
+              <div class="mt"><span class="label">Observação:</span> ${observ}</div>
+
+              <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
+            </div>
+
+            <div class="footer-sign mt">
+              <div class="ass-grid">
+                <div class="ass">
+                  <div class="ass-line"></div>
+                  Assinatura do Empregado
+                </div>
+                <div class="ass">
+                  <div class="ass-line"></div>
+                  Assinatura do Empregador
+                </div>
+              </div>
+              <div class="ass-grid" style="margin-top:20px">
+                <div class="ass">
+                  <div class="ass-line"></div>
+                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
+                </div>
+                <div class="ass">
+                  <div class="ass-line"></div>
+                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
+                </div>
+              </div>
+            </div>
+          </div>
+          <script>window.onload = () => { window.print(); }</script>
+        </body>
+      </html>
+    `
+  }
+
+  function renderGenericHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
     return `
       <html>
         <head>
@@ -259,18 +339,19 @@ export default function TratarTratativa() {
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
-    const registro = t.motorista_chapa || '' // origem do banco
+    const registro = t.motorista_chapa || ''
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
     const observ = (resumo || t.descricao || '').trim() || '—'
 
-    const html = renderMedidaHtml({
+    const html = renderGenericHtml({
       titulo: 'ORIENTAÇÃO DISCIPLINAR',
       intro1: 'Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
       intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.',
       nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
     })
+
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -283,15 +364,16 @@ export default function TratarTratativa() {
     const registro = t.motorista_chapa || ''
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
     const observ = (resumo || t.descricao || '').trim() || '—'
 
-    const html = renderMedidaHtml({
+    const html = renderGenericHtml({
       titulo: 'ADVERTÊNCIA DISCIPLINAR',
       intro1: 'Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
       intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.',
       nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
     })
+
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -304,15 +386,14 @@ export default function TratarTratativa() {
     const registro = t.motorista_chapa || ''
     const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
     const observ = (resumo || t.descricao || '').trim() || '—'
 
-    const html = renderMedidaHtml({
-      titulo: 'SUSPENSÃO DISCIPLINAR',
-      intro1: 'Considerando a infração disciplinar abaixo descrita, comunicamos a aplicação da penalidade de SUSPENSÃO DISCIPLINAR.',
-      intro2: 'Ressaltamos a necessidade de observância rigorosa das normas internas, sob pena de medidas mais severas, conforme legislação vigente.',
-      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
+    const html = renderSuspensaoHtml({
+      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc,
+      dias: diasSusp, inicio: inicioSusp, fim: fimSusp, retorno: retornoSusp
     })
+
     const w = window.open('', '_blank'); w.document.write(html); w.document.close()
   }
 
@@ -328,9 +409,10 @@ export default function TratarTratativa() {
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
-      <p className="text-gray-600 mb-6">Revise os dados e finalize a tratativa.</p>
+      <p className="text-gray-600 mb-6">Revise os dados, anexe a imagem da tratativa e gere a medida.</p>
 
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+      {/* Card: dados + edição */}
+      <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Item titulo="Motorista" valor={`${t.motorista_nome || '-'}`} />
           <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
@@ -382,18 +464,23 @@ export default function TratarTratativa() {
             ) : (t.descricao || '-')}
           />
 
-          {t.imagem_url && (
-            <div className="md:col-span-2">
-              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
-              <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={t.imagem_url}
-                  className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                  alt="Imagem da ocorrência"
-                />
-              </a>
-            </div>
-          )}
+          {/* Imagem única da tratativa */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Imagem da tratativa (opcional)</label>
+            <input type="file" accept="image/*" onChange={e => setImg(e.target.files?.[0] || null)} />
+            {t.imagem_tratativa || t.imagem_url ? (
+              <div className="mt-2">
+                <span className="block text-sm text-gray-600 mb-1">Imagem existente (clique para ampliar)</span>
+                <a href={(t.imagem_tratativa || t.imagem_url)} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={(t.imagem_tratativa || t.imagem_url)}
+                    className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
+                    alt="Imagem da tratativa"
+                  />
+                </a>
+              </div>
+            ) : null}
+          </div>
         </dl>
 
         <div className="mt-4 flex gap-2">
@@ -430,8 +517,9 @@ export default function TratarTratativa() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Card: Suspensão + Ações */}
+      <div className="bg-white rounded-lg shadow-sm p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
             <select className="w-full rounded-md border px-3 py-2" value={acao} onChange={e => setAcao(e.target.value)}>
@@ -439,21 +527,43 @@ export default function TratarTratativa() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Imagem da tratativa (opcional)</label>
-            <input type="file" accept="image/*" onChange={e => setImg(e.target.files?.[0] || null)} />
-          </div>
+          {/* Só mostra os controles de suspensão quando a ação for Suspensão */}
+          {acao === 'Suspensão' && (
+            <>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Dias de Suspensão</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={diasSusp}
+                  onChange={e => setDiasSusp(Number(e.target.value))}
+                >
+                  {[1,3,5,7].map(d => <option key={d} value={d}>{d} dia(s)</option>)}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Assinatura do colaborador (foto/PDF)</label>
-            <input type="file" onChange={e => setAssinatura(e.target.files?.[0] || null)} />
-          </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Data da Suspensão (emissão)</label>
+                <input
+                  type="date"
+                  className="w-full rounded-md border px-3 py-2"
+                  value={dataSuspensao}
+                  onChange={e => setDataSuspensao(e.target.value)}
+                />
+              </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
-            <textarea rows={4} className="w-full rounded-md border px-3 py-2"
-              value={resumo} onChange={e => setResumo(e.target.value)} />
-          </div>
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Item titulo="Início" valor={br(inicioSusp)} />
+                <Item titulo="Fim" valor={br(fimSusp)} />
+                <Item titulo="Retorno" valor={br(retornoSusp)} />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
+          <textarea rows={4} className="w-full rounded-md border px-3 py-2"
+            value={resumo} onChange={e => setResumo(e.target.value)} />
         </div>
 
         <div className="mt-4 flex gap-3 flex-wrap">
@@ -467,7 +577,12 @@ export default function TratarTratativa() {
 
           <button
             type="button"
-            onClick={gerarMedida}
+            onClick={() => {
+              if (acao === 'Orientação') return gerarOrientacao()
+              if (acao === 'Advertência') return gerarAdvertencia()
+              if (acao === 'Suspensão') return gerarSuspensao()
+              alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.')
+            }}
             className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
             title="Gerar documento conforme a ação selecionada"
           >
