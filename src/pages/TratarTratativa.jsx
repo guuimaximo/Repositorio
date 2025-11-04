@@ -23,33 +23,17 @@ export default function TratarTratativa() {
   const [assinatura, setAssinatura] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // Linha (código + descrição)
+  // (opcional) descrição da linha – não é usada no documento de orientação (modelo exige só os campos listados)
   const [linhaDescricao, setLinhaDescricao] = useState('')
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
-        .from('tratativas')
-        .select('*')
-        .eq('id', id)
-        .single()
-
-      if (error) {
-        console.error(error)
-        return
-      }
-      setT(data || null)
+      const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
+      if (!error) setT(data || null)
 
       if (data?.linha) {
-        const { data: row, error: e2 } = await supabase
-          .from('linhas')
-          .select('descricao')
-          .eq('codigo', data.linha)
-          .maybeSingle()
-        if (e2) console.warn('Falha ao buscar descrição da linha:', e2)
+        const { data: row } = await supabase.from('linhas').select('descricao').eq('codigo', data.linha).maybeSingle()
         setLinhaDescricao(row?.descricao || '')
-      } else {
-        setLinhaDescricao('')
       }
     })()
   }, [id])
@@ -80,17 +64,13 @@ export default function TratarTratativa() {
         acao_aplicada: acao,
         observacoes: resumo,
         imagem_tratativa,
-        assinatura_url,
-        // linha: t.linha || null, // opcional, caso queira registrar no histórico
+        assinatura_url
       })
 
-      await supabase
-        .from('tratativas')
-        .update({
-          status: 'Concluída',
-          imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null,
-        })
-        .eq('id', t.id)
+      await supabase.from('tratativas').update({
+        status: 'Concluída',
+        imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null
+      }).eq('id', t.id)
 
       alert('Tratativa concluída com sucesso!')
       nav('/central')
@@ -101,165 +81,103 @@ export default function TratarTratativa() {
     }
   }
 
-  // ================== GERAÇÃO DA MEDIDA DISCIPLINAR (PRINT) ==================
-  const podeGerarMedida = ['Advertência', 'Suspensão', 'Orientação'].includes(acao)
+  // ================== ORIENTAÇÃO — Geração EXATA do modelo ==================
+  const podeGerarOrientacao = acao === 'Orientação'
 
-  const dataHojePt = (d = new Date()) =>
-    d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-
-  const linhaLabel = t?.linha ? `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ''}` : '-'
-
-  const textoCabecalho = (tipo) => {
-    if (tipo === 'Advertência') return 'ADVERTÊNCIA DISCIPLINAR'
-    if (tipo === 'Suspensão') return 'SUSPENSÃO DISCIPLINAR'
-    return 'ORIENTAÇÃO DISCIPLINAR'
+  const dataPtCompletaUpper = (d = new Date()) => {
+    const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
+    const dia = String(d.getDate()).padStart(2,'0')
+    const mes = meses[d.getMonth()]
+    const ano = d.getFullYear()
+    return `${dia} de ${mes} de ${ano}`
   }
 
-  function handleGerarMedida() {
+  function gerarOrientacao() {
     if (!t) return
-    if (!resumo.trim()) {
-      if (!confirm('O campo "Resumo / Observações" está vazio. Deseja gerar mesmo assim?')) return
-    }
 
-    // Monta HTML usando seus modelos como base (título e seções, 1 página A4)
-    const titulo = textoCabecalho(acao)
-    const registro = t.id.toString().padStart(8, '0') // simples: usa o id como “Registro”
-    const nome = t.motorista_nome || '—'
-    const chapa = t.motorista_chapa ? `(${t.motorista_chapa})` : ''
-    const cargo = 'Motorista'
-    const dataDocumento = dataHojePt()
-    const dataOcorrencia = t.data_ocorrido || '—'
-    const ocorrencia = t.tipo_ocorrencia || '—'
-    const observacao = (resumo || '').replace(/\n/g, '<br/>')
+    const registro = String(t.id).padStart(8,'0') // ajuste se tiver outro número de registro
+    const dataDoc = dataPtCompletaUpper(new Date())
+    const nome = (t.motorista_nome || '—').toUpperCase()
+    const cargo = (t.cargo || 'Motorista').toUpperCase() // ajuste se tiver campo específico
+    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
+    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
+    const observ = (resumo || t.descricao || '—')
 
     const estilos = `
       <style>
-        @page { size: A4; margin: 16mm; }
-        * { box-sizing: border-box; }
-        body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
-        .wrap { max-width: 800px; margin: 0 auto; }
-        h1 { font-size: 20px; text-align: center; margin: 0 0 12px; text-transform: uppercase; }
-        .muted { color: #6b7280; }
-        .linha { margin: 8px 0; display: flex; justify-content: space-between; gap: 12px; }
-        .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-top: 10px; }
-        .label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
-        .valor { font-weight: 600; }
-        .mb8 { margin-bottom: 8px; }
-        .mb12 { margin-bottom: 12px; }
-        .mb16 { margin-bottom: 16px; }
-        .flex { display: flex; gap: 12px; }
-        .col { flex: 1; }
-        .assinaturas { margin-top: 28px; }
-        .ass { text-align: center; margin-top: 40px; }
-        .ass .linha-ass { border-top: 1px solid #111827; width: 100%; height: 1px; margin: 24px auto 4px; }
-        .duas-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .nota { font-size: 12px; color: #374151; }
-        .titulo-menor { text-transform: none; font-size: 18px; }
+        @page { size: A4; margin: 18mm; }
+        body { font-family: Arial, Helvetica, sans-serif; color:#000; }
+        .l { line-height: 1.35; }
+        .t { text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 14px; }
+        .row { display:flex; justify-content:space-between; gap:12px; margin: 6px 0; }
+        .mt { margin-top: 10px; }
+        .mb { margin-bottom: 10px; }
+        .bl { white-space: pre-wrap; }
+        .assin { display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-top: 24px; }
+        .ass-linha { margin-top: 30px; border-top: 1px solid #000; height:1px; }
+        .nota { font-size: 12px; }
       </style>
     `
 
-    // blocos comuns
-    const blocoIdent = `
-      <div class="box">
-        <div class="linha"><div><span class="label">Registro</span><div class="valor">${registro}</div></div>
-        <div><span class="label">Data</span><div class="valor">${dataDocumento}</div></div></div>
-        <div class="linha"><div><span class="label">Sr(a)</span><div class="valor">${nome} ${chapa}</div></div>
-        <div><span class="label">Cargo</span><div class="valor">${cargo}</div></div></div>
-        <div class="linha"><div><span class="label">Linha</span><div class="valor">${linhaLabel}</div></div>
-        <div><span class="label">Data da Ocorrência</span><div class="valor">${dataOcorrencia}</div></div></div>
-      </div>
-    `
-
-    const blocoConteudo = `
-      <div class="box">
-        <div class="mb8"><span class="label">Ocorrência</span><div class="valor">${ocorrencia}</div></div>
-        <div><span class="label">Observação</span><div class="nota">${observacao || '—'}</div></div>
-      </div>
-    `
-
-    // Rodapé de assinaturas — de acordo com os modelos
-    const blocoAssinaturas = `
-      <div class="assinaturas">
-        <div class="duas-col">
-          <div class="ass">
-            <div class="linha-ass"></div>
-            <div class="nota">Assinatura do Empregado</div>
-          </div>
-          <div class="ass">
-            <div class="linha-ass"></div>
-            <div class="nota">Assinatura do Empregador</div>
-          </div>
-        </div>
-        ${acao !== 'Advertência' ? `
-        <div class="duas-col" style="margin-top:20px">
-          <div class="ass">
-            <div class="linha-ass"></div>
-            <div class="nota">Testemunha — CPF:</div>
-          </div>
-          <div class="ass">
-            <div class="linha-ass"></div>
-            <div class="nota">Testemunha — CPF:</div>
-          </div>
-        </div>` : ''}
-      </div>
-    `
-
-    // Texto introdutório conforme a medida (resumo adaptado dos seus modelos)
-    const introAdvertencia = `
-      <p class="nota">
-        Vimos pelo presente aplicar-lhe advertência, em virtude da falta abaixo descrita.
-        Solicitamos que a falta não se repita, sob pena de medidas mais severas previstas em lei.
-      </p>
-    `
-    const introSuspensao = `
-      <p class="nota">
-        Pelo presente, notificamos que, em razão da falta abaixo descrita, o(a) colaborador(a) encontra-se
-        <b>Suspenso(a)</b> do serviço pelo período indicado, retornando na data definida pela empresa.
-        Pedimos a devolução deste documento com o “ciente”.
-      </p>
-    `
-    const introOrientacao = `
-      <p class="nota">
-        Pelo presente, registramos <b>Orientação Disciplinar</b> ao(à) colaborador(a), conforme falta
-        abaixo descrita e recomendações realizadas.
-      </p>
-    `
-
-    const intro = acao === 'Advertência' ? introAdvertencia
-                : acao === 'Suspensão' ? introSuspensao
-                : introOrientacao
+    // Texto fiel ao modelo (mantém “advertência” conforme documento-base)
+    const intro1 = `Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o senhor ter cometido à falta abaixo descrita.`
+    const intro2 = `Pedimos-lhe que tal falta não mais se repita, pois pelo contrário seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.`
 
     const html = `
       <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${titulo} - ${nome}</title>
-          ${estilos}
-        </head>
-        <body>
-          <div class="wrap">
-            <h1>${titulo}</h1>
-            ${blocoIdent}
-            <div class="mb12"></div>
-            ${intro}
-            <div class="mb12"></div>
-            ${blocoConteudo}
-            ${blocoAssinaturas}
+        <head><meta charset="utf-8" />${estilos}<title>ORIENTAÇÃO DISCIPLINAR - ${nome}</title></head>
+        <body class="l">
+          <div class="t">ORIENTAÇÃO DISCIPLINAR</div>
+
+          <div class="row"><div><b>Registro:</b> ${registro}</div><div>${dataDoc}</div></div>
+
+          <div class="row">
+            <div><b>SR(A)</b> ${nome}</div>
+            <div><b>Cargo:</b> ${cargo}</div>
           </div>
+
+          <p class="mt bl">${intro1}</p>
+          <p class="bl">${intro2}</p>
+
+          <div class="mt"><b>Ocorrência:</b> ${ocorrencia}</div>
+          <div class="mt"><b>Data da Ocorrência:</b> ${dataOcorr}</div>
+          <div class="mt"><b>Observação:</b> ${observ}</div>
+
+          <div class="mt"><b>Ciente e Concordo:</b> ________/______/__________</div>
+
+          <div class="assin">
+            <div>
+              <div class="ass-linha"></div>
+              <div class="nota">Assinatura do Empregado</div>
+            </div>
+            <div>
+              <div class="ass-linha"></div>
+              <div class="nota">Assinatura do Empregador</div>
+            </div>
+          </div>
+
+          <div class="assin">
+            <div>
+              <div class="ass-linha"></div>
+              <div class="nota">Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            </div>
+            <div>
+              <div class="ass-linha"></div>
+              <div class="nota">Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            </div>
+          </div>
+
           <script>window.onload = () => { window.print(); }</script>
         </body>
       </html>
     `
-
     const w = window.open('', '_blank')
     w.document.write(html)
     w.document.close()
   }
-  // ================== FIM DA GERAÇÃO ==================
+  // ================== FIM ORIENTAÇÃO ==================
 
   if (!t) return <div className="p-6">Carregando…</div>
-
-  const linhaLabelExibicao = linhaLabel
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -272,23 +190,9 @@ export default function TratarTratativa() {
           <Item titulo="Ocorrência" valor={t.tipo_ocorrencia} />
           <Item titulo="Prioridade" valor={t.prioridade} />
           <Item titulo="Setor" valor={t.setor_origem} />
-          <Item titulo="Linha" valor={linhaLabelExibicao} />
           <Item titulo="Status" valor={t.status} />
           <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
           <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
-
-          {t.imagem_url && (
-            <div className="md:col-span-2">
-              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
-              <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={t.imagem_url}
-                  className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                  alt="Imagem da ocorrência"
-                />
-              </a>
-            </div>
-          )}
         </dl>
       </div>
 
@@ -327,12 +231,12 @@ export default function TratarTratativa() {
             {loading ? 'Salvando…' : 'Concluir'}
           </button>
 
-          {podeGerarMedida && (
+          {podeGerarOrientacao && (
             <button
               type="button"
-              onClick={handleGerarMedida}
+              onClick={gerarOrientacao}
               className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-              title="Gerar documento da medida disciplinar"
+              title="Gerar documento de ORIENTAÇÃO DISCIPLINAR"
             >
               GERAR MEDIDA DISCIPLINAR
             </button>
