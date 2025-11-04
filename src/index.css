@@ -1,69 +1,125 @@
 /* src/index.css */
 
+/* ===== Tailwind base ===== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Você pode adicionar estilos globais personalizados aqui, se necessário.
-   Exemplo: 
-*/
+/* ===== Estilos padrão da aplicação ===== */
 body {
-  font-family: 'Inter', sans-serif; /* Exemplo de fonte */
-  background-color: #f9fafb; /* Cor de fundo padrão (claro) */
-  color: #1f2937; /* Cor de texto padrão (escuro) */
-  -webkit-font-smoothing: antialiased; /* Melhora a renderização da fonte */
+  font-family: 'Inter', sans-serif;
+  background-color: #f9fafb;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Adiciona estilos específicos para impressão (já fornecidos anteriormente) */
+/* ===== Estilos para impressão ===== */
 @media print {
-  /* Esconde elementos que não devem ser impressos */
-  .no-print, 
-  nav, 
-  aside, 
-  header
-  {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  /* Oculta elementos desnecessários */
+  .no-print,
+  nav,
+  aside,
+  header,
+  footer,
+  button {
     display: none !important;
   }
 
+  /* Reseta estilo do body */
   body {
-    background-color: white;
+    background: white !important;
+    color: black !important;
     padding: 0;
     margin: 0;
+    -webkit-print-color-adjust: exact;
   }
-  
+
+  /* Área de impressão */
   .printable-area {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     height: auto;
-    box-shadow: none;
     border: none;
+    box-shadow: none;
     overflow: visible !important;
     max-height: none !important;
+    color: #000;
+    font-family: 'Arial', sans-serif;
   }
 
-  .printable-area h1, 
-  .printable-area h2, 
+  /* Cabeçalhos e textos */
+  .printable-area h1,
+  .printable-area h2,
   .printable-area h3 {
-    color: black;
+    color: black !important;
+    font-weight: bold;
   }
-  
+
+  .printable-area p,
+  .printable-area td,
+  .printable-area th {
+    color: black !important;
+  }
+
+  /* Links e elementos interativos */
   .printable-area a {
     text-decoration: none;
     color: black;
   }
 
-   /* Garante que a assinatura apareça */
-   .print\:block { display: block !important; }
-   .print\:pt-16 { padding-top: 4rem; }
-   .print\:mt-10 { margin-top: 2.5rem; }
-   .print\:mx-auto { margin-left: auto; margin-right: auto; }
-   .print\:border-t { border-top-width: 1px; }
-   .print\:border-black { border-color: black; }
-   .print\:w-64 { width: 16rem; }
-   .print\:text-center { text-align: center; }
-   .print\:text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-   .print\:pt-1 { padding-top: 0.25rem; }
+  /* Tabelas */
+  table {
+    width: 100%;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  th,
+  td {
+    border: 1px solid #ccc !important;
+    padding: 4px 8px;
+    text-align: left;
+  }
+
+  thead {
+    display: table-header-group;
+    background-color: #f3f4f6 !important;
+  }
+
+  /* Assinatura e blocos forçados */
+  .print\:block { display: block !important; }
+  .print\:pt-16 { padding-top: 4rem; }
+  .print\:mt-10 { margin-top: 2.5rem; }
+  .print\:mx-auto { margin-left: auto; margin-right: auto; }
+  .print\:border-t { border-top-width: 1px; }
+  .print\:border-black { border-color: black; }
+  .print\:w-64 { width: 16rem; }
+  .print\:text-center { text-align: center; }
+  .print\:text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+  .print\:pt-1 { padding-top: 0.25rem; }
+
+  /* Remove sombra e cantos arredondados de modais */
+  .shadow,
+  .shadow-lg,
+  .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  .rounded-lg {
+    border-radius: 0 !important;
+  }
+
+  /* Garantia de impressão do timbrado */
+  img {
+    -webkit-print-color-adjust: exact;
+    filter: none !important;
+  }
 }
