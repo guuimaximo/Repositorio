@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão limpa e corrigida
+// Versão com impressão em nova aba
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -29,26 +29,22 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     async function carregarDados() {
       if (!avaria) return;
       setLoadingItens(true);
-      setIsEditing(false); // Reseta o modo de edição
+      setIsEditing(false);
 
-      // Formata valor para BRL (com vírgula) no input
       setValorCobrado(avaria.valor_cobrado ? String(avaria.valor_cobrado).replace('.', ',') : '');
       setObservacaoOperacao(avaria.observacao_operacao || '');
       setNumParcelas(avaria.numero_parcelas || 1);
       setMotivoCancelamento(avaria.motivo_cancelamento_cobranca || '');
 
-      // Lógica do Motorista
       if (avaria.motoristaId) {
         setNeedsMotoristaSelection(false);
         const parts = String(avaria.motoristaId).split(' - ');
         setSelectedMotorista({ chapa: parts[0] || '', nome: parts[1] || avaria.motoristaId });
       } else {
-        // Só precisa selecionar se estiver pendente
         setNeedsMotoristaSelection(avaria.status_cobranca === 'Pendente');
         setSelectedMotorista({ chapa: '', nome: '' });
       }
 
-      // Carregar Itens
       const { data, error } = await supabase
         .from('cobrancas_avarias')
         .select('id, descricao, qtd, "valorUnitario", tipo')
@@ -66,22 +62,56 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const servicos = itensOrcamento.filter((i) => i.tipo === 'Servico');
   const formatCurrency = (v) =>
     v === null || v === undefined ? '-' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const handlePrint = () => window.print();
+
+  // --- NOVA FUNÇÃO DE IMPRESSÃO ---
+  const handlePrint = () => {
+    // 1. Obter o HTML da área de impressão
+    const printContents = document.getElementById('printable-area').innerHTML;
+    
+    // 2. Obter todos os links de estilo e tags de estilo da página principal
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map(el => el.outerHTML)
+      .join('\n');
+
+    // 3. Abrir uma nova aba
+    const printWindow = window.open('', '_blank');
+    
+    // 4. Escrever o HTML completo na nova aba
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Imprimir Cobrança</title>
+          ${styles}
+        </head>
+        <body>
+          ${printContents}
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    
+    // 5. Acionar a impressão e fechar a aba
+    // Usar setTimeout para garantir que o conteúdo e estilos carreguem
+    printWindow.setTimeout(() => {
+      printWindow.focus(); // Necessário para alguns navegadores
+      printWindow.print();
+      printWindow.close();
+    }, 500); // 500ms de espera
+  };
+  // --- FIM DA NOVA FUNÇÃO ---
 
   const handleSalvarStatus = (novoStatus) => {
-    // Validação de Cancelamento
     if (novoStatus === 'Cancelada' && !motivoCancelamento.trim()) {
       alert('⚠️ Motivo obrigatório para cancelamento.');
       return;
     }
 
-    // Validação de Motorista
     if (novoStatus === 'Cobrada' && needsMotoristaSelection && !selectedMotorista.chapa) {
       alert('⚠️ Selecione um motorista para marcar como "Cobrada".');
       return;
     }
 
-    // Converte e valida o valor cobrado
     const valorNumerico = parseCurrency(valorCobrado);
     if (novoStatus === 'Cobrada' && valorNumerico === null) {
       alert('⚠️ O Valor Cobrado é inválido.');
@@ -97,7 +127,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       data_cobranca: new Date(),
     };
 
-    // Adiciona o motorista se ele foi selecionado agora
     if (needsMotoristaSelection && selectedMotorista.chapa) {
       updateData.motoristaId = `${selectedMotorista.chapa} - ${selectedMotorista.nome}`;
     }
@@ -106,7 +135,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     
     onAtualizarStatus(avaria.id, novoStatus, updateData);
     
-    // Reseta o modo de edição ao salvar
     if (isEditing) {
       setIsEditing(false);
     }
@@ -132,7 +160,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               <div><label>Prefixo</label><p>{avaria.prefixo}</p></div>
               <div>
                 <label>Motorista</label>
-                {/* Renderiza o CampoMotorista se necessário */}
                 {needsMotoristaSelection ? (
                   <CampoMotorista
                     onSelect={(motorista) => setSelectedMotorista(motorista)}
@@ -171,7 +198,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   	 	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                 	 	   </td>
               	 	   </tr>
-              	 	 ))}
+            	 	   ))}
             	 	 </tbody>
             	  </table>
             	  <div className="text-right text-xl font-bold mt-3">
@@ -287,8 +314,9 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     	  </div>
   	  </div>
 
-  	  {/* === Layout de Impressão com Papel Timbrado === */}
+  	  {/* === Layout de Impressão com Papel Timbrado (ID ADICIONADO) === */}
   	  <div
+  		 	 id="printable-area" 
   		 	 className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
   		 	 style={{
     		 	 minHeight: "100vh",
@@ -307,7 +335,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     		 	 <img
       		 	 src="/assets/logo-planalto.jpg"
       		 	 alt="Expresso Planalto S/A"
-  S     	 	 className="h-10 object-contain"
+      		 	 className="h-10 object-contain"
     		 	 />
   		 	 </div>
 
@@ -320,7 +348,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     		 	 {/* Identificação */}
     		 	 <div className="space-y-1 mb-6">
       		 	 <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
-      		 	 {/* Usa o motorista do estado, que pode ter sido recém-selecionado */}
       		 	 <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
       		 	 <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
       		 	 <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
@@ -387,7 +414,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     		 	 {/* Totais */}
   	 	 	 <div className="text-right mb-8">
       		 	 <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
-      		 	 {/* Usa o valor do estado para reflexo imediato na impressão */}
       		 	 <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
       		 	 <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
     		 	 </div>
