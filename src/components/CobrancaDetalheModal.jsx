@@ -337,8 +337,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       <div id="printable-area" className="hidden font-sans text-sm">
         {/* Cabeçalho com Logos */}
         <header className="flex justify-between items-center pb-8 border-b border-gray-200 mb-10">
-          <img src="/assets/logo-csc.png" alt="Grupo CSC" className="h-12 object-contain" />
-          <img src="/assets/logo-planalto.jpg" alt="Expresso Planalto S/A" className="h-12 object-contain" />
+          <img "src/assets/logo-csc.png" alt="Grupo CSC" className="h-12 object-contain" />
+          <img "src/assets/logo-planalto.jpg" alt="Expresso Planalto S/A" className="h-12 object-contain" />
         </header>
 
         {/* Conteúdo Central */}
