@@ -236,6 +236,106 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           </div>
         </div>
       </div>
+{/* === Layout de Impressão com Papel Timbrado === */}
+<div
+  className="hidden print:block printable-area p-12 font-sans text-sm leading-relaxed relative"
+  style={{
+    backgroundImage: "url('/assets/logo-csc.png')",
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "top right",
+    backgroundSize: "180px",
+    minHeight: "100vh",
+  }}
+>
+  {/* Cabeçalho e título */}
+  <div className="text-center mb-8 mt-8">
+    <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
+  </div>
+
+  {/* Identificação */}
+  <div className="space-y-1 mb-4">
+    <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
+    <p><strong>Motorista:</strong> {avaria.motoristaId || 'N/A'}</p>
+    <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
+    <p><strong>Tipo de Ocorrência:</strong> {avaria.tipoOcorrencia || 'Não informado'}</p>
+  </div>
+
+  {/* Tabela de Peças e Serviços */}
+  <div className="mt-4">
+    <h3 className="text-lg font-semibold mb-2">🔧 Detalhamento do Orçamento</h3>
+    <table className="w-full border-collapse text-sm">
+      <thead className="bg-gray-100 border-b border-gray-300">
+        <tr>
+          <th className="text-left p-2 border">Descrição</th>
+          <th className="text-right p-2 border">Qtd</th>
+          <th className="text-right p-2 border">Valor Unitário</th>
+          <th className="text-right p-2 border">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...pecas, ...servicos].length > 0 ? (
+          [...pecas, ...servicos].map((item) => (
+            <tr key={item.id} className="border-b">
+              <td className="p-2 border">{item.descricao}</td>
+              <td className="p-2 text-right border">{item.qtd}</td>
+              <td className="p-2 text-right border">{formatCurrency(item.valorUnitario)}</td>
+              <td className="p-2 text-right border font-medium">
+                {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan="4" className="text-center text-gray-500 p-3">
+              Nenhum item encontrado.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  {/* Totais */}
+  <div className="mt-6 text-right">
+    <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
+    <p><strong>Valor Cobrado:</strong> {formatCurrency(avaria.valor_cobrado)}</p>
+    <p><strong>Nº de Parcelas:</strong> {avaria.numero_parcelas || 1}</p>
+  </div>
+
+  {/* Observações */}
+  <div className="mt-6 border-t pt-3">
+    <p><strong>Observações:</strong></p>
+    <p className="whitespace-pre-line">{observacaoOperacao || 'Sem observações registradas.'}</p>
+  </div>
+
+  {/* Assinatura do Gerente (se existir) */}
+  {avaria.assinaturaGerente && (
+    <div className="mt-10 text-center">
+      <p className="font-semibold text-gray-700 mb-1">Assinado digitalmente por:</p>
+      <img
+        src={avaria.assinaturaGerente}
+        alt="Assinatura do Gerente"
+        className="h-16 mx-auto"
+      />
+      <p className="text-gray-600 text-sm mt-1">
+        {avaria.nomeGerente} — Gerente de Manutenção
+      </p>
     </div>
-  );
-}
+  )}
+
+  {/* Rodapé */}
+  <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center">
+    <img
+      src="/assets/logo-planalto.jpg"
+      alt="Expresso Planalto S/A"
+      className="h-8 object-contain"
+    />
+  </div>
+
+  {/* Texto do rodapé institucional */}
+  <div className="fixed bottom-1 left-8 right-8 text-gray-500 text-xs flex justify-between">
+    <span>Relatório gerado automaticamente pelo sistema InovaQuatai 🚍</span>
+    <span>{new Date().toLocaleDateString()}</span>
+  </div>
+</div>
+
