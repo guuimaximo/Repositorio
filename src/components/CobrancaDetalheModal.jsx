@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão corrigida com print:hidden no modal
+// Versão limpa e corrigida
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -158,258 +158,258 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                         <th className="p-2 border">Descrição</th>
                         <th className="p-2 border">Qtd</th>
                         <th className="p-2 border">Valor Unitário</th>
-                        <th className="p-2 border">Total</th>
+                      	<th className="p-2 border">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {[...pecas, ...servicos].map((item) => (
-                        <tr key={item.id}>
-                          <td className="border p-2">{item.descricao}</td>
-                          <td className="border p-2 text-right">{item.qtd}</td>
-                          <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-                          <td className="border p-2 text-right font-medium">
-                            {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="text-right text-xl font-bold mt-3">
-                    Valor Total: {formatCurrency(avaria.valor_total_orcamento)}
-                  </div>
-                </>
-              )}
-            </div>
+              	 	   <tr key={item.id}>
+                	 	   <td className="border p-2">{item.descricao}</td>
+                	 	   <td className="border p-2 text-right">{item.qtd}</td>
+                	 	   <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+                	 	   <td className="border p-2 text-right font-medium">
+                  	 	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                	 	   </td>
+              	 	   </tr>
+              	 	 ))}
+            	 	 </tbody>
+            	  </table>
+            	  <div className="text-right text-xl font-bold mt-3">
+            	 	 Valor Total: {formatCurrency(avaria.valor_total_orcamento)}
+            	  </div>
+          	 	</>
+          	  )}
+        	  </div>
 
-            {/* Operação */}
-            <div className="border-t pt-4">
-              <h3 className="text-xl font-semibold mb-2">🧮 Detalhes da Operação</h3>
+        	  {/* Operação */}
+        	  <div className="border-t pt-4">
+          	  <h3 className="text-xl font-semibold mb-2">🧮 Detalhes da Operação</h3>
 
-              <label className="block text-sm font-medium">Observações</label>
-              <textarea
-                value={observacaoOperacao}
-                onChange={(e) => setObservacaoOperacao(e.target.value)}
-                readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
-                className="w-full border rounded-md p-2 mb-3"
-              ></textarea>
+          	  <label className="block text-sm font-medium">Observações</label>
+          	  <textarea
+          	 	 value={observacaoOperacao}
+          	 	 onChange={(e) => setObservacaoOperacao(e.target.value)}
+          	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
+          	 	 className="w-full border rounded-md p-2 mb-3"
+          	  ></textarea>
 
-              <label className="block text-sm font-medium">Motivo do Cancelamento</label>
-              <textarea
-                value={motivoCancelamento}
-                onChange={(e) => setMotivoCancelamento(e.target.value)}
-                readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
-                className="w-full border rounded-md p-2 mb-3"
-              ></textarea>
+          	  <label className="block text-sm font-medium">Motivo do Cancelamento</label>
+          	  <textarea
+          	 	 value={motivoCancelamento}
+          	 	 onChange={(e) => setMotivoCancelamento(e.target.value)}
+          	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
+  	       	 	 className="w-full border rounded-md p-2 mb-3"
+          	  ></textarea>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label>Nº de Parcelas</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={numParcelas}
-                    onChange={(e) => setNumParcelas(e.target.value)}
-                    readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
-                    className="w-full border rounded-md p-2"
-                  />
-                </div>
-                <div>
-                  <label>Valor Cobrado (R$)</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 1234,56"
-                    value={valorCobrado}
-                    onChange={(e) => setValorCobrado(e.target.value)}
-                    readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
-                    className="w-full border rounded-md p-2"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          	  <div className="grid grid-cols-2 gap-4">
+          	 	 <div>
+            	 	 <label>Nº de Parcelas</label>
+            	 	 <input
+            	 	 	 type="number"
+            	 	 	 min="1"
+            	 	 	 value={numParcelas}
+            	 	 	 onChange={(e) => setNumParcelas(e.target.value)}
+            	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
+            	 	 	 className="w-full border rounded-md p-2"
+            	 	 />
+          	 	 </div>
+          	 	 <div>
+            	 	 <label>Valor Cobrado (R$)</label>
+            	 	 <input
+            	 	 	 type="text"
+            	 	 	 placeholder="Ex: 1234,56"
+            	 	 	 value={valorCobrado}
+            	 	 	 onChange={(e) => setValorCobrado(e.target.value)}
+            	 	 	 readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
+            	 	 	 className="w-full border rounded-md p-2"
+            	 	 />
+          	 	 </div>
+          	  </div>
+        	  </div>
+      	  </div>
 
-          {/* Rodapé */}
-          <div className="flex justify-between items-center p-4 border-t bg-gray-50">
-            <button
-              onClick={handlePrint}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
-            >
-              🖨️ Imprimir
-            </button>
+      	  {/* Rodapé */}
+      	  <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+        	  <button
+        	 	 onClick={handlePrint}
+        	 	 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2"
+        	  >
+        	 	 🖨️ Imprimir
+        	  </button>
 
-            <div className="flex gap-3">
-              {avaria.status_cobranca === 'Pendente' && (
-                <>
-                  <button
-                    onClick={() => handleSalvarStatus('Cobrada')}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                  >
-                    💰 Marcar como Cobrada
-                  </button>
-                  <button
-          _         onClick={() => handleSalvarStatus('Cancelada')}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                  >
-                    ❌ Cancelar Cobrança
-                  </button>
-                </>
-              )}
+        	  <div className="flex gap-3">
+        	 	 {avaria.status_cobranca === 'Pendente' && (
+          	 	 <>
+          	 	 	 <button
+            	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
+            	 	 	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+            	 	 	 >
+            	 	 	 💰 Marcar como Cobrada
+            	 	 	 </button>
+          	 	 	 <button
+            	 	 	 onClick={() => handleSalvarStatus('Cancelada')}
+            	 	 	 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+            	 	 	 >
+            	 	 	 ❌ Cancelar Cobrança
+            	 	 	 </button>
+          	 	 </>
+        	 	 )}
 
-              {avaria.status_cobranca === 'Cobrada' && !isEditing && (
-                <button
-                  onClick={() => {
-                    setIsEditing(true);
-                    alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
-                  }}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                >
-                  ✏️ Editar Cobrança
-                </button>
-              )}
+        	 	 {avaria.status_cobranca === 'Cobrada' && !isEditing && (
+          	 	 <button
+          	 	 	 onClick={() => {
+            	 	 	 setIsEditing(true);
+            	 	 	 alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
+            	 	 	 }}
+          	 	 	 className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
+          	 	 >
+          	 	 	 ✏️ Editar Cobrança
+          	 	 </button>
+        	 	 )}
 
-              {isEditing && (
-                <button
-                  onClick={() => handleSalvarStatus('Cobrada')}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-                >
-                  💾 Salvar Alterações
-                </button>
-        _     )}
+        	 	 {isEditing && (
+          	 	 <button
+          	 	 	 onClick={() => handleSalvarStatus('Cobrada')}
+  	       	 	 	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+          	 	 >
+          	 	 	 💾 Salvar Alterações
+          	 	 </button>
+        	 	 )}
 
-              <button
-                onClick={onClose}
-                className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
-              >
-                🚪 Fechar
-          	   </button>
-            </div>
-_         </div>
-        </div>
-      </div>
+        	 	 <button
+        	 	 	 onClick={onClose}
+        	 	 	 className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
+        	 	 >
+        	 	 	 🚪 Fechar
+        	 	 </button>
+        	  </div>
+      	  </div>
+    	  </div>
+  	  </div>
 
-      {/* === Layout de Impressão com Papel Timbrado === */}
-      <div
-        className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
-        style={{
-          minHeight: "100vh",
-          padding: "100px 60px 80px 60px", // Margens internas
-          boxSizing: "border-box",
-          position: "relative",
-        }}
-      >
-        {/* Cabeçalho com Logos */}
-      	 <div className="absolute top-8 left-8 right-8 flex justify-between items-center">
-          <img
-            src="/assets/logo-csc.png"
-            alt="Grupo CSC"
-            className="h-10 object-contain"
-          />
-          <img
-            src="/assets/logo-planalto.jpg"
-	         alt="Expresso Planalto S/A"
-            className="h-10 object-contain"
-          />
-        </div>
+  	  {/* === Layout de Impressão com Papel Timbrado === */}
+  	  <div
+  		 	 className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
+  		 	 style={{
+    		 	 minHeight: "100vh",
+    		 	 padding: "100px 60px 80px 60px", // Margens internas
+    		 	 boxSizing: "border-box",
+    		 	 position: "relative",
+  		 	 }}
+  	  >
+  		 	 {/* Cabeçalho com Logos */}
+  		 	 <div className="absolute top-8 left-8 right-8 flex justify-between items-center">
+    		 	 <img
+      		 	 src="/assets/logo-csc.png"
+      		 	 alt="Grupo CSC"
+      		 	 className="h-10 object-contain"
+    		 	 />
+    		 	 <img
+      		 	 src="/assets/logo-planalto.jpg"
+      		 	 alt="Expresso Planalto S/A"
+  S     	 	 className="h-10 object-contain"
+    		 	 />
+  		 	 </div>
 
-        {/* Conteúdo Central */}
-        <div className="mt-24">
-          <div className="text-center mb-8">
-        	   <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
-          </div>
+  		 	 {/* Conteúdo Central */}
+  		 	 <div className="mt-24">
+    		 	 <div className="text-center mb-8">
+      		 	 <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
+    		 	 </div>
 
-          {/* Identificação */}
-          <div className="space-y-1 mb-6">
-        	   <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
-          	 {/* Usa o motorista do estado, que pode ter sido recém-selecionado */}
-            <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
-            <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
-            <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
-    	   </div>
+    		 	 {/* Identificação */}
+    		 	 <div className="space-y-1 mb-6">
+      		 	 <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
+      		 	 {/* Usa o motorista do estado, que pode ter sido recém-selecionado */}
+      		 	 <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
+      		 	 <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
+      		 	 <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
+    		 	 </div>
 
-          {/* Peças */}
-      	   {pecas.length > 0 && (
-        	   <>
-          	   <h3 className="text-lg font-semibold mb-2">Peças</h3>
-          	   <table className="w-full border-collapse text-sm mb-6">
-            	   <thead>
-  ci           	   <tr className="bg-gray-100">
-              	   <th className="text-left border p-2">Descrição</th>
-              	   <th className="text-center border p-2">Qtd</th>
-              	   <th className="text-right border p-2">Valor Unitário</th>
-              	   <th className="text-right border p-2">Total</th>
-          	 	   </tr>
-          	   </thead>
-          	   <tbody>
-            	   {pecas.map((item) => (
-              	   <tr key={item.id}>
-                	   <td className="border p-2">{item.descricao}</td>
-                	   <td className="border p-2 text-center">{item.qtd}</td>
-              	 	   <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-                	   <td className="border p-2 text-right font-medium">
-                  	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                	 	 </td>
-              	   </tr>
-            	   ))}
-        	 	   </tbody>
-          	 </table>
-      	     </>
-    	   )}
+    		 	 {/* Peças */}
+    		 	 {pecas.length > 0 && (
+      		 	 <>
+        		 	 <h3 className="text-lg font-semibold mb-2">Peças</h3>
+        		 	 <table className="w-full border-collapse text-sm mb-6">
+          		 	 <thead>
+          	 		 	 <tr className="bg-gray-100">
+            	 		 	 <th className="text-left border p-2">Descrição</th>
+            	 		 	 <th className="text-center border p-2">Qtd</th>
+            	 		 	 <th className="text-right border p-2">Valor Unitário</th>
+            	 		 	 <th className="text-right border p-2">Total</th>
+          	 		 	 </tr>
+          		 	 </thead>
+          		 	 <tbody>
+            		 	 {pecas.map((item) => (
+              		 	 <tr key={item.id}>
+              	 		 	 <td className="border p-2">{item.descricao}</td>
+              	 		 	 <td className="border p-2 text-center">{item.qtd}</td>
+              	 		 	 <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+              	 		 	 <td className="border p-2 text-right font-medium">
+                	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                	 		 	 </td>
+              		 	 </tr>
+            		 	 ))}
+          		 	 </tbody>
+        		 	 </table>
+      		 	 </>
+    		 	 )}
 
-        {/* Serviços */}
-        {servicos.length > 0 && (
-	       <>
-            <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
-            <table className="w-full border-collapse text-sm mb-6">
-              <thead>
-                <tr className="bg-gray-100">
-S               <th className="text-left border p-2">Descrição</th>
-                  <th className="text-center border p-2">Qtd</th>
-                  <th className="text-right border p-2">Valor Unitário</th>
-                  <th className="text-right border p-2">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-  content:               {servicos.map((item) => (
-                  <tr key={item.id}>
-                    <td className="border p-2">{item.descricao}</td>
-CSS                 <td className="border p-2 text-center">{item.qtd}</td>
-                    <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-CSS                 <td className="border p-2 text-right font-medium">
-                      {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-A           </table>
-          </>
-        )}
+    		 	 {/* Serviços */}
+    		 	 {servicos.length > 0 && (
+      		 	 <>
+        		 	 <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
+        		 	 <table className="w-full border-collapse text-sm mb-6">
+          		 	 <thead>
+    	       		 	 <tr className="bg-gray-100">
+              		 	 <th className="text-left border p-2">Descrição</th>
+              		 	 <th className="text-center border p-2">Qtd</th>
+              		 	 <th className="text-right border p-2">Valor Unitário</th>
+              		 	 <th className="text-right border p-2">Total</th>
+            		 	 </tr>
+          		 	 </thead>
+          		 	 <tbody>
+            		 	 {servicos.map((item) => (
+              		 	 <tr key={item.id}>
+              	 		 	 <td className="border p-2">{item.descricao}</td>
+              	 		 	 <td className="border p-2 text-center">{item.qtd}</td>
+              	 		 	 <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+              	 		 	 <td className="border p-2 text-right font-medium">
+                	 		 	 {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                	 		 	 </td>
+      	       		 	 </tr>
+            		 	 ))}
+          		 	 </tbody>
+        		 	 </table>
+      		 	 </>
+    		 	 )}
 
-        {/* Totais */}
-        <div className="text-right mb-8">
-          <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
-          {/* Usa o valor do estado para reflexo imediato na impressão */}
-          <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
-S         <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
-        </div>
+    		 	 {/* Totais */}
+  	 	 	 <div className="text-right mb-8">
+      		 	 <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
+      		 	 {/* Usa o valor do estado para reflexo imediato na impressão */}
+      		 	 <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
+      		 	 <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
+    		 	 </div>
 
-        {/* Assinaturas */}
-        <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
-          <div className="w-1/3">
-            <p className="font-medium">__________________________</p>
-            <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
-css         </div>
-          <div className="w-1/3">
-            <p className="font-medium">__________________________</p>
-          	 <p className="text-sm mt-1 text-gray-600">Gerente de Manutenção</p>
-          </div>
-        </div>
-    	 </div>
+    		 	 {/* Assinaturas */}
+    		 	 <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
+      		 	 <div className="w-1/3">
+        		 	 <p className="font-medium">__________________________</p>
+  	       		 	 <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
+      		 	 </div>
+      		 	 <div className="w-1/3">
+        		 	 <p className="font-medium">__________________________</p>
+        		 	 <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
+      		 	 </div>
+    		 	 </div>
+  		 	 </div>
 
-        {/* Rodapé */}
-        <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
-          Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
-  	   </div>
-      </div>
-    </>
+  		 	 {/* Rodapé */}
+  		 	 <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
+    		 	 	 Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
+  		 	 </div>
+  	  </div>
+  	</>
   );
 }
