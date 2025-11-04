@@ -1,3 +1,4 @@
+// src/pages/TratarTratativa.jsx
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
@@ -16,6 +17,7 @@ const acoes = [
 export default function TratarTratativa() {
   const { id } = useParams()
   const nav = useNavigate()
+
   const [t, setT] = useState(null)
   const [resumo, setResumo] = useState('')
   const [acao, setAcao] = useState('Orientação')
@@ -23,20 +25,106 @@ export default function TratarTratativa() {
   const [assinatura, setAssinatura] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // (opcional) descrição da linha – não é usada no documento de orientação (modelo exige só os campos listados)
+  // Exibição complementar
   const [linhaDescricao, setLinhaDescricao] = useState('')
+  const [cargoMotorista, setCargoMotorista] = useState('MOTORISTA')
+
+  // Edição inline
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    tipo_ocorrencia: '',
+    prioridade: 'Média',
+    setor_origem: '',
+    linha: '',
+    descricao: '',
+  })
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
-      if (!error) setT(data || null)
+      const { data, error } = await supabase
+        .from('tratativas')
+        .select('*')
+        .eq('id', id)
+        .single()
+      if (error) { console.error(error); return }
+      setT(data || null)
+
+      setEditForm({
+        tipo_ocorrencia: data?.tipo_ocorrencia || '',
+        prioridade: data?.prioridade || 'Média',
+        setor_origem: data?.setor_origem || '',
+        linha: data?.linha || '',
+        descricao: data?.descricao || '',
+      })
 
       if (data?.linha) {
-        const { data: row } = await supabase.from('linhas').select('descricao').eq('codigo', data.linha).maybeSingle()
+        const { data: row } = await supabase
+          .from('linhas')
+          .select('descricao')
+          .eq('codigo', data.linha)
+          .maybeSingle()
         setLinhaDescricao(row?.descricao || '')
+      } else {
+        setLinhaDescricao('')
+      }
+
+      if (data?.motorista_chapa) {
+        const { data: m } = await supabase
+          .from('motoristas')
+          .select('cargo')
+          .eq('chapa', data.motorista_chapa)
+          .maybeSingle()
+        setCargoMotorista((m?.cargo || data?.cargo || 'Motorista').toUpperCase())
+      } else {
+        setCargoMotorista((data?.cargo || 'Motorista').toUpperCase())
       }
     })()
   }, [id])
+
+  async function salvarEdicao() {
+    if (!t) return
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('tratativas')
+        .update({
+          tipo_ocorrencia: editForm.tipo_ocorrencia || null,
+          prioridade: editForm.prioridade || null,
+          setor_origem: editForm.setor_origem || null,
+          linha: editForm.linha || null,
+          descricao: editForm.descricao || null,
+        })
+        .eq('id', t.id)
+      if (error) throw error
+
+      setT(prev => prev ? ({
+        ...prev,
+        tipo_ocorrencia: editForm.tipo_ocorrencia,
+        prioridade: editForm.prioridade,
+        setor_origem: editForm.setor_origem,
+        linha: editForm.linha,
+        descricao: editForm.descricao,
+      }) : prev)
+
+      if (editForm.linha) {
+        const { data: row } = await supabase
+          .from('linhas')
+          .select('descricao')
+          .eq('codigo', editForm.linha)
+          .maybeSingle()
+        setLinhaDescricao(row?.descricao || '')
+      } else {
+        setLinhaDescricao('')
+      }
+
+      setIsEditing(false)
+      alert('Dados atualizados!')
+    } catch (e) {
+      alert(`Erro ao salvar: ${e.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function concluir() {
     if (!t) return
@@ -51,6 +139,7 @@ export default function TratarTratativa() {
         if (up.error) throw up.error
         imagem_tratativa = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
       }
+
       let assinatura_url = null
       if (assinatura) {
         const nome = `ass_${Date.now()}_${assinatura.name}`.replace(/\s+/g, '_')
@@ -67,10 +156,13 @@ export default function TratarTratativa() {
         assinatura_url
       })
 
-      await supabase.from('tratativas').update({
-        status: 'Concluída',
-        imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null
-      }).eq('id', t.id)
+      await supabase
+        .from('tratativas')
+        .update({
+          status: 'Concluída',
+          imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null,
+        })
+        .eq('id', t.id)
 
       alert('Tratativa concluída com sucesso!')
       nav('/central')
@@ -81,7 +173,7 @@ export default function TratarTratativa() {
     }
   }
 
-  // ================== ORIENTAÇÃO — Geração EXATA do modelo ==================
+  // ================== ORIENTAÇÃO — (exatamente o modelo, SEM registro) ==================
   const podeGerarOrientacao = acao === 'Orientação'
 
   const dataPtCompletaUpper = (d = new Date()) => {
@@ -95,75 +187,78 @@ export default function TratarTratativa() {
   function gerarOrientacao() {
     if (!t) return
 
-    const registro = String(t.id).padStart(8,'0') // ajuste se tiver outro número de registro
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
-    const cargo = (t.cargo || 'Motorista').toUpperCase() // ajuste se tiver campo específico
+    const cargo = cargoMotorista
     const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR') : '—'
-    const observ = (resumo || t.descricao || '—')
+    const dataOcorr = t.data_ocorrido
+      ? new Date(t.data_ocorrido).toLocaleDateString('pt-BR')
+      : '—'
+    const observ = (resumo || t.descricao || '').trim() || '—'
 
     const estilos = `
       <style>
-        @page { size: A4; margin: 18mm; }
-        body { font-family: Arial, Helvetica, sans-serif; color:#000; }
-        .l { line-height: 1.35; }
-        .t { text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 14px; }
-        .row { display:flex; justify-content:space-between; gap:12px; margin: 6px 0; }
+        @page { size: A4; margin: 25mm; }
+        body {
+          font-family: "Courier New", Courier, monospace;
+          color:#000; font-size: 14px; line-height: 1.35;
+        }
+        .linha { display:flex; justify-content:space-between; gap:12px; }
         .mt { margin-top: 10px; }
-        .mb { margin-bottom: 10px; }
+        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+        .ass { text-align: center; }
+        .ass-line { margin-top: 30px; border-top: 1px solid #000; height:1px; }
+        .center { text-align: center; font-weight: bold; }
+        .right { text-align: right; }
         .bl { white-space: pre-wrap; }
-        .assin { display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-top: 24px; }
-        .ass-linha { margin-top: 30px; border-top: 1px solid #000; height:1px; }
-        .nota { font-size: 12px; }
       </style>
     `
 
-    // Texto fiel ao modelo (mantém “advertência” conforme documento-base)
+    // Texto igual ao modelo
     const intro1 = `Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o senhor ter cometido à falta abaixo descrita.`
     const intro2 = `Pedimos-lhe que tal falta não mais se repita, pois pelo contrário seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.`
 
     const html = `
       <html>
         <head><meta charset="utf-8" />${estilos}<title>ORIENTAÇÃO DISCIPLINAR - ${nome}</title></head>
-        <body class="l">
-          <div class="t">ORIENTAÇÃO DISCIPLINAR</div>
+        <body>
+          <div class="center">ORIENTAÇÃO DISCIPLINAR</div>
 
-          <div class="row"><div><b>Registro:</b> ${registro}</div><div>${dataDoc}</div></div>
+          <div class="right mt">${dataDoc}</div>
 
-          <div class="row">
-            <div><b>SR(A)</b> ${nome}</div>
-            <div><b>Cargo:</b> ${cargo}</div>
+          <div class="linha mt">
+            <div>SR(A) ${nome}</div>
+            <div>Cargo: ${cargo}</div>
           </div>
 
           <p class="mt bl">${intro1}</p>
           <p class="bl">${intro2}</p>
 
-          <div class="mt"><b>Ocorrência:</b> ${ocorrencia}</div>
-          <div class="mt"><b>Data da Ocorrência:</b> ${dataOcorr}</div>
-          <div class="mt"><b>Observação:</b> ${observ}</div>
+          <div class="mt">Ocorrência: ${ocorrencia}</div>
+          <div class="mt">Data da Ocorrência: ${dataOcorr}</div>
+          <div class="mt">Observação: ${observ}</div>
 
-          <div class="mt"><b>Ciente e Concordo:</b> ________/______/__________</div>
+          <div class="mt">Ciente e Concordo: ________/______/__________</div>
 
-          <div class="assin">
-            <div>
-              <div class="ass-linha"></div>
-              <div class="nota">Assinatura do Empregado</div>
+          <div class="ass-grid">
+            <div class="ass">
+              <div class="ass-line"></div>
+              Assinatura do Empregado
             </div>
-            <div>
-              <div class="ass-linha"></div>
-              <div class="nota">Assinatura do Empregador</div>
+            <div class="ass">
+              <div class="ass-line"></div>
+              Assinatura do Empregador
             </div>
           </div>
 
-          <div class="assin">
-            <div>
-              <div class="ass-linha"></div>
-              <div class="nota">Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+          <div class="ass-grid">
+            <div class="ass">
+              <div class="ass-line"></div>
+              Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
             </div>
-            <div>
-              <div class="ass-linha"></div>
-              <div class="nota">Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
+            <div class="ass">
+              <div class="ass-line"></div>
+              Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
             </div>
           </div>
 
@@ -184,18 +279,107 @@ export default function TratarTratativa() {
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
       <p className="text-gray-600 mb-6">Revise os dados e finalize a tratativa.</p>
 
+      {/* Card: dados + edição */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Item titulo="Motorista" valor={`${t.motorista_nome || ''} ${t.motorista_chapa ? `(${t.motorista_chapa})` : ''}`} />
-          <Item titulo="Ocorrência" valor={t.tipo_ocorrencia} />
-          <Item titulo="Prioridade" valor={t.prioridade} />
-          <Item titulo="Setor" valor={t.setor_origem} />
+          <Item
+            titulo="Ocorrência"
+            valor={isEditing ? (
+              <input className="w-full border rounded px-2 py-1"
+                     value={editForm.tipo_ocorrencia}
+                     onChange={e=>setEditForm(s=>({...s, tipo_ocorrencia: e.target.value}))}/>
+            ) : t.tipo_ocorrencia}
+          />
+          <Item
+            titulo="Prioridade"
+            valor={isEditing ? (
+              <select className="w-full border rounded px-2 py-1"
+                      value={editForm.prioridade}
+                      onChange={e=>setEditForm(s=>({...s, prioridade: e.target.value}))}>
+                <option>Baixa</option><option>Média</option><option>Alta</option>
+              </select>
+            ) : t.prioridade}
+          />
+          <Item
+            titulo="Setor"
+            valor={isEditing ? (
+              <input className="w-full border rounded px-2 py-1"
+                     value={editForm.setor_origem}
+                     onChange={e=>setEditForm(s=>({...s, setor_origem: e.target.value}))}/>
+            ) : t.setor_origem}
+          />
+          <Item
+            titulo="Linha"
+            valor={isEditing ? (
+              <input className="w-full border rounded px-2 py-1"
+                     placeholder="Código ex.: 01TR"
+                     value={editForm.linha}
+                     onChange={e=>setEditForm(s=>({...s, linha: e.target.value}))}/>
+            ) : (t.linha ? `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ''}` : '-')}
+          />
           <Item titulo="Status" valor={t.status} />
           <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
-          <Item titulo="Descrição" valor={t.descricao || '-'} className="md:col-span-2" />
+          <Item
+            className="md:col-span-2"
+            titulo="Descrição"
+            valor={isEditing ? (
+              <textarea className="w-full border rounded px-2 py-1" rows={3}
+                        value={editForm.descricao}
+                        onChange={e=>setEditForm(s=>({...s, descricao: e.target.value}))}/>
+            ) : (t.descricao || '-')}
+          />
+
+          {t.imagem_url && (
+            <div className="md:col-span-2">
+              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
+              <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={t.imagem_url}
+                  className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
+                  alt="Imagem da ocorrência"
+                />
+              </a>
+            </div>
+          )}
         </dl>
+
+        {/* Botões de edição */}
+        <div className="mt-4 flex gap-2">
+          {!isEditing ? (
+            <button
+              onClick={()=>setIsEditing(true)}
+              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
+            >
+              Editar dados
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={salvarEdicao}
+                disabled={loading}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                Salvar
+              </button>
+              <button
+                onClick={()=>{ setIsEditing(false); setEditForm({
+                  tipo_ocorrencia: t.tipo_ocorrencia || '',
+                  prioridade: t.prioridade || 'Média',
+                  setor_origem: t.setor_origem || '',
+                  linha: t.linha || '',
+                  descricao: t.descricao || '',
+                })}}
+                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
+              >
+                Cancelar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
+      {/* Card: ações */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
