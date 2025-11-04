@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão completa e limpa
+// Versão corrigida com print:hidden no modal
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -114,8 +114,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
 
   return (
     <>
-      {/* === Modal Principal === */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
+      {/* === Modal Principal (Adicionado print:hidden) === */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4 print:hidden">
         <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
           {/* Cabeçalho */}
           <div className="flex justify-between items-center p-4 border-b">
@@ -245,14 +245,14 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
                   >
                     💰 Marcar como Cobrada
-              _   </button>
+                  </button>
                   <button
-                    onClick={() => handleSalvarStatus('Cancelada')}
+          _         onClick={() => handleSalvarStatus('Cancelada')}
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
                   >
                     ❌ Cancelar Cobrança
                   </button>
-    _           </>
+                </>
               )}
 
               {avaria.status_cobranca === 'Cobrada' && !isEditing && (
@@ -265,151 +265,151 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                 >
                   ✏️ Editar Cobrança
                 </button>
-            	 )}
+              )}
 
               {isEditing && (
                 <button
                   onClick={() => handleSalvarStatus('Cobrada')}
-                	 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
                 >
                   💾 Salvar Alterações
                 </button>
-              )}
+        _     )}
 
               <button
                 onClick={onClose}
-            	   className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
               >
-            	   🚪 Fechar
-              </button>
+                🚪 Fechar
+          	   </button>
             </div>
-      	   </div>
-    	 </div>
-  	 </div>
+_         </div>
+        </div>
+      </div>
 
       {/* === Layout de Impressão com Papel Timbrado === */}
       <div
-    	   className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
-    	   style={{
-      	   minHeight: "100vh",
-      	   padding: "100px 60px 80px 60px", // Margens internas
-      	   boxSizing: "border-box",
-      	   position: "relative",
-    	   }}
-  	 >
-    	   {/* Cabeçalho com Logos */}
-    	   <div className="absolute top-8 left-8 right-8 flex justify-between items-center">
-      	   <img
-        	   src="/assets/logo-csc.png"
-        	   alt="Grupo CSC"
-        	   className="h-10 object-contain"
-      	   />
-      	   <img
-        	   src="/assets/logo-planalto.jpg"
-        	   alt="Expresso Planalto S/A"
-        	   className="h-10 object-contain"
-      	   />
+        className="hidden print:block printable-area font-sans text-sm leading-relaxed relative bg-white"
+        style={{
+          minHeight: "100vh",
+          padding: "100px 60px 80px 60px", // Margens internas
+          boxSizing: "border-box",
+          position: "relative",
+        }}
+      >
+        {/* Cabeçalho com Logos */}
+      	 <div className="absolute top-8 left-8 right-8 flex justify-between items-center">
+          <img
+            src="/assets/logo-csc.png"
+            alt="Grupo CSC"
+            className="h-10 object-contain"
+          />
+          <img
+            src="/assets/logo-planalto.jpg"
+	         alt="Expresso Planalto S/A"
+            className="h-10 object-contain"
+          />
+        </div>
+
+        {/* Conteúdo Central */}
+        <div className="mt-24">
+          <div className="text-center mb-8">
+        	   <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
+          </div>
+
+          {/* Identificação */}
+          <div className="space-y-1 mb-6">
+        	   <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
+          	 {/* Usa o motorista do estado, que pode ter sido recém-selecionado */}
+            <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
+            <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
+            <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
     	   </div>
 
-    	   {/* Conteúdo Central */}
-    	   <div className="mt-24">
-      	   <div className="text-center mb-8">
-        	   <h1 className="text-2xl font-bold text-gray-800">RELATÓRIO DE COBRANÇA DE AVARIA</h1>
-      	   </div>
-
-      	   {/* Identificação */}
-      	   <div className="space-y-1 mb-6">
-        	   <p><strong>Prefixo:</strong> {avaria.prefixo}</p>
-        	   {/* Usa o motorista do estado, que pode ter sido recém-selecionado */}
-        	   <p><strong>Motorista:</strong> {selectedMotorista.nome ? `${selectedMotorista.chapa} - ${selectedMotorista.nome}` : 'N/A'}</p>
-        	   <p><strong>Data da Avaria:</strong> {new Date(avaria.dataAvaria).toLocaleDateString()}</p>
-        	   <p><strong>Descrição:</strong> {avaria.descricao || 'Não informada'}</p>
-      	   </div>
-
-      	   {/* Peças */}
+          {/* Peças */}
       	   {pecas.length > 0 && (
         	   <>
           	   <h3 className="text-lg font-semibold mb-2">Peças</h3>
           	   <table className="w-full border-collapse text-sm mb-6">
-          	 	   <thead>
-            	 	   <tr className="bg-gray-100">
-              	 	   <th className="text-left border p-2">Descrição</th>
-              	 	   <th className="text-center border p-2">Qtd</th>
-              	 	   <th className="text-right border p-2">Valor Unitário</th>
-              	 	   <th className="text-right border p-2">Total</th>
-            	 	   </tr>
-          	 	   </thead>
-          	 	   <tbody>
-            	 	   {pecas.map((item) => (
-              	 	   <tr key={item.id}>
-                	 	   <td className="border p-2">{item.descricao}</td>
-                	 	   <td className="border p-2 text-center">{item.qtd}</td>
-                	 	   <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-                	 	   <td className="border p-2 text-right font-medium">
-                  	 	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                	 	   </td>
-              	 	   </tr>
-            	 	   ))}
-          	 	   </tbody>
-          	   </table>
-        	   </>
-      	   )}
+            	   <thead>
+  ci           	   <tr className="bg-gray-100">
+              	   <th className="text-left border p-2">Descrição</th>
+              	   <th className="text-center border p-2">Qtd</th>
+              	   <th className="text-right border p-2">Valor Unitário</th>
+              	   <th className="text-right border p-2">Total</th>
+          	 	   </tr>
+          	   </thead>
+          	   <tbody>
+            	   {pecas.map((item) => (
+              	   <tr key={item.id}>
+                	   <td className="border p-2">{item.descricao}</td>
+                	   <td className="border p-2 text-center">{item.qtd}</td>
+              	 	   <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+                	   <td className="border p-2 text-right font-medium">
+                  	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                	 	 </td>
+              	   </tr>
+            	   ))}
+        	 	   </tbody>
+          	 </table>
+      	     </>
+    	   )}
 
-      	   {/* Serviços */}
-      	   {servicos.length > 0 && (
-        	   <>
-          	   <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
-          	   <table className="w-full border-collapse text-sm mb-6">
-          	 	   <thead>
-            	 	   <tr className="bg-gray-100">
-              	 	   <th className="text-left border p-2">Descrição</th>
-              	 	   <th className="text-center border p-2">Qtd</th>
-              	 	   <th className="text-right border p-2">Valor Unitário</th>
-              	 	   <th className="text-right border p-2">Total</th>
-            	 	   </tr>
-          	 	   </thead>
-          	 	   <tbody>
-            	 	   {servicos.map((item) => (
-              	 	   <tr key={item.id}>
-                	 	   <td className="border p-2">{item.descricao}</td>
-                	 	   <td className="border p-2 text-center">{item.qtd}</td>
-                	 	   <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-sv               	 	   <td className="border p-2 text-right font-medium">
-                  	 	   {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                	 	   </td>
-              	 	   </tr>
-            	 	   ))}
-          	 	   </tbody>
-          	   </table>
-        	   </>
-      	   )}
+        {/* Serviços */}
+        {servicos.length > 0 && (
+	       <>
+            <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
+            <table className="w-full border-collapse text-sm mb-6">
+              <thead>
+                <tr className="bg-gray-100">
+S               <th className="text-left border p-2">Descrição</th>
+                  <th className="text-center border p-2">Qtd</th>
+                  <th className="text-right border p-2">Valor Unitário</th>
+                  <th className="text-right border p-2">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+  content:               {servicos.map((item) => (
+                  <tr key={item.id}>
+                    <td className="border p-2">{item.descricao}</td>
+CSS                 <td className="border p-2 text-center">{item.qtd}</td>
+                    <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
+CSS                 <td className="border p-2 text-right font-medium">
+                      {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+A           </table>
+          </>
+        )}
 
-      	   {/* Totais */}
-      	   <div className="text-right mb-8">
-        	   <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
-        	   {/* Usa o valor do estado para reflexo imediato na impressão */}
-        	   <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
-        	   <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
-      	   </div>
+        {/* Totais */}
+        <div className="text-right mb-8">
+          <p><strong>Valor Total Orçado:</strong> {formatCurrency(avaria.valor_total_orcamento)}</p>
+          {/* Usa o valor do estado para reflexo imediato na impressão */}
+          <p><strong>Valor Cobrado:</strong> {formatCurrency(parseCurrency(valorCobrado))}</p>
+S         <p><strong>Nº de Parcelas:</strong> {numParcelas || 1}</p>
+        </div>
 
-      	   {/* Assinaturas */}
-      	   <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
-        	   <div className="w-1/3">
-          	   <p className="font-medium">__________________________</p>
-          	   <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
-        	   </div>
-        	   <div className="w-1/3">
-          	   <p className="font-medium">__________________________</p>
-          	   <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
-        	   </div>
-      	   </div>
-    	   </div>
+        {/* Assinaturas */}
+        <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
+          <div className="w-1/3">
+            <p className="font-medium">__________________________</p>
+            <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
+css         </div>
+          <div className="w-1/3">
+            <p className="font-medium">__________________________</p>
+          	 <p className="text-sm mt-1 text-gray-600">Gerente de Manutenção</p>
+          </div>
+        </div>
+    	 </div>
 
-    	   {/* Rodapé */}
-    	   <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
-      	   Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
-    	   </div>
-  	 </div>
+        {/* Rodapé */}
+        <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
+          Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
+  	   </div>
+      </div>
     </>
   );
 }
