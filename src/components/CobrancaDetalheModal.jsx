@@ -1,5 +1,5 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão funcional com seleção de motorista e parse de moeda
+// Versão corrigida (removido CSS/caracteres inválidos do JSX)
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -138,7 +138,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     onSelect={(motorista) => setSelectedMotorista(motorista)}
                     initialValue={selectedMotorista}
                   />
-                ) : (
+          _       ) : (
                   <p>{selectedMotorista.nome || 'N/A'}</p>
                 )}
               </div>
@@ -167,7 +167,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                           <td className="border p-2">{item.descricao}</td>
                           <td className="border p-2 text-right">{item.qtd}</td>
                           <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
-          _               <td className="border p-2 text-right font-medium">
+                          <td className="border p-2 text-right font-medium">
                             {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
                           </td>
                         </tr>
@@ -211,7 +211,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     onChange={(e) => setNumParcelas(e.target.value)}
                     readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
                     className="w-full border rounded-md p-2"
-              _   />
+                  />
                 </div>
                 <div>
                   <label>Valor Cobrado (R$)</label>
@@ -219,10 +219,10 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     type="text"
                     placeholder="Ex: 1234,56"
                     value={valorCobrado}
-              _       onChange={(e) => setValorCobrado(e.target.value)}
+                    onChange={(e) => setValorCobrado(e.target.value)}
                     readOnly={!isEditing && avaria.status_cobranca !== 'Pendente'}
                     className="w-full border rounded-md p-2"
-                  />
+      _           />
                 </div>
               </div>
             </div>
@@ -271,7 +271,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                 <button
                   onClick={() => handleSalvarStatus('Cobrada')}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
-line-height: 1.5;
                 >
                   💾 Salvar Alterações
                 </button>
@@ -279,7 +278,7 @@ line-height: 1.5;
 
               <button
                 onClick={onClose}
-	             className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
               >
                 🚪 Fechar
               </button>
@@ -361,7 +360,7 @@ line-height: 1.5;
             <>
               <h3 className="text-lg font-semibold mb-2">Mão de Obra / Serviços</h3>
               <table className="w-full border-collapse text-sm mb-6">
-    _           <thead>
+                <thead>
                   <tr className="bg-gray-100">
                     <th className="text-left border p-2">Descrição</th>
                     <th className="text-center border p-2">Qtd</th>
@@ -370,14 +369,14 @@ line-height: 1.5;
                   </tr>
                 </thead>
                 <tbody>
-                  {servicos.map((item) => (
+        _         {servicos.map((item) => (
                     <tr key={item.id}>
                       <td className="border p-2">{item.descricao}</td>
                       <td className="border p-2 text-center">{item.qtd}</td>
                       <td className="border p-2 text-right">{formatCurrency(item.valorUnitario)}</td>
                       <td className="border p-2 text-right font-medium">
-          _             {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
-                      </td>
+                        {formatCurrency((item.qtd || 0) * (item.valorUnitario || 0))}
+                _       </td>
                     </tr>
                   ))}
                 </tbody>
@@ -397,18 +396,18 @@ line-height: 1.5;
           <div className="flex justify-between text-center mt-12 pt-6 border-t border-gray-300">
             <div className="w-1/3">
               <p className="font-medium">__________________________</p>
-              <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
+  nbsp;           <p className="text-sm mt-1 text-gray-600">Responsável pela Cobrança</p>
             </div>
             <div className="w-1/3">
               <p className="font-medium">__________________________</p>
-              <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
+nbsp;           <p className="text-sm mt-1 text-gray-600">Supervisor de Manutenção</p>
             </div>
           </div>
         </div>
 
         {/* Rodapé */}
         <div className="absolute bottom-6 left-0 right-0 text-center text-gray-500 text-xs">
-{/* ... o restante do layout de impressão ... */}
+          Relatório gerado automaticamente pelo sistema InovaQuatai 🚍
         </div>
       </div>
     </>
