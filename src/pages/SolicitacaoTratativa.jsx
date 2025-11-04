@@ -31,7 +31,7 @@ export default function SolicitacaoTratativa() {
           await Promise.all([
             supabase.from('tipos_ocorrencia').select('id, nome').order('nome'),
             supabase.from('setores').select('id, nome').order('nome'),
-            supabase.from('linhas').select('id, nome').order('nome'),
+            supabase.from('linhas').select('id, codigo').order('codigo'),
           ]);
 
         if (e1 || e2 || e3) {
