@@ -256,11 +256,6 @@ function renderSuspensaoHtml({
           </div>
 
           <p class="mt bl">
-  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita,
-  encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>,
-  <span class="nowrap">a partir de <span class="label">${br(inicio)}</span></span>, devendo, portanto,
-  apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${br(retorno)}</span></span>,
-  salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
   Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${br(inicio)}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${br(retorno)}</span></span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
 </p>
 
