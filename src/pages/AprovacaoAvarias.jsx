@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { FaCheckCircle, FaTimesCircle, FaEye, FaTimes, FaLock, FaEdit, FaSave } from 'react-icons/fa';
+import { 
+  FaCheckCircle, FaTimesCircle, FaEye, FaTimes, FaLock, 
+  FaEdit, FaSave, FaPlus, FaTrash 
+} from 'react-icons/fa';
 
 // --- Modal de Login ---
 function LoginModal({ onConfirm, onCancel }) {
@@ -68,6 +71,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [prefixo, setPrefixo] = useState('');
   const [valorTotal, setValorTotal] = useState(0);
   const [observacao, setObservacao] = useState('');
+  const [urlsEvidencias, setUrlsEvidencias] = useState([]);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [acaoPendente, setAcaoPendente] = useState(null);
 
@@ -88,6 +92,15 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       setPrefixo(avaria.prefixo || '');
       setValorTotal(avaria.valor_total_orcamento || 0);
       setObservacao(avaria.observacao_operacao || '');
+
+      // 🔧 Trata urls_evidencias
+      let urls = [];
+      if (Array.isArray(avaria.urls_evidencias)) {
+        urls = avaria.urls_evidencias;
+      } else if (typeof avaria.urls_evidencias === 'string') {
+        urls = avaria.urls_evidencias.split(',').map(u => u.trim());
+      }
+      setUrlsEvidencias(urls.filter(u => u));
     }
     setLoadingItens(false);
   }
@@ -95,6 +108,8 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const handleEditChange = (id, field, value) => {
     setItens(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
+
+  const formatCurrency = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const salvarAlteracoes = async () => {
     for (const item of itens) {
@@ -104,18 +119,21 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
         valorUnitario: item.valorUnitario
       }).eq('id', item.id);
     }
+
     await supabase.from('avarias').update({
       prefixo,
       descricao,
-      valor_total_orcamento: valorTotal
+      valor_total_orcamento: valorTotal,
+      observacao_operacao: observacao
     }).eq('id', avaria.id);
+
     alert('Alterações salvas!');
     setEditMode(false);
     onAtualizarStatus();
   };
 
   const handleAprovar = () => { setAcaoPendente('Aprovado'); setLoginModalOpen(true); };
-  const handleReprovar = () => { 
+  const handleReprovar = () => {
     const motivo = prompt("Informe o motivo da reprovação ou o que deve ser corrigido:");
     if (!motivo) {
       alert("Você precisa informar uma observação para reprovar.");
@@ -152,8 +170,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
     onAtualizarStatus();
   };
 
-  const formatCurrency = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
   if (!avaria) return null;
 
   return (
@@ -161,7 +177,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Cabeçalho */}
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria #{avaria.id}</h2>
           <div className="flex items-center gap-2">
             {!editMode ? (
               <button onClick={() => setEditMode(true)} className="bg-yellow-500 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-yellow-600">
@@ -180,6 +196,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
         {/* Corpo */}
         <div className="p-6 space-y-4 overflow-y-auto">
+          {/* Dados */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm text-gray-500">Prefixo</label>
@@ -191,7 +208,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             </div>
             <div>
               <label className="text-sm text-gray-500">Motorista</label>
-              <p>{avaria.motoristaId}</p>
+              <p>{avaria.motoristaId || '—'}</p>
             </div>
             <div>
               <label className="text-sm text-gray-500">Data</label>
@@ -199,6 +216,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             </div>
           </div>
 
+          {/* Descrição */}
           <div>
             <label className="text-sm text-gray-500">Descrição</label>
             {editMode ? (
@@ -208,12 +226,30 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             )}
           </div>
 
-          {/* Observação Operacional */}
+          {/* Observação */}
           <div>
-            <label className="text-sm text-gray-500">Observação de Reprovação</label>
-            <p className="bg-gray-50 p-2 border rounded min-h-[60px]">
-              {observacao || "—"}
-            </p>
+            <label className="text-sm text-gray-500">Observação / Motivo</label>
+            <p className="bg-gray-50 p-2 border rounded min-h-[60px]">{observacao || '—'}</p>
+          </div>
+
+          {/* Evidências */}
+          <div>
+            <h3 className="font-semibold text-gray-800 mb-2">Evidências (Fotos e Vídeos)</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {urlsEvidencias.length > 0 ? (
+                urlsEvidencias.map((url, index) => (
+                  <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="border rounded-lg overflow-hidden hover:opacity-80">
+                    {url.match(/\.(mp4|mov|webm)$/i) ? (
+                      <video controls src={url} className="w-full h-32 object-cover" />
+                    ) : (
+                      <img src={url} alt={`Evidência ${index + 1}`} className="w-full h-32 object-cover" />
+                    )}
+                  </a>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm">Nenhuma evidência anexada.</p>
+              )}
+            </div>
           </div>
 
           {/* Itens */}
@@ -244,6 +280,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             )}
           </div>
 
+          {/* Total */}
           <div className="text-right text-xl font-bold border-t pt-2">
             Total: {editMode ? (
               <input type="number" className="border p-1 rounded text-right" value={valorTotal} onChange={(e) => setValorTotal(e.target.value)} />
@@ -263,9 +300,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
           </button>
         </div>
 
-        {loginModalOpen && (
-          <LoginModal onConfirm={confirmarAprovacao} onCancel={() => setLoginModalOpen(false)} />
-        )}
+        {loginModalOpen && <LoginModal onConfirm={confirmarAprovacao} onCancel={() => setLoginModalOpen(false)} />}
       </div>
     </div>
   );
@@ -296,24 +331,36 @@ export default function AprovacaoAvarias() {
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
-            <tr><th className="py-2 px-3 text-left">Data</th><th className="py-2 px-3 text-left">Prefixo</th><th className="py-2 px-3 text-left">Tipo</th><th className="py-2 px-3 text-left">Valor</th><th className="py-2 px-3 text-left">Ações</th></tr>
+            <tr>
+              <th className="py-2 px-3 text-left">Data</th>
+              <th className="py-2 px-3 text-left">Prefixo</th>
+              <th className="py-2 px-3 text-left">Tipo</th>
+              <th className="py-2 px-3 text-left">Valor</th>
+              <th className="py-2 px-3 text-left">Ações</th>
+            </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="5" className="text-center p-4">Carregando...</td></tr> :
-              avarias.length === 0 ? <tr><td colSpan="5" className="text-center p-4 text-gray-600">Nenhuma avaria pendente.</td></tr> :
-                avarias.map(a => (
-                  <tr key={a.id} className="border-t hover:bg-gray-50">
-                    <td className="py-2 px-3">{new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
-                    <td className="py-2 px-3">{a.prefixo}</td>
-                    <td className="py-2 px-3">{a.tipoOcorrencia}</td>
-                    <td className="py-2 px-3 font-medium">{(a.valor_total_orcamento || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td className="py-2 px-3">
-                      <button onClick={() => setSelected(a)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1">
-                        <FaEye /> Ver Detalhes
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+            {loading ? (
+              <tr><td colSpan="5" className="text-center p-4">Carregando...</td></tr>
+            ) : avarias.length === 0 ? (
+              <tr><td colSpan="5" className="text-center p-4 text-gray-600">Nenhuma avaria pendente.</td></tr>
+            ) : (
+              avarias.map(a => (
+                <tr key={a.id} className="border-t hover:bg-gray-50">
+                  <td className="py-2 px-3">{new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
+                  <td className="py-2 px-3">{a.prefixo}</td>
+                  <td className="py-2 px-3">{a.tipoOcorrencia}</td>
+                  <td className="py-2 px-3 font-medium">
+                    {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className="py-2 px-3">
+                    <button onClick={() => setSelected(a)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1">
+                      <FaEye /> Ver Detalhes
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
