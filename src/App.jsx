@@ -28,6 +28,7 @@ export default function App() {
         <Route path="/lancar-avaria" element={<LancarAvaria />} />
         <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
+        <Route path="/avarias-reprovadas" element={<AvariasReprovadas />} />
       </Route>
 
       {/* Rotas públicas comentadas */}
