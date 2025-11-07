@@ -10,6 +10,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   const [prefixo, setPrefixo] = useState('');
   const [valorTotal, setValorTotal] = useState(0);
   const [observacao, setObservacao] = useState('');
+  const [urlsEvidencias, setUrlsEvidencias] = useState([]);
 
   useEffect(() => {
     if (avaria) carregarItens();
@@ -27,6 +28,15 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
       setPrefixo(avaria.prefixo || '');
       setValorTotal(avaria.valor_total_orcamento || 0);
       setObservacao(avaria.observacao_operacao || '');
+
+      // 🔧 Trata urls_evidencias (array ou string)
+      let urls = [];
+      if (Array.isArray(avaria.urls_evidencias)) {
+        urls = avaria.urls_evidencias;
+      } else if (typeof avaria.urls_evidencias === 'string') {
+        urls = avaria.urls_evidencias.split(',').map(u => u.trim());
+      }
+      setUrlsEvidencias(urls.filter(u => u));
     }
     setLoadingItens(false);
   }
@@ -114,6 +124,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto">
+          {/* Dados Principais */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm text-gray-500">Prefixo</label>
@@ -134,6 +145,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             </div>
           </div>
 
+          {/* Descrição */}
           <div>
             <label className="text-sm text-gray-500">Descrição</label>
             <textarea
@@ -144,6 +156,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             />
           </div>
 
+          {/* Observação / Motivo */}
           <div>
             <label className="text-sm text-gray-500">Observação / Motivo de Reprovação</label>
             <textarea
@@ -152,6 +165,32 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
             />
+          </div>
+
+          {/* Evidências */}
+          <div>
+            <h3 className="font-semibold text-gray-800 mb-2">Evidências (Fotos e Vídeos)</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {urlsEvidencias.length > 0 ? (
+                urlsEvidencias.map((url, index) => (
+                  <a
+                    key={index}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border rounded-lg overflow-hidden hover:opacity-80"
+                  >
+                    {url.match(/\.(mp4|mov|webm)$/i) ? (
+                      <video controls src={url} className="w-full h-32 object-cover" />
+                    ) : (
+                      <img src={url} alt={`Evidência ${index + 1}`} className="w-full h-32 object-cover" />
+                    )}
+                  </a>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm">Nenhuma evidência anexada.</p>
+              )}
+            </div>
           </div>
 
           {/* Itens */}
@@ -212,6 +251,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             )}
           </div>
 
+          {/* Total */}
           <div className="text-right text-xl font-bold border-t pt-2">
             Total:
             <input
@@ -224,6 +264,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
           </div>
         </div>
 
+        {/* Botões */}
         <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
           <button
             onClick={() => salvarAlteracoes()}
