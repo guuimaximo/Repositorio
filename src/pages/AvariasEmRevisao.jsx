@@ -1,11 +1,12 @@
-// src/pages/AvariasReprovadas.jsx
+// src/pages/AvariasEmRevisao.jsx
+// Página atualizada com o nome "Pendências de Revisão"
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { FaEye, FaUndo, FaTimes } from 'react-icons/fa';
 
 // --- Modal de Detalhes ---
-function ModalDetalhesReprovada({ avaria, onClose, onReverter }) {
+function ModalPendenciaRevisao({ avaria, onClose, onReverter }) {
   if (!avaria) return null;
 
   const formatCurrency = (v) =>
@@ -15,7 +16,7 @@ function ModalDetalhesReprovada({ avaria, onClose, onReverter }) {
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria Reprovada</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Detalhes da Pendência</h2>
           <button onClick={onClose} className="text-gray-600 hover:text-gray-900">
             <FaTimes size={20} />
           </button>
@@ -76,12 +77,12 @@ function ModalDetalhesReprovada({ avaria, onClose, onReverter }) {
 }
 
 // --- Página Principal ---
-export default function AvariasReprovadas() {
+export default function AvariasEmRevisao() {
   const [avarias, setAvarias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
 
-  async function carregarReprovadas() {
+  async function carregarPendencias() {
     setLoading(true);
     const { data, error } = await supabase
       .from('avarias')
@@ -90,8 +91,8 @@ export default function AvariasReprovadas() {
       .order('aprovado_em', { ascending: false });
 
     if (error) {
-      console.error('Erro ao buscar avarias reprovadas:', error);
-      alert('Erro ao carregar avarias reprovadas.');
+      console.error('Erro ao buscar pendências:', error);
+      alert('Erro ao carregar pendências de revisão.');
     } else {
       setAvarias(data || []);
     }
@@ -99,11 +100,11 @@ export default function AvariasReprovadas() {
   }
 
   useEffect(() => {
-    carregarReprovadas();
+    carregarPendencias();
   }, []);
 
   async function reverterParaPendente(id) {
-    if (!window.confirm('Deseja realmente reverter esta avaria para pendente?')) return;
+    if (!window.confirm('Deseja realmente reverter esta pendência para aprovação novamente?')) return;
 
     const { error } = await supabase
       .from('avarias')
@@ -115,18 +116,18 @@ export default function AvariasReprovadas() {
       return;
     }
 
-    alert('Avaria revertida para pendente com sucesso!');
+    alert('Avaria revertida para pendente de aprovação!');
     setSelected(null);
-    carregarReprovadas();
+    carregarPendencias();
   }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Avarias Reprovadas</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
 
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
-          <thead className="bg-red-600 text-white">
+          <thead className="bg-yellow-600 text-white">
             <tr>
               <th className="py-2 px-3 text-left">Data</th>
               <th className="py-2 px-3 text-left">Prefixo</th>
@@ -140,7 +141,7 @@ export default function AvariasReprovadas() {
             {loading ? (
               <tr><td colSpan="6" className="text-center p-4">Carregando...</td></tr>
             ) : avarias.length === 0 ? (
-              <tr><td colSpan="6" className="text-center p-4 text-gray-600">Nenhuma avaria reprovada.</td></tr>
+              <tr><td colSpan="6" className="text-center p-4 text-gray-600">Nenhuma pendência de revisão encontrada.</td></tr>
             ) : (
               avarias.map((avaria) => (
                 <tr key={avaria.id} className="border-t hover:bg-gray-50">
@@ -169,7 +170,7 @@ export default function AvariasReprovadas() {
       </div>
 
       {selected && (
-        <ModalDetalhesReprovada
+        <ModalPendenciaRevisao
           avaria={selected}
           onClose={() => setSelected(null)}
           onReverter={reverterParaPendente}
