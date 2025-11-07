@@ -65,7 +65,9 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [loadingItens, setLoadingItens] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [descricao, setDescricao] = useState('');
+  const [prefixo, setPrefixo] = useState('');
   const [valorTotal, setValorTotal] = useState(0);
+  const [observacao, setObservacao] = useState('');
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [acaoPendente, setAcaoPendente] = useState(null);
 
@@ -83,7 +85,9 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
     if (!error && data) {
       setItens(data);
       setDescricao(avaria.descricao || '');
+      setPrefixo(avaria.prefixo || '');
       setValorTotal(avaria.valor_total_orcamento || 0);
+      setObservacao(avaria.observacao_operacao || '');
     }
     setLoadingItens(false);
   }
@@ -101,6 +105,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       }).eq('id', item.id);
     }
     await supabase.from('avarias').update({
+      prefixo,
       descricao,
       valor_total_orcamento: valorTotal
     }).eq('id', avaria.id);
@@ -110,19 +115,34 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   };
 
   const handleAprovar = () => { setAcaoPendente('Aprovado'); setLoginModalOpen(true); };
-  const handleReprovar = () => { setAcaoPendente('Reprovado'); setLoginModalOpen(true); };
+  const handleReprovar = () => { 
+    const motivo = prompt("Informe o motivo da reprovação ou o que deve ser corrigido:");
+    if (!motivo) {
+      alert("Você precisa informar uma observação para reprovar.");
+      return;
+    }
+    setObservacao(motivo);
+    setAcaoPendente('Reprovado');
+    setLoginModalOpen(true);
+  };
 
   const confirmarAprovacao = async (nomeAprovador) => {
     setLoginModalOpen(false);
+    const updateData = {
+      status: acaoPendente,
+      aprovado_por: nomeAprovador,
+      aprovado_em: new Date().toISOString(),
+      observacao_operacao: observacao
+    };
+    if (acaoPendente === 'Aprovado') {
+      updateData.status_cobranca = 'Pendente';
+    }
+
     const { error } = await supabase
       .from('avarias')
-      .update({
-        status: acaoPendente,
-        aprovado_por: nomeAprovador,
-        aprovado_em: new Date().toISOString(),
-        ...(acaoPendente === 'Aprovado' ? { status_cobranca: 'Pendente' } : {})
-      })
+      .update(updateData)
       .eq('id', avaria.id);
+
     if (error) {
       alert('Erro ao atualizar: ' + error.message);
       return;
@@ -139,6 +159,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 p-4 z-40">
       <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+        {/* Cabeçalho */}
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria</h2>
           <div className="flex items-center gap-2">
@@ -157,11 +178,25 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
           </div>
         </div>
 
+        {/* Corpo */}
         <div className="p-6 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label className="text-sm text-gray-500">Prefixo</label><p>{avaria.prefixo}</p></div>
-            <div><label className="text-sm text-gray-500">Motorista</label><p>{avaria.motoristaId}</p></div>
-            <div><label className="text-sm text-gray-500">Data</label><p>{new Date(avaria.dataAvaria).toLocaleDateString('pt-BR')}</p></div>
+            <div>
+              <label className="text-sm text-gray-500">Prefixo</label>
+              {editMode ? (
+                <input type="text" className="border p-2 rounded w-full" value={prefixo} onChange={(e) => setPrefixo(e.target.value)} />
+              ) : (
+                <p>{prefixo}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm text-gray-500">Motorista</label>
+              <p>{avaria.motoristaId}</p>
+            </div>
+            <div>
+              <label className="text-sm text-gray-500">Data</label>
+              <p>{new Date(avaria.dataAvaria).toLocaleDateString('pt-BR')}</p>
+            </div>
           </div>
 
           <div>
@@ -173,6 +208,15 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             )}
           </div>
 
+          {/* Observação Operacional */}
+          <div>
+            <label className="text-sm text-gray-500">Observação de Reprovação</label>
+            <p className="bg-gray-50 p-2 border rounded min-h-[60px]">
+              {observacao || "—"}
+            </p>
+          </div>
+
+          {/* Itens */}
           <div>
             <h3 className="font-semibold text-gray-800 mb-2">Itens do Orçamento</h3>
             {loadingItens ? (
@@ -209,6 +253,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
           </div>
         </div>
 
+        {/* Rodapé */}
         <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
           <button onClick={handleReprovar} className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 flex items-center gap-1">
             <FaTimesCircle /> Reprovar
