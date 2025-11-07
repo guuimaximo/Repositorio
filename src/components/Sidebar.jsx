@@ -68,6 +68,7 @@ export default function Sidebar() {
         {avariasOpen && (
           <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
             <NavLink to="/lancar-avaria" className={subNavLinkClass}> <FaWrench /> <span>Lançamento</span> </NavLink>
+            <NavLink to="/avarias-reprovadas">Pendências de Revisão</NavLink>
             <NavLink to="/aprovar-avarias" className={subNavLinkClass}> <FaClipboardCheck /> <span>Aprovações</span> </NavLink>
             <NavLink to="/cobrancas" className={subNavLinkClass}> <FaMoneyBill /> <span>Cobranças</span> </NavLink>
           </div>
