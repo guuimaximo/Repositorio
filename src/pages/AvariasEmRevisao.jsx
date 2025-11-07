@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
-import { FaUndo, FaEdit, FaSave, FaEye } from 'react-icons/fa';
+import { FaUndo, FaEdit, FaSave, FaPlus, FaTrash } from 'react-icons/fa';
 
 // --- Modal de Edição Completa ---
 function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
@@ -37,26 +37,55 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
   const formatCurrency = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // 🧩 Atualiza todos os itens e avaria
+  // ➕ Adicionar novo item
+  const adicionarItem = () => {
+    const novo = {
+      id: Date.now(),
+      descricao: '',
+      qtd: 1,
+      valorUnitario: 0,
+      tipo: 'Peca',
+      avaria_id: avaria.id,
+      novo: true
+    };
+    setItens(prev => [...prev, novo]);
+  };
+
+  // 🗑️ Remover item
+  const removerItem = async (id, novo) => {
+    if (!novo) {
+      await supabase.from('cobrancas_avarias').delete().eq('id', id);
+    }
+    setItens(prev => prev.filter(i => i.id !== id));
+  };
+
+  // 💾 Atualiza todos os itens e avaria
   async function salvarAlteracoes(statusFinal = null) {
-    // Atualiza itens
     for (const item of itens) {
-      await supabase.from('cobrancas_avarias').update({
-        descricao: item.descricao,
-        qtd: item.qtd,
-        valorUnitario: item.valorUnitario,
-        tipo: item.tipo
-      }).eq('id', item.id);
+      if (item.novo) {
+        await supabase.from('cobrancas_avarias').insert([{
+          descricao: item.descricao,
+          qtd: item.qtd,
+          valorUnitario: item.valorUnitario,
+          tipo: item.tipo,
+          avaria_id: avaria.id
+        }]);
+      } else {
+        await supabase.from('cobrancas_avarias').update({
+          descricao: item.descricao,
+          qtd: item.qtd,
+          valorUnitario: item.valorUnitario,
+          tipo: item.tipo
+        }).eq('id', item.id);
+      }
     }
 
-    // Atualiza avaria
     const updateData = {
       prefixo,
       descricao,
       valor_total_orcamento: valorTotal,
       observacao_operacao: observacao
     };
-
     if (statusFinal) updateData.status = statusFinal;
 
     const { error } = await supabase.from('avarias').update(updateData).eq('id', avaria.id);
@@ -68,7 +97,6 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     alert(statusFinal
       ? 'Correções salvas e avaria reenviada para aprovação!'
       : 'Correções salvas com sucesso!');
-
     onAtualizarLista();
     onClose();
   }
@@ -126,29 +154,41 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             />
           </div>
 
+          {/* Itens */}
           <div>
-            <h3 className="font-semibold text-gray-800 mb-2">Itens do Orçamento</h3>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold text-gray-800">Itens do Orçamento</h3>
+              <button
+                onClick={adicionarItem}
+                className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+              >
+                <FaPlus /> Adicionar Item
+              </button>
+            </div>
             {loadingItens ? (
               <p>Carregando...</p>
             ) : itens.length > 0 ? (
               itens.map(item => (
-                <div key={item.id} className="grid grid-cols-4 gap-2 p-2 bg-gray-50 rounded mb-1">
+                <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
                   <input
                     className="border p-1 rounded"
                     value={item.descricao || ''}
                     onChange={(e) => handleEditChange(item.id, 'descricao', e.target.value)}
+                    placeholder="Descrição"
                   />
                   <input
                     className="border p-1 rounded text-center"
                     type="number"
                     value={item.qtd || 0}
                     onChange={(e) => handleEditChange(item.id, 'qtd', e.target.value)}
+                    placeholder="Qtd"
                   />
                   <input
                     className="border p-1 rounded text-center"
                     type="number"
                     value={item.valorUnitario || 0}
                     onChange={(e) => handleEditChange(item.id, 'valorUnitario', e.target.value)}
+                    placeholder="Valor Unitário"
                   />
                   <select
                     className="border p-1 rounded"
@@ -158,6 +198,13 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
                     <option value="Peca">Peça</option>
                     <option value="Servico">Serviço</option>
                   </select>
+                  <button
+                    onClick={() => removerItem(item.id, item.novo)}
+                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                    title="Excluir Item"
+                  >
+                    <FaTrash />
+                  </button>
                 </div>
               ))
             ) : (
