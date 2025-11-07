@@ -1,12 +1,13 @@
+// src/pages/AprovacaoAvarias.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { 
-  FaCheckCircle, FaTimesCircle, FaEye, FaTimes, FaLock, 
-  FaEdit, FaSave, FaPlus, FaTrash 
+import {
+  FaCheckCircle, FaTimesCircle, FaEye, FaTimes, FaLock,
+  FaEdit, FaSave, FaPlus, FaTrash
 } from 'react-icons/fa';
 
 // --- Modal de Login ---
-function LoginModal({ onConfirm, onCancel }) {
+function LoginModal({ onConfirm, onCancel, title = 'Aprovação Restrita' }) {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,14 +27,14 @@ function LoginModal({ onConfirm, onCancel }) {
       alert('Login ou senha incorretos!');
       return;
     }
-    onConfirm(data.nome);
+    onConfirm({ nome: data.nome, login: data.login });
   }
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50">
       <div className="bg-white p-6 rounded-lg shadow-lg w-80">
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-          <FaLock /> Aprovação Restrita
+          <FaLock /> {title}
         </h2>
         <input
           type="text"
@@ -53,7 +54,11 @@ function LoginModal({ onConfirm, onCancel }) {
           <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
             Cancelar
           </button>
-          <button onClick={handleLogin} disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
             {loading ? 'Verificando...' : 'Entrar'}
           </button>
         </div>
@@ -67,13 +72,16 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [itens, setItens] = useState([]);
   const [loadingItens, setLoadingItens] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [editorInfo, setEditorInfo] = useState(null); // {nome, login}
   const [descricao, setDescricao] = useState('');
   const [prefixo, setPrefixo] = useState('');
   const [valorTotal, setValorTotal] = useState(0);
   const [observacao, setObservacao] = useState('');
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [acaoPendente, setAcaoPendente] = useState(null);
+  const [loginTitle, setLoginTitle] = useState('Aprovação Restrita');
+  const [acaoPendente, setAcaoPendente] = useState(null); // 'approve' | 'reject' | 'edit'
+  const [motivoReprovacao, setMotivoReprovacao] = useState('');
 
   useEffect(() => {
     if (!avaria) return;
@@ -86,105 +94,220 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       .from('cobrancas_avarias')
       .select('*')
       .eq('avaria_id', avaria.id);
-    if (!error && data) {
-      setItens(data);
+
+    if (!error) {
+      setItens(data || []);
       setDescricao(avaria.descricao || '');
       setPrefixo(avaria.prefixo || '');
       setValorTotal(avaria.valor_total_orcamento || 0);
       setObservacao(avaria.observacao_operacao || '');
-
-      // 🔧 Trata urls_evidencias
+      // Evidências: aceita array ou string
       let urls = [];
       if (Array.isArray(avaria.urls_evidencias)) {
         urls = avaria.urls_evidencias;
       } else if (typeof avaria.urls_evidencias === 'string') {
-        urls = avaria.urls_evidencias.split(',').map(u => u.trim());
+        urls = avaria.urls_evidencias.split(',').map((u) => u.trim());
       }
-      setUrlsEvidencias(urls.filter(u => u));
+      setUrlsEvidencias((urls || []).filter(Boolean));
+    } else {
+      alert('Erro ao carregar itens: ' + error.message);
     }
     setLoadingItens(false);
   }
 
-  const handleEditChange = (id, field, value) => {
-    setItens(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
-  };
+  const formatCurrency = (v) =>
+    (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  const formatCurrency = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  // ---- LOGIN FLOW ----
+  function solicitarLogin(acao, titulo) {
+    setAcaoPendente(acao);
+    setLoginTitle(titulo);
+    setLoginModalOpen(true);
+  }
 
-  const salvarAlteracoes = async () => {
-    for (const item of itens) {
-      await supabase.from('cobrancas_avarias').update({
-        descricao: item.descricao,
-        qtd: item.qtd,
-        valorUnitario: item.valorUnitario
-      }).eq('id', item.id);
+  async function onLoginConfirm({ nome }) {
+    setLoginModalOpen(false);
+
+    if (acaoPendente === 'edit') {
+      // habilita modo edição
+      setEditorInfo({ nome });
+      setEditMode(true);
+      return;
     }
 
-    await supabase.from('avarias').update({
-      prefixo,
-      descricao,
-      valor_total_orcamento: valorTotal,
-      observacao_operacao: observacao
-    }).eq('id', avaria.id);
+    if (acaoPendente === 'approve') {
+      await confirmarAprovacao(nome);
+      return;
+    }
+
+    if (acaoPendente === 'reject') {
+      if (!motivoReprovacao || !motivoReprovacao.trim()) {
+        alert('Informe o motivo da reprovação.');
+        return;
+      }
+      await confirmarReprovacao(nome, motivoReprovacao.trim());
+      return;
+    }
+  }
+
+  // ---- ITENS: edição básica (salvos com botão "Salvar") ----
+  const handleEditChange = (id, field, value) => {
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+  };
+
+  async function salvarAlteracoes() {
+    // Atualiza itens existentes
+    for (const item of itens) {
+      if (item.id && !item.__novo) {
+        const { error } = await supabase
+          .from('cobrancas_avarias')
+          .update({
+            descricao: item.descricao,
+            qtd: item.qtd,
+            valorUnitario: item.valorUnitario,
+            tipo: item.tipo,
+          })
+          .eq('id', item.id);
+        if (error) {
+          alert('Erro ao salvar item: ' + error.message);
+          return;
+        }
+      }
+    }
+
+    // Atualiza avaria
+    const { error: errAvaria } = await supabase
+      .from('avarias')
+      .update({
+        prefixo,
+        descricao,
+        valor_total_orcamento: valorTotal,
+        observacao_operacao: observacao,
+      })
+      .eq('id', avaria.id);
+
+    if (errAvaria) {
+      alert('Erro ao salvar avaria: ' + errAvaria.message);
+      return;
+    }
 
     alert('Alterações salvas!');
     setEditMode(false);
     onAtualizarStatus();
-  };
+  }
 
-  const handleAprovar = () => { setAcaoPendente('Aprovado'); setLoginModalOpen(true); };
-  const handleReprovar = () => {
-    const motivo = prompt("Informe o motivo da reprovação ou o que deve ser corrigido:");
-    if (!motivo) {
-      alert("Você precisa informar uma observação para reprovar.");
+  // ---- ADICIONAR ITENS (auto-insert) ----
+  async function adicionarItem(tipo) {
+    if (!editMode) {
+      alert('Entre em modo de edição para adicionar itens.');
       return;
     }
-    setObservacao(motivo);
-    setAcaoPendente('Reprovado');
-    setLoginModalOpen(true);
-  };
-
-  const confirmarAprovacao = async (nomeAprovador) => {
-    setLoginModalOpen(false);
-    const updateData = {
-      status: acaoPendente,
-      aprovado_por: nomeAprovador,
-      aprovado_em: new Date().toISOString(),
-      observacao_operacao: observacao
+    const novoItem = {
+      avaria_id: avaria.id,
+      descricao: '',
+      qtd: 1,
+      valorUnitario: 0,
+      tipo, // 'Peca' | 'Servico'
     };
-    if (acaoPendente === 'Aprovado') {
-      updateData.status_cobranca = 'Pendente';
-    }
 
-    const { error } = await supabase
-      .from('avarias')
-      .update(updateData)
-      .eq('id', avaria.id);
+    const { data, error } = await supabase
+      .from('cobrancas_avarias')
+      .insert([novoItem])
+      .select('*')
+      .single();
 
     if (error) {
-      alert('Erro ao atualizar: ' + error.message);
+      alert('Erro ao adicionar item: ' + error.message);
       return;
     }
-    alert(`Avaria ${acaoPendente.toLowerCase()} por ${nomeAprovador}`);
+
+    setItens((prev) => [...prev, data]);
+  }
+
+  // Remover item
+  async function removerItem(id) {
+    if (!editMode) {
+      alert('Entre em modo de edição para remover itens.');
+      return;
+    }
+    const { error } = await supabase.from('cobrancas_avarias').delete().eq('id', id);
+    if (error) {
+      alert('Erro ao remover item: ' + error.message);
+      return;
+    }
+    setItens((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  // ---- APROVAR / REPROVAR ----
+  function handleAprovar() {
+    solicitarLogin('approve', 'Confirmar Aprovação');
+  }
+
+  function handleReprovar() {
+    const motivo = prompt('Informe o motivo da reprovação ou o que deve ser corrigido:');
+    if (!motivo) return;
+    setMotivoReprovacao(motivo);
+    solicitarLogin('reject', 'Confirmar Reprovação');
+  }
+
+  async function confirmarAprovacao(nomeAprovador) {
+    const updateData = {
+      status: 'Aprovado',
+      aprovado_por: nomeAprovador,
+      aprovado_em: new Date().toISOString(),
+      // mantém observacao_operacao como está
+      status_cobranca: 'Pendente',
+    };
+
+    const { error } = await supabase.from('avarias').update(updateData).eq('id', avaria.id);
+    if (error) {
+      alert('Erro ao aprovar: ' + error.message);
+      return;
+    }
+    alert(`Avaria aprovada por ${nomeAprovador}.`);
     onClose();
     onAtualizarStatus();
-  };
+  }
+
+  async function confirmarReprovacao(nomeAprovador, motivo) {
+    const updateData = {
+      status: 'Reprovado',
+      aprovado_por: nomeAprovador,
+      aprovado_em: new Date().toISOString(),
+      observacao_operacao: motivo,
+    };
+
+    const { error } = await supabase.from('avarias').update(updateData).eq('id', avaria.id);
+    if (error) {
+      alert('Erro ao reprovar: ' + error.message);
+      return;
+    }
+    alert(`Avaria reprovada por ${nomeAprovador}.`);
+    onClose();
+    onAtualizarStatus();
+  }
 
   if (!avaria) return null;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 p-4 z-40">
-      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
         {/* Cabeçalho */}
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-2xl font-bold text-gray-800">Detalhes da Avaria #{avaria.id}</h2>
           <div className="flex items-center gap-2">
             {!editMode ? (
-              <button onClick={() => setEditMode(true)} className="bg-yellow-500 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-yellow-600">
+              <button
+                onClick={() => solicitarLogin('edit', 'Entrar para Editar')}
+                className="bg-yellow-500 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-yellow-600"
+              >
                 <FaEdit /> Editar
               </button>
             ) : (
-              <button onClick={salvarAlteracoes} className="bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700">
+              <button
+                onClick={salvarAlteracoes}
+                className="bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"
+              >
                 <FaSave /> Salvar
               </button>
             )}
@@ -201,7 +324,12 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             <div>
               <label className="text-sm text-gray-500">Prefixo</label>
               {editMode ? (
-                <input type="text" className="border p-2 rounded w-full" value={prefixo} onChange={(e) => setPrefixo(e.target.value)} />
+                <input
+                  type="text"
+                  className="border p-2 rounded w-full"
+                  value={prefixo}
+                  onChange={(e) => setPrefixo(e.target.value)}
+                />
               ) : (
                 <p>{prefixo}</p>
               )}
@@ -220,16 +348,30 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
           <div>
             <label className="text-sm text-gray-500">Descrição</label>
             {editMode ? (
-              <textarea className="w-full border p-2 rounded" rows="3" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+              <textarea
+                className="w-full border p-2 rounded"
+                rows="3"
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+              />
             ) : (
-              <p className="bg-gray-50 p-2 border rounded">{descricao}</p>
+              <p className="bg-gray-50 p-2 border rounded">{descricao || '—'}</p>
             )}
           </div>
 
           {/* Observação */}
           <div>
             <label className="text-sm text-gray-500">Observação / Motivo</label>
-            <p className="bg-gray-50 p-2 border rounded min-h-[60px]">{observacao || '—'}</p>
+            {editMode ? (
+              <textarea
+                className="w-full border p-2 rounded bg-yellow-50"
+                rows="3"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+              />
+            ) : (
+              <p className="bg-gray-50 p-2 border rounded min-h-[60px]">{observacao || '—'}</p>
+            )}
           </div>
 
           {/* Evidências */}
@@ -238,7 +380,13 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {urlsEvidencias.length > 0 ? (
                 urlsEvidencias.map((url, index) => (
-                  <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="border rounded-lg overflow-hidden hover:opacity-80">
+                  <a
+                    key={index}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border rounded-lg overflow-hidden hover:opacity-80"
+                  >
                     {url.match(/\.(mp4|mov|webm)$/i) ? (
                       <video controls src={url} className="w-full h-32 object-cover" />
                     ) : (
@@ -254,23 +402,79 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
           {/* Itens */}
           <div>
-            <h3 className="font-semibold text-gray-800 mb-2">Itens do Orçamento</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-gray-800">Itens do Orçamento</h3>
+              {editMode && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => adicionarItem('Peca')}
+                    className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                    title="Adicionar Peça"
+                  >
+                    <FaPlus /> Peça
+                  </button>
+                  <button
+                    onClick={() => adicionarItem('Servico')}
+                    className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 text-sm"
+                    title="Adicionar Serviço"
+                  >
+                    <FaPlus /> Serviço
+                  </button>
+                </div>
+              )}
+            </div>
+
             {loadingItens ? (
               <p>Carregando...</p>
             ) : itens.length > 0 ? (
-              itens.map(item => (
-                <div key={item.id} className="grid grid-cols-3 gap-2 p-2 bg-gray-50 rounded mb-1">
+              itens.map((item) => (
+                <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
                   {editMode ? (
                     <>
-                      <input className="border p-1 rounded" value={item.descricao || ''} onChange={(e) => handleEditChange(item.id, 'descricao', e.target.value)} />
-                      <input className="border p-1 rounded" type="number" value={item.qtd || 0} onChange={(e) => handleEditChange(item.id, 'qtd', e.target.value)} />
-                      <input className="border p-1 rounded text-right" type="number" value={item.valorUnitario || 0} onChange={(e) => handleEditChange(item.id, 'valorUnitario', e.target.value)} />
+                      <input
+                        className="border p-1 rounded"
+                        value={item.descricao || ''}
+                        onChange={(e) => handleEditChange(item.id, 'descricao', e.target.value)}
+                        placeholder="Descrição"
+                      />
+                      <input
+                        className="border p-1 rounded text-center"
+                        type="number"
+                        value={item.qtd || 0}
+                        onChange={(e) => handleEditChange(item.id, 'qtd', e.target.value)}
+                        placeholder="Qtd"
+                      />
+                      <input
+                        className="border p-1 rounded text-center"
+                        type="number"
+                        value={item.valorUnitario || 0}
+                        onChange={(e) => handleEditChange(item.id, 'valorUnitario', e.target.value)}
+                        placeholder="Valor Unitário"
+                      />
+                      <select
+                        className="border p-1 rounded"
+                        value={item.tipo || 'Peca'}
+                        onChange={(e) => handleEditChange(item.id, 'tipo', e.target.value)}
+                      >
+                        <option value="Peca">Peça</option>
+                        <option value="Servico">Serviço</option>
+                      </select>
+                      <button
+                        onClick={() => removerItem(item.id)}
+                        className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                        title="Excluir Item"
+                      >
+                        <FaTrash />
+                      </button>
                     </>
                   ) : (
                     <>
-                      <span>{item.descricao}</span>
+                      <span className="col-span-2">{item.descricao}</span>
                       <span>{item.qtd} x {formatCurrency(item.valorUnitario)}</span>
-                      <span className="text-right">{formatCurrency(item.qtd * item.valorUnitario)}</span>
+                      <span className="text-right font-medium">
+                        {formatCurrency((Number(item.qtd) || 0) * (Number(item.valorUnitario) || 0))}
+                      </span>
+                      <span className="text-xs text-gray-500 text-right">{item.tipo}</span>
                     </>
                   )}
                 </div>
@@ -282,8 +486,14 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
           {/* Total */}
           <div className="text-right text-xl font-bold border-t pt-2">
-            Total: {editMode ? (
-              <input type="number" className="border p-1 rounded text-right" value={valorTotal} onChange={(e) => setValorTotal(e.target.value)} />
+            Total:{' '}
+            {editMode ? (
+              <input
+                type="number"
+                className="border p-1 rounded text-right w-40"
+                value={valorTotal}
+                onChange={(e) => setValorTotal(e.target.value)}
+              />
             ) : (
               formatCurrency(valorTotal)
             )}
@@ -292,15 +502,27 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
 
         {/* Rodapé */}
         <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
-          <button onClick={handleReprovar} className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 flex items-center gap-1">
+          <button
+            onClick={handleReprovar}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 flex items-center gap-1"
+          >
             <FaTimesCircle /> Reprovar
           </button>
-          <button onClick={handleAprovar} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-1">
+          <button
+            onClick={handleAprovar}
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-1"
+          >
             <FaCheckCircle /> Aprovar
           </button>
         </div>
 
-        {loginModalOpen && <LoginModal onConfirm={confirmarAprovacao} onCancel={() => setLoginModalOpen(false)} />}
+        {loginModalOpen && (
+          <LoginModal
+            title={loginTitle}
+            onConfirm={onLoginConfirm}
+            onCancel={() => setLoginModalOpen(false)}
+          />
+        )}
       </div>
     </div>
   );
@@ -345,7 +567,7 @@ export default function AprovacaoAvarias() {
             ) : avarias.length === 0 ? (
               <tr><td colSpan="5" className="text-center p-4 text-gray-600">Nenhuma avaria pendente.</td></tr>
             ) : (
-              avarias.map(a => (
+              avarias.map((a) => (
                 <tr key={a.id} className="border-t hover:bg-gray-50">
                   <td className="py-2 px-3">{new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
                   <td className="py-2 px-3">{a.prefixo}</td>
@@ -354,7 +576,10 @@ export default function AprovacaoAvarias() {
                     {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </td>
                   <td className="py-2 px-3">
-                    <button onClick={() => setSelected(a)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1">
+                    <button
+                      onClick={() => setSelected(a)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1"
+                    >
                       <FaEye /> Ver Detalhes
                     </button>
                   </td>
@@ -366,7 +591,11 @@ export default function AprovacaoAvarias() {
       </div>
 
       {selected && (
-        <DetalheAvariaModal avaria={selected} onClose={() => setSelected(null)} onAtualizarStatus={carregar} />
+        <DetalheAvariaModal
+          avaria={selected}
+          onClose={() => setSelected(null)}
+          onAtualizarStatus={carregar}
+        />
       )}
     </div>
   );
