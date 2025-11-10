@@ -133,6 +133,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-40 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+        {/* Cabeçalho */}
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-xl font-bold text-gray-800">
             Detalhes do SOS #{sos.numero_sos}
@@ -159,41 +160,51 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           </div>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto text-sm">
-          {/* Agrupamento de campos principais */}
+        {/* Conteúdo */}
+        <div className="p-6 space-y-6 overflow-y-auto text-sm">
+          {/* 🟦 Informações Gerais */}
+          <h3 className="font-semibold text-blue-700">Informações Gerais</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {renderField("Criado em", "created_at")}
             {renderField("Número SOS", "numero_sos")}
-            {renderField("Status", "status")}
-            {renderField("Data de Fechamento", "data_fechamento")}
-            {renderField("Prefixo", "veiculo")}
-            {renderField("Motorista", "motorista_nome")}
-            {renderField("Linha", "linha")}
-            {renderField("Supervisor", "supervisor")}
-            {renderField("Responsável Técnico", "avaliador")}
-            {renderField("Setor Responsável", "setor")}
+            {renderField("Plantonista", "plantonista")}
+            {renderField("Data SOS", "data_sos")}
+            {renderField("Hora SOS", "hora_sos")}
+            {renderField("Veículo", "veiculo")}
           </div>
 
-          {/* Ocorrência e observação */}
-          {renderField("Ocorrência", "ocorrencia")}
-          {renderField("Observações", "observacao", true)}
-
-          {/* Outras informações complementares */}
+          {/* 🟨 Dados do Motorista e Ocorrência */}
+          <h3 className="font-semibold text-yellow-700 mt-4">Dados do Motorista e Ocorrência</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {renderField("Tipo de Falha", "tipo_falha")}
-            {renderField("Turno", "turno")}
-            {renderField("Horário da Ocorrência", "horario")}
-            {renderField("Placa", "placa")}
-            {renderField("Cluster", "cluster")}
-            {renderField("Oficina", "oficina")}
-            {renderField("Avaliador", "avaliador")}
-            {renderField("Data de Criação", "data_criacao")}
-            {renderField("Atualizado em", "atualizado_em")}
+            {renderField("Motorista ID", "motorista_id")}
+            {renderField("Motorista Nome", "motorista_nome")}
+            {renderField("Reclamação Motorista", "reclamacao_motorista", true)}
+            {renderField("Local Ocorrência", "local_ocorrencia")}
+            {renderField("Linha", "linha")}
+            {renderField("Tabela Operacional", "tabela_operacional")}
           </div>
 
-          {/* Campo livre adicional */}
-          {renderField("Anotações Internas", "anotacoes_internas", true)}
+          {/* 🟩 Atendimento e Manutenção */}
+          <h3 className="font-semibold text-green-700 mt-4">Atendimento e Manutenção</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {renderField("Avaliador Manutenção", "avaliador_manutencao")}
+            {renderField("Procedência do Socorro", "procedencia_socorro")}
+            {renderField("Ocorrência", "ocorrencia")}
+            {renderField("SR Número", "sr_numero")}
+            {renderField("Setor Manutenção", "setor_manutencao")}
+            {renderField("Grupo Manutenção", "grupo_manutencao")}
+            {renderField("Problema Encontrado", "problema_encontrado", true)}
+          </div>
+
+          {/* 🟥 Fechamento */}
+          <h3 className="font-semibold text-red-700 mt-4">Fechamento</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {renderField("Solucionador", "solucionador")}
+            {renderField("Solução", "solucao", true)}
+          </div>
         </div>
 
+        {/* Modal de login */}
         {loginModalOpen && (
           <LoginModal
             onConfirm={onLoginConfirm}
