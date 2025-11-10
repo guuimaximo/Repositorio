@@ -12,7 +12,12 @@ import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
 import LancarAvaria from "./pages/LancarAvaria"; 
 import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias"; 
-import AvariasEmRevisao from "./pages/AvariasEmRevisao"; // ✅ Nova página adicionada
+import AvariasEmRevisao from "./pages/AvariasEmRevisao"; 
+
+// 🆕 Intervenções (SOS)
+import SolicitacaoSOS from "./pages/SolicitacaoSOS";
+import ManutencaoSOS from "./pages/ManutencaoSOS";
+import FechamentoSOS from "./pages/FechamentoSOS";
 
 export default function App() {
   return (
@@ -26,7 +31,12 @@ export default function App() {
         <Route path="/lancar-avaria" element={<LancarAvaria />} />
         <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
-        <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} /> {/* ✅ Rota atualizada */}
+        <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
+
+        {/* 🆕 Rotas do módulo Intervenções */}
+        <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
+        <Route path="/sos-manutencao" element={<ManutencaoSOS />} />
+        <Route path="/sos-fechamento" element={<FechamentoSOS />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} /> 
