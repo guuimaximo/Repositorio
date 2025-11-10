@@ -4,7 +4,8 @@ import { NavLink } from "react-router-dom";
 import { 
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaSignOutAlt, 
   FaChevronDown, FaChevronRight, FaPenSquare, FaListAlt,   
-  FaWrench, FaClipboardCheck, FaUndo, FaCogs, FaCheckDouble, FaScrewdriver
+  FaWrench, FaClipboardCheck, FaUndo, FaCogs, FaCheckDouble, 
+  FaScrewdriver, FaEye
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 
@@ -108,6 +109,9 @@ export default function Sidebar() {
             </NavLink>
             <NavLink to="/sos-tratamento" className={subNavLinkClass}>
               <FaScrewdriver /> <span>Manutenção</span>
+            </NavLink>
+            <NavLink to="/sos-central" className={subNavLinkClass}>
+              <FaEye /> <span>Central</span>
             </NavLink>
           </div>
         )}
