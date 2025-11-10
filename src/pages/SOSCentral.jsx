@@ -1,10 +1,11 @@
+// src/pages/SOSCentral.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import {
   FaSearch, FaEye, FaTimes, FaLock, FaEdit, FaSave
 } from "react-icons/fa";
 
-/* --- Modal de Login (reutilizado do modelo das Avarias) --- */
+/* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
@@ -65,27 +66,21 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
   );
 }
 
-/* --- Modal de Detalhes --- */
+/* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   const [editMode, setEditMode] = useState(false);
-  const [responsavel, setResponsavel] = useState("");
-  const [ocorrencia, setOcorrencia] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
 
   useEffect(() => {
-    if (sos) {
-      setResponsavel(sos.avaliador || "");
-      setOcorrencia(sos.ocorrencia || "");
-      setObservacao(sos.observacao || "");
-    }
+    if (sos) setFormData(sos);
   }, [sos]);
 
   function solicitarLogin() {
     setLoginModalOpen(true);
   }
 
-  async function onLoginConfirm({ nome }) {
+  async function onLoginConfirm() {
     setLoginModalOpen(false);
     setEditMode(true);
   }
@@ -94,9 +89,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     const { error } = await supabase
       .from("sos_acionamentos")
       .update({
-        avaliador: responsavel,
-        ocorrencia,
-        observacao,
+        ...formData,
         atualizado_em: new Date().toISOString(),
       })
       .eq("id", sos.id);
@@ -112,9 +105,34 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     onClose();
   }
 
+  const renderField = (label, field, multiline = false) => (
+    <div>
+      <label className="text-sm text-gray-500">{label}</label>
+      {editMode ? (
+        multiline ? (
+          <textarea
+            className="border p-2 rounded w-full"
+            rows="2"
+            value={formData[field] || ""}
+            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+          />
+        ) : (
+          <input
+            type="text"
+            className="border p-2 rounded w-full"
+            value={formData[field] || ""}
+            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+          />
+        )
+      ) : (
+        <p className="bg-gray-50 p-2 border rounded">{formData[field] || "—"}</p>
+      )}
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-40 p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-xl font-bold text-gray-800">
             Detalhes do SOS #{sos.numero_sos}
@@ -141,76 +159,39 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           </div>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-500">Prefixo</label>
-              <p>{sos.veiculo}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-500">Motorista</label>
-              <p>{sos.motorista_nome}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-500">Linha</label>
-              <p>{sos.linha}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-500">Data de Fechamento</label>
-              <p>{new Date(sos.data_fechamento).toLocaleDateString("pt-BR")}</p>
-            </div>
+        <div className="p-6 space-y-4 overflow-y-auto text-sm">
+          {/* Agrupamento de campos principais */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {renderField("Número SOS", "numero_sos")}
+            {renderField("Status", "status")}
+            {renderField("Data de Fechamento", "data_fechamento")}
+            {renderField("Prefixo", "veiculo")}
+            {renderField("Motorista", "motorista_nome")}
+            {renderField("Linha", "linha")}
+            {renderField("Supervisor", "supervisor")}
+            {renderField("Responsável Técnico", "avaliador")}
+            {renderField("Setor Responsável", "setor")}
           </div>
 
-          <div>
-            <label className="text-sm text-gray-500">Responsável Técnico</label>
-            {editMode ? (
-              <input
-                type="text"
-                className="border p-2 rounded w-full"
-                value={responsavel}
-                onChange={(e) => setResponsavel(e.target.value)}
-              />
-            ) : (
-              <p className="bg-gray-50 p-2 border rounded">{responsavel || "—"}</p>
-            )}
+          {/* Ocorrência e observação */}
+          {renderField("Ocorrência", "ocorrencia")}
+          {renderField("Observações", "observacao", true)}
+
+          {/* Outras informações complementares */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {renderField("Tipo de Falha", "tipo_falha")}
+            {renderField("Turno", "turno")}
+            {renderField("Horário da Ocorrência", "horario")}
+            {renderField("Placa", "placa")}
+            {renderField("Cluster", "cluster")}
+            {renderField("Oficina", "oficina")}
+            {renderField("Avaliador", "avaliador")}
+            {renderField("Data de Criação", "data_criacao")}
+            {renderField("Atualizado em", "atualizado_em")}
           </div>
 
-          <div>
-            <label className="text-sm text-gray-500">Ocorrência</label>
-            {editMode ? (
-              <select
-                className="border p-2 rounded w-full"
-                value={ocorrencia}
-                onChange={(e) => setOcorrencia(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                <option value="SOS">SOS</option>
-                <option value="RECOLHEU">RECOLHEU</option>
-                <option value="TROCA">TROCA</option>
-                <option value="AVARIA">AVARIA</option>
-                <option value="IMPROCEDENTE">IMPROCEDENTE</option>
-                <option value="SEGUIU VIAGEM">SEGUIU VIAGEM</option>
-              </select>
-            ) : (
-              <p className="bg-gray-50 p-2 border rounded">{ocorrencia || "—"}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-500">Observações</label>
-            {editMode ? (
-              <textarea
-                className="border p-2 rounded w-full"
-                rows="3"
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-              />
-            ) : (
-              <p className="bg-gray-50 p-2 border rounded min-h-[60px]">
-                {observacao || "—"}
-              </p>
-            )}
-          </div>
+          {/* Campo livre adicional */}
+          {renderField("Anotações Internas", "anotacoes_internas", true)}
         </div>
 
         {loginModalOpen && (
@@ -236,25 +217,17 @@ export default function SOSCentral() {
 
   async function carregarSOS() {
     setLoading(true);
-    let query = supabase
-      .from("sos_acionamentos")
-      .select("*")
-      .eq("status", "Fechado");
+    let query = supabase.from("sos_acionamentos").select("*").eq("status", "Fechado");
 
     if (dataInicio) query = query.gte("data_fechamento", dataInicio);
     if (dataFim) query = query.lte("data_fechamento", dataFim);
 
     const { data, error } = await query.order("data_fechamento", { ascending: false });
-
-    if (error) {
-      console.error(error.message);
-      setLoading(false);
-      return;
-    }
+    if (error) return console.error(error.message);
 
     setSosList(data || []);
     const contagens = {};
-    data.forEach((s) => {
+    data?.forEach((s) => {
       const o = (s.ocorrencia || "").toUpperCase().trim();
       contagens[o] = (contagens[o] || 0) + 1;
     });
@@ -284,12 +257,7 @@ export default function SOSCentral() {
       {/* 🔢 Cards de Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {["SOS", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"].map((key) => (
-          <CardResumo
-            key={key}
-            titulo={key}
-            valor={counts[key] || 0}
-            cor={cores[key]}
-          />
+          <CardResumo key={key} titulo={key} valor={counts[key] || 0} cor={cores[key]} />
         ))}
       </div>
 
@@ -303,22 +271,9 @@ export default function SOSCentral() {
           onChange={(e) => setBusca(e.target.value)}
           className="border rounded-md px-3 py-2 flex-1"
         />
-        <input
-          type="date"
-          value={dataInicio}
-          onChange={(e) => setDataInicio(e.target.value)}
-          className="border rounded-md px-3 py-2"
-        />
-        <input
-          type="date"
-          value={dataFim}
-          onChange={(e) => setDataFim(e.target.value)}
-          className="border rounded-md px-3 py-2"
-        />
-        <button
-          onClick={carregarSOS}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-        >
+        <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="border rounded-md px-3 py-2" />
+        <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="border rounded-md px-3 py-2" />
+        <button onClick={carregarSOS} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
           Aplicar
         </button>
       </div>
@@ -364,18 +319,12 @@ export default function SOSCentral() {
         </table>
       </div>
 
-      {selected && (
-        <DetalheSOSModal
-          sos={selected}
-          onClose={() => setSelected(null)}
-          onAtualizar={carregarSOS}
-        />
-      )}
+      {selected && <DetalheSOSModal sos={selected} onClose={() => setSelected(null)} onAtualizar={carregarSOS} />}
     </div>
   );
 }
 
-/* --- Card de Resumo --- */
+/* --- CardResumo e OcorrenciaTag --- */
 const cores = {
   SOS: "bg-red-600 text-white",
   RECOLHEU: "bg-blue-600 text-white",
@@ -394,13 +343,8 @@ function CardResumo({ titulo, valor, cor }) {
   );
 }
 
-/* --- Tag colorida da Ocorrência --- */
 function OcorrenciaTag({ ocorrencia }) {
   const o = (ocorrencia || "").toUpperCase();
   const estilo = cores[o] || "bg-gray-300 text-gray-700";
-  return (
-    <span className={`${estilo} px-2 py-1 rounded text-xs font-semibold`}>
-      {o || "—"}
-    </span>
-  );
+  return <span className={`${estilo} px-2 py-1 rounded text-xs font-semibold`}>{o || "—"}</span>;
 }
