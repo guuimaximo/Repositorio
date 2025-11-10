@@ -35,8 +35,7 @@ export default function App() {
 
         {/* 🆕 Rotas do módulo Intervenções */}
         <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
-        <Route path="/sos-manutencao" element={<ManutencaoSOS />} />
-        <Route path="/sos-fechamento" element={<FechamentoSOS />} />
+
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} /> 
