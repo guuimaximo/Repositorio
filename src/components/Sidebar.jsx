@@ -107,7 +107,7 @@ export default function Sidebar() {
               <FaCheckDouble /> <span>Fechamento</span>
             </NavLink>
             <NavLink to="/sos-tratamento" className={subNavLinkClass}>
-              <FaScrewdriver /> <span>Tratamento / Manutenção</span>
+              <FaScrewdriver /> <span>Manutenção</span>
             </NavLink>
           </div>
         )}
