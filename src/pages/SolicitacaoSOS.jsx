@@ -74,7 +74,7 @@ export default function SolicitacaoSOS() {
       const { error } = await supabase.from("sos_acionamentos").insert(payload);
       if (error) throw error;
 
-      const mensagem = `*Acionamento de Troca/SOS:* ${numeroSOS}\n*Data:* ${dataAtual}\n*Veículo:* ${form.veiculo}\n*Motorista:* ${motorista.chapa} - ${motorista.nome}\n*Linha:* ${form.linha}\n*Local:* ${form.local_ocorrencia}\n*Defeito:* ${form.reclamacao_motorista}\n*Plantonista:* ${form.plantonista}`;
+      const mensagem = `*Acionamento:* ${numeroSOS}\n*Data:* ${dataAtual}\n*Veículo:* ${form.veiculo}\n*Motorista:* ${motorista.chapa} - ${motorista.nome}\n*Linha:* ${form.linha}\n*Local:* ${form.local_ocorrencia}\n*Defeito:* ${form.reclamacao_motorista}\n*Plantonista:* ${form.plantonista}`;
 
       await navigator.clipboard.writeText(mensagem);
       alert("Solicitação registrada! Mensagem copiada para WhatsApp ✅");
@@ -99,12 +99,12 @@ export default function SolicitacaoSOS() {
 
   return (
     <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Solicitação de SOS</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">Acionamentos de Intervenção - Operação</h1>
 
       {/* Cabeçalho */}
       <div className="flex justify-between mb-4">
         <div>
-          <p className="text-sm text-gray-500">Número do SOS</p>
+          <p className="text-sm text-gray-500">Número do Acionamento</p>
           <p className="text-xl font-semibold text-blue-600">{numeroSOS || "..."}</p>
         </div>
         <div className="text-right">
