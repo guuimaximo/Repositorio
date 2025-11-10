@@ -42,7 +42,7 @@ export default function SOSCentral() {
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Central de SOS — Etiquetas Finalizadas</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Central de Intervenções</h1>
         <button
           onClick={carregarSOS}
           className="px-3 py-2 rounded-md text-sm bg-gray-100 hover:bg-gray-200 text-gray-700"
