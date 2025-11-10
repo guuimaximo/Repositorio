@@ -1,5 +1,4 @@
 // src/App.jsx
-
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 
@@ -9,15 +8,15 @@ import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import LancarAvaria from "./pages/LancarAvaria"; 
+import LancarAvaria from "./pages/LancarAvaria";
 import CobrancasAvarias from "./pages/CobrancasAvarias";
-import AprovacaoAvarias from "./pages/AprovacaoAvarias"; 
-import AvariasEmRevisao from "./pages/AvariasEmRevisao"; 
+import AprovacaoAvarias from "./pages/AprovacaoAvarias";
+import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
 // 🆕 Intervenções (SOS)
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
-import SOSFechamento from "./pages/SOSFechamento"; // ✅ Nova página
-// futuramente virá também: SOSManutencao, SOSCentral
+import SOSFechamento from "./pages/SOSFechamento";
+import SOSTratamento from "./pages/SOSTratamento"; // ✅ Nova página (manutenção)
 
 export default function App() {
   return (
@@ -40,11 +39,12 @@ export default function App() {
 
         {/* 🆕 Intervenções (SOS) */}
         <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
-        <Route path="/sos-fechamento" element={<SOSFechamento />} /> {/* ✅ Adicionado */}
+        <Route path="/sos-fechamento" element={<SOSFechamento />} />
+        <Route path="/sos-tratamento" element={<SOSTratamento />} /> {/* ✅ Novo */}
       </Route>
 
       {/* Redirecionamento padrão */}
-      <Route path="*" element={<Navigate to="/" replace />} /> 
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
