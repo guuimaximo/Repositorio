@@ -93,7 +93,7 @@ export default function Sidebar() {
           className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 hover:bg-blue-600"
         >
           <div className="flex items-center gap-3">
-            <FaCogs /> <span>Intervenções (SOS)</span>
+            <FaCogs /> <span>Intervenções</span>
           </div>
           {intervencoesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
         </button>
