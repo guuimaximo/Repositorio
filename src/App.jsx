@@ -3,7 +3,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 
-// Páginas
+// Páginas principais
 import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
@@ -16,26 +16,34 @@ import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
 // 🆕 Intervenções (SOS)
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
+import SOSFechamento from "./pages/SOSFechamento"; // ✅ Nova página
+// futuramente virá também: SOSManutencao, SOSCentral
 
 export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
+        {/* Início */}
         <Route path="/" element={<Dashboard />} />
+
+        {/* Tratativas */}
         <Route path="/central" element={<CentralTratativas />} />
         <Route path="/tratar/:id" element={<TratarTratativa />} />
         <Route path="/consultar/:id" element={<ConsultarTratativa />} />
         <Route path="/solicitar" element={<SolicitacaoTratativa />} />
+
+        {/* Avarias */}
         <Route path="/lancar-avaria" element={<LancarAvaria />} />
         <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
         <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-        {/* 🆕 Rotas do módulo Intervenções */}
+        {/* 🆕 Intervenções (SOS) */}
         <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
-
+        <Route path="/sos-fechamento" element={<SOSFechamento />} /> {/* ✅ Adicionado */}
       </Route>
 
+      {/* Redirecionamento padrão */}
       <Route path="*" element={<Navigate to="/" replace />} /> 
     </Routes>
   );
