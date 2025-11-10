@@ -5,13 +5,14 @@ import { NavLink } from "react-router-dom";
 import { 
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaSignOutAlt, 
   FaChevronDown, FaChevronRight, FaPenSquare, FaListAlt,   
-  FaWrench, FaClipboardCheck, FaUndo
+  FaWrench, FaClipboardCheck, FaUndo, FaCogs, FaWrench as FaSpanner, FaCheckDouble
 } from "react-icons/fa";
 import logoInova from '../assets/logoInovaQuatai.png';
 
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
+  const [intervencoesOpen, setIntervencoesOpen] = useState(false); // 👈 Novo grupo
 
   const navLinkClass = ({ isActive }) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
@@ -74,17 +75,39 @@ export default function Sidebar() {
             <NavLink to="/lancar-avaria" className={subNavLinkClass}> 
               <FaWrench /> <span>Lançamento</span> 
             </NavLink>
-
             <NavLink to="/avarias-em-revisao" className={subNavLinkClass}>
               <FaUndo /> <span>Pendências de Revisão</span>
             </NavLink>
-
             <NavLink to="/aprovar-avarias" className={subNavLinkClass}> 
               <FaClipboardCheck /> <span>Aprovações</span> 
             </NavLink>
-
             <NavLink to="/cobrancas" className={subNavLinkClass}> 
               <FaMoneyBill /> <span>Cobranças</span> 
+            </NavLink>
+          </div>
+        )}
+
+        {/* 5. Intervenções 🚨 */}
+        <button
+          onClick={() => setIntervencoesOpen(!intervencoesOpen)}
+          className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 hover:bg-blue-600"
+        >
+          <div className="flex items-center gap-3"> 
+            <FaCogs /> <span>Intervenções</span> 
+          </div>
+          {intervencoesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+        </button>
+
+        {intervencoesOpen && (
+          <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+            <NavLink to="/sos-solicitacao" className={subNavLinkClass}> 
+              <FaPenSquare /> <span>Solicitação</span> 
+            </NavLink>
+            <NavLink to="/sos-manutencao" className={subNavLinkClass}> 
+              <FaSpanner /> <span>Manutenção</span> 
+            </NavLink>
+            <NavLink to="/sos-fechamento" className={subNavLinkClass}> 
+              <FaCheckDouble /> <span>Fechamento</span> 
             </NavLink>
           </div>
         )}
