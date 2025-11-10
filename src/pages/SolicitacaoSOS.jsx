@@ -1,14 +1,13 @@
 // src/pages/SolicitacaoSOS.jsx
-
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import CampoMotorista from "../components/CampoMotorista";
 
 export default function SolicitacaoSOS() {
+  const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [form, setForm] = useState({
     plantonista: "",
     veiculo: "",
-    motorista_id: "",
-    motorista_nome: "",
     reclamacao_motorista: "",
     local_ocorrencia: "",
     linha: "",
@@ -17,10 +16,10 @@ export default function SolicitacaoSOS() {
 
   const [tabelas, setTabelas] = useState([]);
   const [linhas, setLinhas] = useState([]);
+  const [prefixos, setPrefixos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [numeroSOS, setNumeroSOS] = useState(null);
 
-  // Data e hora automáticas
   const agora = new Date();
   const dataAtual = agora.toLocaleDateString("pt-BR");
   const horaAtual = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -29,12 +28,12 @@ export default function SolicitacaoSOS() {
     async function carregarListas() {
       const { data: linhasData } = await supabase.from("linhas").select("codigo, descricao").order("codigo");
       const { data: tabelasData } = await supabase.from("tabelas_operacionais").select("codigo, descricao");
+      const { data: prefixosData } = await supabase.from("prefixos").select("codigo").order("codigo");
       setLinhas(linhasData || []);
       setTabelas(tabelasData || []);
+      setPrefixos(prefixosData || []);
     }
-    carregarListas();
 
-    // Obter último número SOS
     async function getNextSOS() {
       const { data, error } = await supabase
         .from("sos_acionamentos")
@@ -44,13 +43,15 @@ export default function SolicitacaoSOS() {
         .single();
 
       if (error && error.code !== "PGRST116") console.error(error);
-      setNumeroSOS(data ? Number(data.numero_sos) + 1 : 3000); // começa em 3000 caso vazio
+      setNumeroSOS(data ? Number(data.numero_sos) + 1 : 3000);
     }
+
+    carregarListas();
     getNextSOS();
   }, []);
 
   async function salvarSOS() {
-    if (!form.veiculo || !form.motorista_nome || !form.reclamacao_motorista) {
+    if (!form.veiculo || !motorista.chapa || !motorista.nome || !form.reclamacao_motorista) {
       alert("Preencha veículo, motorista e reclamação!");
       return;
     }
@@ -61,8 +62,8 @@ export default function SolicitacaoSOS() {
         numero_sos: numeroSOS,
         plantonista: form.plantonista,
         veiculo: form.veiculo,
-        motorista_id: form.motorista_id,
-        motorista_nome: form.motorista_nome,
+        motorista_id: motorista.chapa,
+        motorista_nome: motorista.nome,
         reclamacao_motorista: form.reclamacao_motorista,
         local_ocorrencia: form.local_ocorrencia,
         linha: form.linha,
@@ -73,23 +74,20 @@ export default function SolicitacaoSOS() {
       const { error } = await supabase.from("sos_acionamentos").insert(payload);
       if (error) throw error;
 
-      // Gerar mensagem formatada
-      const mensagem = `*Acionamento de Troca/SOS:* ${numeroSOS}\n*Data:* ${dataAtual}\n*Veículo:* ${form.veiculo}\n*Motorista:* ${form.motorista_id || ""} ${form.motorista_nome}\n*Linha:* ${form.linha}\n*Local:* ${form.local_ocorrencia}\n*Defeito:* ${form.reclamacao_motorista}\n*Plantonista:* ${form.plantonista}`;
-      
-      await navigator.clipboard.writeText(mensagem);
-      alert("Solicitação registrada! Mensagem copiada para o WhatsApp ✅");
+      const mensagem = `*Acionamento de Troca/SOS:* ${numeroSOS}\n*Data:* ${dataAtual}\n*Veículo:* ${form.veiculo}\n*Motorista:* ${motorista.chapa} - ${motorista.nome}\n*Linha:* ${form.linha}\n*Local:* ${form.local_ocorrencia}\n*Defeito:* ${form.reclamacao_motorista}\n*Plantonista:* ${form.plantonista}`;
 
-      // Resetar
+      await navigator.clipboard.writeText(mensagem);
+      alert("Solicitação registrada! Mensagem copiada para WhatsApp ✅");
+
       setForm({
         plantonista: "",
         veiculo: "",
-        motorista_id: "",
-        motorista_nome: "",
         reclamacao_motorista: "",
         local_ocorrencia: "",
         linha: "",
         tabela_operacional: "",
       });
+      setMotorista({ chapa: "", nome: "" });
       setNumeroSOS((prev) => prev + 1);
     } catch (err) {
       console.error(err);
@@ -127,34 +125,24 @@ export default function SolicitacaoSOS() {
           />
         </div>
 
+        {/* Prefixo do veículo */}
         <div>
           <label className="text-sm text-gray-600">Prefixo do Veículo</label>
-          <input
-            type="text"
+          <select
             className="w-full border rounded p-2"
             value={form.veiculo}
             onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
-          />
+          >
+            <option value="">Selecione...</option>
+            {prefixos.map((p) => (
+              <option key={p.codigo} value={p.codigo}>{p.codigo}</option>
+            ))}
+          </select>
         </div>
 
-        <div>
-          <label className="text-sm text-gray-600">Chapa do Motorista</label>
-          <input
-            type="text"
-            className="w-full border rounded p-2"
-            value={form.motorista_id}
-            onChange={(e) => setForm({ ...form, motorista_id: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="text-sm text-gray-600">Nome do Motorista</label>
-          <input
-            type="text"
-            className="w-full border rounded p-2"
-            value={form.motorista_nome}
-            onChange={(e) => setForm({ ...form, motorista_nome: e.target.value })}
-          />
+        {/* Motorista (componente padrão) */}
+        <div className="md:col-span-2">
+          <CampoMotorista value={motorista} onChange={setMotorista} />
         </div>
 
         <div>
