@@ -27,7 +27,7 @@ export default function SOSFechamento() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        Fechamento de SOS
+        Fechamento do Acionamento - Operação
       </h1>
 
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
