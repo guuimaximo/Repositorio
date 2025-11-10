@@ -1,20 +1,29 @@
+// src/components/Sidebar.jsx
 import { useState, useContext } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
   FaPenSquare, FaListAlt, FaWrench, FaClipboardCheck, FaUndo, FaCogs,
-  FaCheckDouble, FaScrewdriver, FaEye, FaUserCog
+  FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
-import { AuthContext } from "../context/AuthContext"; // ✅ Importa contexto
+import { AuthContext } from "../context/AuthContext"; // ✅ Contexto de autenticação
 
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false); // 👑 Configuração
+  const [configOpen, setConfigOpen] = useState(false);
 
-  const { user } = useContext(AuthContext); // ✅ Pega o usuário logado
+  const { user, logout } = useContext(AuthContext); // ✅ Pega usuário e logout
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    if (confirm("Deseja realmente sair?")) {
+      logout();
+      navigate("/login");
+    }
+  };
 
   const navLinkClass = ({ isActive }) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
@@ -138,6 +147,16 @@ export default function Sidebar() {
           </>
         )}
       </nav>
+
+      {/* 🚪 Logout */}
+      <div className="p-3 border-t border-blue-600">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-sm"
+        >
+          <FaSignOutAlt /> <span>Sair</span>
+        </button>
+      </div>
 
       {/* Rodapé */}
       <div className="p-3 text-xs text-center border-t border-blue-600 text-blue-200">
