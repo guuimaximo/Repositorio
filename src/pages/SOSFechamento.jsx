@@ -1,9 +1,9 @@
-// src/pages/SOSTratamento.jsx
+// src/pages/SOSFechamento.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { FaTools, FaTimes, FaPlus, FaTrash, FaCheckCircle } from "react-icons/fa";
+import { FaCheckCircle, FaTimes, FaWrench } from "react-icons/fa";
 
-export default function SOSTratamento() {
+export default function SOSFechamento() {
   const [acionamentos, setAcionamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -13,7 +13,7 @@ export default function SOSTratamento() {
     const { data, error } = await supabase
       .from("sos_acionamentos")
       .select("*")
-      .eq("status", "Em Andamento")
+      .eq("status", "Aberto")
       .order("created_at", { ascending: false });
 
     if (!error) setAcionamentos(data || []);
@@ -27,7 +27,7 @@ export default function SOSTratamento() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        Tratamento de SOS pela Manutenção
+        Fechamento de SOS
       </h1>
 
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -47,13 +47,13 @@ export default function SOSTratamento() {
             {loading ? (
               <tr>
                 <td colSpan="7" className="text-center py-6 text-gray-600">
-                  Carregando SOS em andamento...
+                  Carregando SOS...
                 </td>
               </tr>
             ) : acionamentos.length === 0 ? (
               <tr>
                 <td colSpan="7" className="text-center py-6 text-gray-600">
-                  Nenhum SOS em andamento ⚙️
+                  Nenhum SOS em aberto 🎉
                 </td>
               </tr>
             ) : (
@@ -70,9 +70,9 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelected(a)}
-                      className="bg-yellow-400 hover:bg-yellow-500 text-black font-medium px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
+                      className="bg-yellow-400 hover:bg-yellow-500 text-black px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2 font-medium transition"
                     >
-                      <FaTools /> Tratar SOS
+                      <FaWrench className="text-black" /> Tratar SOS
                     </button>
                   </td>
                 </tr>
@@ -83,7 +83,7 @@ export default function SOSTratamento() {
       </div>
 
       {selected && (
-        <TratamentoModal
+        <FechamentoModal
           sos={selected}
           onClose={() => setSelected(null)}
           onAtualizar={carregarSOS}
@@ -93,232 +93,177 @@ export default function SOSTratamento() {
   );
 }
 
-// 🟨 Modal para tratar o SOS (adicionar defeitos em cascata)
-function TratamentoModal({ sos, onClose, onAtualizar }) {
-  const [setores, setSetores] = useState([]);
-  const [grupos, setGrupos] = useState([]);
-  const [defeitos, setDefeitos] = useState([]);
-  const [selSetor, setSelSetor] = useState("");
-  const [selGrupo, setSelGrupo] = useState("");
-  const [selDefeito, setSelDefeito] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [lista, setLista] = useState([]);
-  const [responsavel, setResponsavel] = useState("");
+// 🟨 Modal de Fechamento (sem alteração de campos)
+function FechamentoModal({ sos, onClose, onAtualizar }) {
+  const [form, setForm] = useState({
+    avaliador: "",
+    procedencia_socorrista: "Procedente",
+    ocorrencia: "",
+    carro_substituto: "",
+    sr_numero: "",
+  });
   const [saving, setSaving] = useState(false);
+  const [prefixos, setPrefixos] = useState([]);
 
-  async function carregarSetores() {
-    const { data } = await supabase
-      .from("sos_manutencao_catalogo")
-      .select("setor_macro")
-      .order("setor_macro", { ascending: true });
-    const uniques = Array.from(new Set((data || []).map((d) => d.setor_macro)));
-    setSetores(uniques);
-  }
-
-  async function carregarGrupos(setor_macro) {
-    const { data } = await supabase
-      .from("sos_manutencao_catalogo")
-      .select("grupo")
-      .eq("setor_macro", setor_macro);
-    const uniques = Array.from(new Set((data || []).map((d) => d.grupo)));
-    setGrupos(uniques);
-  }
-
-  async function carregarDefeitos(setor_macro, grupo) {
-    const { data } = await supabase
-      .from("sos_manutencao_catalogo")
-      .select("defeito")
-      .eq("setor_macro", setor_macro)
-      .eq("grupo", grupo);
-    const uniques = Array.from(new Set((data || []).map((d) => d.defeito)));
-    setDefeitos(uniques);
-  }
+  const ocorrencias = [
+    "SEGUIU VIAGEM",
+    "RECOLHEU",
+    "TROCA",
+    "AVARIA",
+    "IMPROCEDENTE",
+  ];
 
   useEffect(() => {
-    carregarSetores();
+    async function carregarPrefixos() {
+      const { data } = await supabase
+        .from("prefixos")
+        .select("codigo")
+        .order("codigo");
+      setPrefixos(data || []);
+    }
+    carregarPrefixos();
   }, []);
 
-  const addDefeito = () => {
-    if (!selSetor || !selGrupo || !selDefeito) {
-      alert("Selecione setor, grupo e defeito!");
-      return;
-    }
-    const novo = {
-      setor_macro: selSetor,
-      grupo: selGrupo,
-      defeito: selDefeito,
-      observacao: observacao || null,
-    };
-    setLista([...lista, novo]);
-    setSelDefeito("");
-    setObservacao("");
-  };
-
-  const salvar = async () => {
-    if (lista.length === 0) {
-      alert("Adicione pelo menos um defeito!");
+  async function salvarFechamento() {
+    if (!form.avaliador || !form.ocorrencia) {
+      alert("Preencha todos os campos obrigatórios!");
       return;
     }
 
     setSaving(true);
-    const registros = lista.map((d) => ({
-      sos_id: sos.id,
-      numero_sos: sos.numero_sos,
-      setor_macro: d.setor_macro,
-      grupo: d.grupo,
-      defeito: d.defeito,
-      observacao: d.observacao,
-      criado_por: responsavel || null,
-      criado_em: new Date().toISOString(),
-    }));
+    const { error } = await supabase
+      .from("sos_acionamentos")
+      .update({
+        avaliador: form.avaliador,
+        procedencia_socorrista: form.procedencia_socorrista,
+        ocorrencia: form.ocorrencia,
+        carro_substituto: form.carro_substituto,
+        sr_numero: form.sr_numero,
+        data_fechamento: new Date().toISOString(),
+        status: "Em Andamento",
+      })
+      .eq("id", sos.id);
 
-    const { error } = await supabase.from("sos_manutencao_tratadas").insert(registros);
-    if (!error) {
-      await supabase
-        .from("sos_acionamentos")
-        .update({ status: "Fechado", data_fechamento: new Date().toISOString() })
-        .eq("id", sos.id);
-      alert("Tratamento salvo com sucesso ✅");
-      onAtualizar();
-      onClose();
-    } else alert("Erro ao salvar: " + error.message);
     setSaving(false);
-  };
+
+    if (error) {
+      alert("Erro ao salvar: " + error.message);
+      return;
+    }
+
+    alert("Fechamento registrado com sucesso ✅");
+    onAtualizar();
+    onClose();
+  }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full overflow-y-auto max-h-[90vh]">
-        <div className="flex justify-between items-center p-4 border-b bg-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Tratar SOS #{sos.numero_sos}
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 z-50">
+      <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full animate-fadeIn overflow-y-auto max-h-[90vh]">
+        {/* Cabeçalho */}
+        <div className="flex justify-between items-center p-4 border-b bg-blue-50 rounded-t-lg">
+          <h2 className="text-xl font-semibold text-gray-800">
+            Fechamento do SOS #{sos.numero_sos}
           </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-red-500">
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-red-500 transition"
+          >
             <FaTimes size={20} />
           </button>
         </div>
 
+        {/* Corpo */}
         <div className="p-6 space-y-4">
-          <p className="text-sm text-gray-700">
-            <strong>Veículo:</strong> {sos.veiculo} <br />
-            <strong>Motorista:</strong> {sos.motorista_nome} <br />
-            <strong>Local:</strong> {sos.local_ocorrencia}
-          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">Avaliador</label>
+              <input
+                type="text"
+                className="w-full border rounded p-2"
+                value={form.avaliador}
+                onChange={(e) => setForm({ ...form, avaliador: e.target.value })}
+                placeholder="Ex: Fernando"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">Procedência</label>
+              <select
+                className="w-full border rounded p-2"
+                value={form.procedencia_socorrista}
+                onChange={(e) =>
+                  setForm({ ...form, procedencia_socorrista: e.target.value })
+                }
+              >
+                <option>Procedente</option>
+                <option>Improcedente</option>
+              </select>
+            </div>
+          </div>
 
           <div>
-            <label className="block text-sm mb-1">Responsável Técnico</label>
-            <input
+            <label className="block text-sm text-gray-500 mb-1">Ocorrência</label>
+            <select
               className="w-full border rounded p-2"
-              placeholder="Ex: Fernando, Natalia..."
-              value={responsavel}
-              onChange={(e) => setResponsavel(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm">Setor Macro</label>
-              <select
-                className="w-full border rounded p-2"
-                value={selSetor}
-                onChange={(e) => {
-                  setSelSetor(e.target.value);
-                  carregarGrupos(e.target.value);
-                }}
-              >
-                <option value="">Selecione...</option>
-                {setores.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm">Grupo</label>
-              <select
-                className="w-full border rounded p-2"
-                value={selGrupo}
-                onChange={(e) => {
-                  setSelGrupo(e.target.value);
-                  carregarDefeitos(selSetor, e.target.value);
-                }}
-                disabled={!selSetor}
-              >
-                <option value="">Selecione...</option>
-                {grupos.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm">Defeito</label>
-              <select
-                className="w-full border rounded p-2"
-                value={selDefeito}
-                onChange={(e) => setSelDefeito(e.target.value)}
-                disabled={!selGrupo}
-              >
-                <option value="">Selecione...</option>
-                {defeitos.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <textarea
-            rows="2"
-            className="w-full border rounded p-2"
-            placeholder="Observação (opcional)"
-            value={observacao}
-            onChange={(e) => setObservacao(e.target.value)}
-          />
-
-          <button
-            onClick={addDefeito}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm flex items-center gap-2"
-          >
-            <FaPlus /> Adicionar
-          </button>
-
-          {lista.length > 0 && (
-            <ul className="divide-y border rounded mt-3">
-              {lista.map((l, i) => (
-                <li key={i} className="p-2 flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-gray-800">
-                      {l.setor_macro} • {l.grupo} • {l.defeito}
-                    </p>
-                    {l.observacao && (
-                      <p className="text-xs text-gray-600">{l.observacao}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() =>
-                      setLista((prev) => prev.filter((_, idx) => idx !== i))
-                    }
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <FaTrash />
-                  </button>
-                </li>
+              value={form.ocorrencia}
+              onChange={(e) => setForm({ ...form, ocorrencia: e.target.value })}
+            >
+              <option value="">Selecione...</option>
+              {ocorrencias.map((o, idx) => (
+                <option key={idx} value={o}>
+                  {o}
+                </option>
               ))}
-            </ul>
-          )}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">
+                Carro que entrou no lugar
+              </label>
+              <select
+                className="w-full border rounded p-2"
+                value={form.carro_substituto}
+                onChange={(e) =>
+                  setForm({ ...form, carro_substituto: e.target.value })
+                }
+              >
+                <option value="">Selecione...</option>
+                {prefixos.map((p) => (
+                  <option key={p.codigo} value={p.codigo}>
+                    {p.codigo}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">
+                SR (Operação)
+              </label>
+              <input
+                type="text"
+                className="w-full border rounded p-2"
+                value={form.sr_numero}
+                onChange={(e) =>
+                  setForm({ ...form, sr_numero: e.target.value })
+                }
+                placeholder="Ex: SR12345"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
+        {/* Rodapé */}
+        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-lg">
           <button
-            onClick={salvar}
+            onClick={salvarFechamento}
             disabled={saving}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition"
           >
             <FaCheckCircle />
-            {saving ? "Salvando..." : "Confirmar Tratamento"}
+            {saving ? "Salvando..." : "Confirmar Fechamento"}
           </button>
         </div>
       </div>
