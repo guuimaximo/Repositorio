@@ -103,12 +103,12 @@ export default function Sidebar() {
             <NavLink to="/sos-solicitacao" className={subNavLinkClass}> 
               <FaPenSquare /> <span>Solicitação</span> 
             </NavLink>
-            <NavLink to="/sos-manutencao" className={subNavLinkClass}> 
-              <FaSpanner /> <span>Manutenção</span> 
-            </NavLink>
             <NavLink to="/sos-fechamento" className={subNavLinkClass}> 
               <FaCheckDouble /> <span>Fechamento</span> 
             </NavLink>
+            <NavLink to="/sos-manutencao" className={subNavLinkClass}> 
+              <FaSpanner /> <span>Manutenção</span> 
+            </NavLink>          
           </div>
         )}
       </nav>
