@@ -1,16 +1,21 @@
+// src/pages/Login.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
+import { useAuth } from "../context/AuthContext"; // ✅ usa o contexto de autenticação
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth(); // ✅ função de login do contexto
+
   const [isCadastro, setIsCadastro] = useState(false);
-  const [login, setLogin] = useState("");
+  const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // 🔐 LOGIN
   async function handleEntrar(e) {
     e.preventDefault();
     setLoading(true);
@@ -18,7 +23,7 @@ export default function Login() {
     const { data, error } = await supabase
       .from("usuarios_aprovadores")
       .select("*")
-      .eq("login", login)
+      .eq("login", loginInput)
       .eq("senha", senha)
       .eq("ativo", true)
       .single();
@@ -30,13 +35,15 @@ export default function Login() {
       return;
     }
 
-    localStorage.setItem("session", JSON.stringify(data));
+    // ✅ salva no AuthContext e no localStorage
+    login(data);
     navigate("/");
   }
 
+  // 🆕 CADASTRO
   async function handleCadastro(e) {
     e.preventDefault();
-    if (!nome || !login || !senha) {
+    if (!nome || !loginInput || !senha) {
       alert("Preencha todos os campos!");
       return;
     }
@@ -45,7 +52,7 @@ export default function Login() {
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome,
-        login,
+        login: loginInput,
         senha,
         ativo: false,
         nivel: "Pendente",
@@ -59,7 +66,7 @@ export default function Login() {
       alert("Cadastro enviado! Aguarde aprovação do administrador.");
       setIsCadastro(false);
       setNome("");
-      setLogin("");
+      setLoginInput("");
       setSenha("");
     }
   }
@@ -100,8 +107,8 @@ export default function Login() {
             </label>
             <input
               type="text"
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
+              value={loginInput}
+              onChange={(e) => setLoginInput(e.target.value)}
               className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
             />
           </div>
