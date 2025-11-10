@@ -1,18 +1,19 @@
-// src/components/Sidebar.jsx
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { 
-  FaHome, FaClipboardList, FaTools, FaMoneyBill, FaSignOutAlt, 
-  FaChevronDown, FaChevronRight, FaPenSquare, FaListAlt,   
-  FaWrench, FaClipboardCheck, FaUndo, FaCogs, FaCheckDouble, 
-  FaScrewdriver, FaEye
+import {
+  FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
+  FaPenSquare, FaListAlt, FaWrench, FaClipboardCheck, FaUndo, FaCogs, FaCheckDouble,
+  FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
+import { useAuth } from "../context/AuthContext"; // 👈 importa o contexto de autenticação
 
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
-  const [intervencoesOpen, setIntervencoesOpen] = useState(false); // 👈 Novo grupo SOS
+  const [intervencoesOpen, setIntervencoesOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const { usuario, logout } = useAuth(); // 👈 obtém usuário logado e função logout
 
   const navLinkClass = ({ isActive }) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 ${
@@ -25,14 +26,14 @@ export default function Sidebar() {
     }`;
 
   return (
-    <aside className="w-60 bg-blue-700 text-white flex flex-col">
+    <aside className="w-60 bg-blue-700 text-white flex flex-col justify-between">
       {/* Cabeçalho */}
       <div className="p-4 flex items-center justify-center gap-2 border-b border-blue-600">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-8 w-auto" />
         <span className="font-bold text-xl tracking-tight">INOVAQUATAI</span>
       </div>
 
-      <nav className="flex-1 p-3">
+      <nav className="flex-1 p-3 overflow-y-auto">
         {/* 1️⃣ Início */}
         <NavLink to="/" className={navLinkClass}>
           <FaHome /> <span>Início</span>
@@ -115,12 +116,46 @@ export default function Sidebar() {
             </NavLink>
           </div>
         )}
+
+        {/* 5️⃣ Configurações (somente Administrador) */}
+        {usuario?.nivel === "Administrador" && (
+          <>
+            <button
+              onClick={() => setConfigOpen(!configOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 transition-all duration-200 hover:bg-blue-600"
+            >
+              <div className="flex items-center gap-3">
+                <FaUserCog /> <span>Configurações</span>
+              </div>
+              {configOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {configOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                <NavLink to="/usuarios" className={subNavLinkClass}>
+                  <FaUserCog /> <span>Gerenciar Usuários</span>
+                </NavLink>
+              </div>
+            )}
+          </>
+        )}
       </nav>
 
-      {/* Rodapé */}
-      <div className="p-3 text-xs text-center border-t border-blue-600 text-blue-200">
-        © {new Date().getFullYear()} InovaQuatai
-      </div>
+      {/* Rodapé com logout */}
+      {usuario && (
+        <div className="p-4 border-t border-blue-600 bg-blue-800 text-sm">
+          <div className="mb-2">
+            <p className="font-semibold">{usuario.nome}</p>
+            <p className="text-blue-300 text-xs">{usuario.nivel}</p>
+          </div>
+          <button
+            onClick={logout}
+            className="w-full bg-red-500 hover:bg-red-600 text-white py-1.5 rounded flex items-center justify-center gap-2"
+          >
+            <FaSignOutAlt /> Sair
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
