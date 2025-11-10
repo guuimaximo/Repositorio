@@ -27,7 +27,7 @@ export default function SOSTratamento() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        Tratamento de SOS pela Manutenção
+        Tratamento de Interveção - Manutenção
       </h1>
 
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -53,7 +53,7 @@ export default function SOSTratamento() {
             ) : acionamentos.length === 0 ? (
               <tr>
                 <td colSpan="7" className="text-center py-6 text-gray-600">
-                  Nenhum SOS em andamento ⚙️
+                  Nenhuma Interveção em andamento ⚙️
                 </td>
               </tr>
             ) : (
@@ -72,7 +72,7 @@ export default function SOSTratamento() {
                       onClick={() => setSelected(a)}
                       className="bg-yellow-400 hover:bg-yellow-500 text-black font-medium px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
                     >
-                      <FaTools /> Tratar SOS
+                      <FaTools /> Tratar Intervenção
                     </button>
                   </td>
                 </tr>
