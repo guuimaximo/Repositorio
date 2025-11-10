@@ -1,15 +1,15 @@
 // src/pages/SOSCentral.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { FaSearch, FaEye, FaTimes } from "react-icons/fa";
 
 export default function SOSCentral() {
   const [sosList, setSosList] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
 
-  async function carregarFechadas() {
+  async function carregarSOS() {
     setLoading(true);
     const { data, error } = await supabase
       .from("sos_acionamentos")
@@ -17,40 +17,48 @@ export default function SOSCentral() {
       .eq("status", "Fechado")
       .order("data_fechamento", { ascending: false });
 
-    if (!error) setSosList(data || []);
+    if (error) {
+      alert("Erro ao carregar SOS: " + error.message);
+    } else {
+      setSosList(data || []);
+    }
     setLoading(false);
   }
 
   useEffect(() => {
-    carregarFechadas();
+    carregarSOS();
   }, []);
 
-  const filtradas = sosList.filter((s) => {
-    const q = busca.toLowerCase();
-    return (
-      s.numero_sos?.toString().includes(q) ||
-      s.veiculo?.toLowerCase().includes(q) ||
-      s.motorista_nome?.toLowerCase().includes(q) ||
-      s.linha?.toLowerCase().includes(q) ||
-      s.local_ocorrencia?.toLowerCase().includes(q)
-    );
-  });
+  const filtrados = useMemo(() => {
+    const q = (busca || "").toLowerCase();
+    if (!q) return sosList;
+    return sosList.filter((s) => {
+      const comp = `${s.numero_sos} ${s.veiculo} ${s.motorista_nome || ""} ${s.linha || ""} ${s.local_ocorrencia || ""} ${s.avaliador || ""}`.toLowerCase();
+      return comp.includes(q);
+    });
+  }, [busca, sosList]);
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        Central de SOS — Etiquetas Finalizadas
-      </h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Central de SOS — Etiquetas Finalizadas</h1>
+        <button
+          onClick={carregarSOS}
+          className="px-3 py-2 rounded-md text-sm bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          Atualizar
+        </button>
+      </div>
 
       {/* Barra de busca */}
-      <div className="bg-white shadow rounded-lg mb-5 p-4 flex items-center gap-2">
-        <FaSearch className="text-gray-500" />
+      <div className="bg-white rounded-lg shadow mb-5 p-4 flex items-center gap-2">
+        <FaSearch />
         <input
-          type="text"
+          className="flex-1 outline-none"
           placeholder="Buscar por número, veículo, motorista, linha, local..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="flex-1 outline-none text-gray-700"
         />
       </div>
 
@@ -66,40 +74,44 @@ export default function SOSCentral() {
               <th className="py-3 px-4 text-left text-sm font-semibold">Linha</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Local</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Avaliador</th>
+              <th className="py-3 px-4 text-left text-sm font-semibold">Procedência</th>
+              <th className="py-3 px-4 text-left text-sm font-semibold">Ocorrência</th>
               <th className="py-3 px-4 text-center text-sm font-semibold">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" className="text-center py-6 text-gray-600">
-                  Carregando SOS fechadas...
+                <td colSpan="10" className="text-center py-6 text-gray-600">
+                  Carregando SOS...
                 </td>
               </tr>
-            ) : filtradas.length === 0 ? (
+            ) : filtrados.length === 0 ? (
               <tr>
-                <td colSpan="8" className="text-center py-6 text-gray-600">
-                  Nenhuma etiqueta finalizada encontrada.
+                <td colSpan="10" className="text-center py-6 text-gray-600">
+                  Nenhuma SOS finalizada encontrada.
                 </td>
               </tr>
             ) : (
-              filtradas.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4">{s.numero_sos}</td>
+              filtrados.map((a) => (
+                <tr key={a.id} className="border-t hover:bg-gray-50 transition-colors">
+                  <td className="py-3 px-4">{a.numero_sos}</td>
                   <td className="py-3 px-4">
-                    {s.data_fechamento
-                      ? new Date(s.data_fechamento).toLocaleDateString("pt-BR")
+                    {a.data_fechamento
+                      ? new Date(a.data_fechamento).toLocaleDateString("pt-BR")
                       : "-"}
                   </td>
-                  <td className="py-3 px-4">{s.veiculo}</td>
-                  <td className="py-3 px-4">{s.motorista_nome}</td>
-                  <td className="py-3 px-4">{s.linha}</td>
-                  <td className="py-3 px-4">{s.local_ocorrencia}</td>
-                  <td className="py-3 px-4">{s.avaliador || "-"}</td>
+                  <td className="py-3 px-4">{a.veiculo}</td>
+                  <td className="py-3 px-4">{a.motorista_nome}</td>
+                  <td className="py-3 px-4">{a.linha}</td>
+                  <td className="py-3 px-4">{a.local_ocorrencia}</td>
+                  <td className="py-3 px-4">{a.avaliador || a.responsavel_manutencao || "-"}</td>
+                  <td className="py-3 px-4">{a.procedencia_socorrista || "-"}</td>
+                  <td className="py-3 px-4">{a.ocorrencia || "-"}</td>
                   <td className="py-3 px-4 text-center">
                     <button
-                      onClick={() => setSelected(s)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
+                      onClick={() => setSelected(a)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
                     >
                       <FaEye /> Ver Detalhes
                     </button>
@@ -111,25 +123,21 @@ export default function SOSCentral() {
         </table>
       </div>
 
-      {selected && (
-        <DetalhesModal
-          sos={selected}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {selected && <DetalhesModal sos={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-// 🟦 Modal de Detalhes
+// 🔹 Modal de Detalhes
 function DetalhesModal({ sos, onClose }) {
+  const defeitos = sos.manutencao_defeitos || [];
+
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full animate-fadeIn overflow-y-auto max-h-[90vh]">
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-center p-4 border-b bg-blue-50 rounded-t-lg">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 p-4 z-50">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl animate-fadeIn overflow-hidden">
+        <div className="flex justify-between items-center p-4 border-b bg-gray-100 rounded-t-lg">
           <h2 className="text-xl font-semibold text-gray-800">
-            Detalhes do SOS #{sos.numero_sos}
+            SOS #{sos.numero_sos} — Detalhes do Fechamento
           </h2>
           <button
             onClick={onClose}
@@ -139,50 +147,50 @@ function DetalhesModal({ sos, onClose }) {
           </button>
         </div>
 
-        {/* Corpo */}
-        <div className="p-6 space-y-4 text-sm text-gray-700">
-          <div className="grid grid-cols-2 gap-3">
-            <p><span className="font-medium">Data Abertura:</span> {new Date(sos.created_at).toLocaleString("pt-BR")}</p>
-            <p><span className="font-medium">Data Fechamento:</span> {sos.data_fechamento ? new Date(sos.data_fechamento).toLocaleString("pt-BR") : "-"}</p>
-            <p><span className="font-medium">Veículo:</span> {sos.veiculo}</p>
-            <p><span className="font-medium">Motorista:</span> {sos.motorista_nome}</p>
-            <p><span className="font-medium">Linha:</span> {sos.linha}</p>
-            <p><span className="font-medium">Local:</span> {sos.local_ocorrencia}</p>
-          </div>
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <section className="bg-gray-50 border rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">
+              Informações Gerais
+            </h3>
+            <div className="grid md:grid-cols-2 gap-2 text-sm text-gray-700">
+              <p><b>Data:</b> {new Date(sos.data_fechamento).toLocaleString("pt-BR")}</p>
+              <p><b>Veículo:</b> {sos.veiculo}</p>
+              <p><b>Motorista:</b> {sos.motorista_nome}</p>
+              <p><b>Linha:</b> {sos.linha}</p>
+              <p><b>Local:</b> {sos.local_ocorrencia}</p>
+              <p><b>Avaliador:</b> {sos.avaliador || sos.responsavel_manutencao || "-"}</p>
+              <p><b>Procedência:</b> {sos.procedencia_socorrista || "-"}</p>
+              <p><b>Ocorrência:</b> {sos.ocorrencia || "-"}</p>
+              <p><b>Carro Substituto:</b> {sos.carro_substituto || "-"}</p>
+              <p><b>SR Operação:</b> {sos.sr_numero || "-"}</p>
+            </div>
+          </section>
 
-          <div className="pt-3 border-t">
-            <h3 className="text-base font-semibold text-gray-800 mb-2">Informações de Fechamento</h3>
-            <p><span className="font-medium">Avaliador:</span> {sos.avaliador || "-"}</p>
-            <p><span className="font-medium">Procedência:</span> {sos.procedencia_socorrista || "-"}</p>
-            <p><span className="font-medium">Ocorrência:</span> {sos.ocorrencia || "-"}</p>
-            <p><span className="font-medium">Carro Substituto:</span> {sos.carro_substituto || "-"}</p>
-            <p><span className="font-medium">SR:</span> {sos.sr_numero || "-"}</p>
-          </div>
-
-          {sos.manutencao_defeitos?.length > 0 && (
-            <div className="pt-3 border-t">
-              <h3 className="text-base font-semibold text-gray-800 mb-2">
-                Defeitos registrados pela Manutenção
+          {defeitos.length > 0 && (
+            <section className="bg-white border rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Defeitos tratados pela manutenção
               </h3>
-              <ul className="list-disc ml-5 space-y-1">
-                {sos.manutencao_defeitos.map((d, i) => (
-                  <li key={i}>
-                    {d.setor_macro} • {d.grupo} • {d.defeito}
+              <ul className="space-y-2">
+                {defeitos.map((d, idx) => (
+                  <li key={idx} className="border rounded p-2 bg-gray-50 text-sm">
+                    <b>{d.setor_macro}</b> • {d.grupo} • {d.defeito}
                     {d.observacao && (
-                      <span className="text-gray-600 text-xs"> — {d.observacao}</span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Obs: {d.observacao}
+                      </p>
                     )}
                   </li>
                 ))}
               </ul>
-            </div>
+            </section>
           )}
         </div>
 
-        {/* Rodapé */}
         <div className="flex justify-end p-4 border-t bg-gray-50 rounded-b-lg">
           <button
             onClick={onClose}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition"
+            className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm"
           >
             Fechar
           </button>
