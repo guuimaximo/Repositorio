@@ -20,6 +20,9 @@ import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
 
+// 🧩 Administração / Configuração
+import Usuarios from "./pages/Usuarios"; // ✅ Nova página de controle de acessos
+
 export default function App() {
   return (
     <AuthProvider>
@@ -29,7 +32,10 @@ export default function App() {
 
         {/* Área principal protegida */}
         <Route element={<Layout />}>
+          {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
+
+          {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
           <Route path="/tratar/:id" element={<TratarTratativa />} />
           <Route path="/consultar/:id" element={<ConsultarTratativa />} />
@@ -41,14 +47,17 @@ export default function App() {
           <Route path="/cobrancas" element={<CobrancasAvarias />} />
           <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-          {/* SOS */}
+          {/* Intervenções (SOS) */}
           <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
           <Route path="/sos-fechamento" element={<SOSFechamento />} />
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
+
+          {/* ⚙️ Administração */}
+          <Route path="/usuarios" element={<Usuarios />} /> {/* ✅ Adicionado */}
         </Route>
 
-        {/* Fallback para login */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
