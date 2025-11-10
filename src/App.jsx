@@ -16,8 +16,6 @@ import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
 // 🆕 Intervenções (SOS)
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
-import ManutencaoSOS from "./pages/ManutencaoSOS";
-import FechamentoSOS from "./pages/FechamentoSOS";
 
 export default function App() {
   return (
