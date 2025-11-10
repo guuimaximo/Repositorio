@@ -72,7 +72,7 @@ export default function SOSFechamento() {
                       onClick={() => setSelected(a)}
                       className="bg-yellow-400 hover:bg-yellow-500 text-black px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2 font-medium transition"
                     >
-                      <FaWrench className="text-black" /> Tratar SOS
+                      <FaWrench className="text-black" /> Fechar Etiqueta 
                     </button>
                   </td>
                 </tr>
