@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from "react";
+// src/pages/SolicitacaoSOS.jsx
+
+import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 
 export default function SolicitacaoSOS() {
-  const [prefixos, setPrefixos] = useState([]);
-  const [motoristas, setMotoristas] = useState([]);
-  const [linhas, setLinhas] = useState([]);
   const [form, setForm] = useState({
-    numero_sos: "",
     plantonista: "",
     veiculo: "",
     motorista_id: "",
@@ -15,68 +13,74 @@ export default function SolicitacaoSOS() {
     local_ocorrencia: "",
     linha: "",
     tabela_operacional: "",
-    acao_motorista: "",
   });
-  const [loading, setLoading] = useState(false);
 
-  // Carrega dados auxiliares
+  const [tabelas, setTabelas] = useState([]);
+  const [linhas, setLinhas] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [numeroSOS, setNumeroSOS] = useState(null);
+
+  // Data e hora automáticas
+  const agora = new Date();
+  const dataAtual = agora.toLocaleDateString("pt-BR");
+  const horaAtual = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
   useEffect(() => {
     async function carregarListas() {
-      const [pfx, mot, lin] = await Promise.all([
-        supabase.from("prefixos").select("codigo").order("codigo"),
-        supabase.from("motoristas").select("chapa, nome").order("nome"),
-        supabase.from("linhas").select("codigo, descricao").order("codigo"),
-      ]);
-      if (pfx.data) setPrefixos(pfx.data);
-      if (mot.data) setMotoristas(mot.data);
-      if (lin.data) setLinhas(lin.data);
+      const { data: linhasData } = await supabase.from("linhas").select("codigo, descricao").order("codigo");
+      const { data: tabelasData } = await supabase.from("tabelas_operacionais").select("codigo, descricao");
+      setLinhas(linhasData || []);
+      setTabelas(tabelasData || []);
     }
     carregarListas();
 
-    gerarNumeroSOS();
+    // Obter último número SOS
+    async function getNextSOS() {
+      const { data, error } = await supabase
+        .from("sos_acionamentos")
+        .select("numero_sos")
+        .order("numero_sos", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== "PGRST116") console.error(error);
+      setNumeroSOS(data ? Number(data.numero_sos) + 1 : 3000); // começa em 3000 caso vazio
+    }
+    getNextSOS();
   }, []);
 
-  // Gera número SOS sequencial
-  async function gerarNumeroSOS() {
-    const { data, error } = await supabase
-      .from("sos_acionamentos")
-      .select("numero_sos")
-      .order("numero_sos", { ascending: false })
-      .limit(1)
-      .single();
-    if (!error && data) {
-      setForm((prev) => ({ ...prev, numero_sos: (data.numero_sos || 0) + 1 }));
-    } else {
-      setForm((prev) => ({ ...prev, numero_sos: 1 }));
-    }
-  }
-
-  // Cria novo SOS
   async function salvarSOS() {
     if (!form.veiculo || !form.motorista_nome || !form.reclamacao_motorista) {
-      alert("Preencha todos os campos obrigatórios!");
+      alert("Preencha veículo, motorista e reclamação!");
       return;
     }
 
     setLoading(true);
-    const agora = new Date();
-    const payload = {
-      ...form,
-      data_sos: agora.toISOString().split("T")[0],
-      hora_sos: agora.toTimeString().split(" ")[0],
-      status: "Aberto",
-    };
+    try {
+      const payload = {
+        numero_sos: numeroSOS,
+        plantonista: form.plantonista,
+        veiculo: form.veiculo,
+        motorista_id: form.motorista_id,
+        motorista_nome: form.motorista_nome,
+        reclamacao_motorista: form.reclamacao_motorista,
+        local_ocorrencia: form.local_ocorrencia,
+        linha: form.linha,
+        tabela_operacional: form.tabela_operacional,
+        status: "Aberto",
+      };
 
-    const { error } = await supabase.from("sos_acionamentos").insert([payload]);
-    setLoading(false);
+      const { error } = await supabase.from("sos_acionamentos").insert(payload);
+      if (error) throw error;
 
-    if (error) {
-      console.error(error);
-      alert("Erro ao salvar SOS.");
-    } else {
-      alert(`✅ SOS nº ${form.numero_sos} criado com sucesso!`);
+      // Gerar mensagem formatada
+      const mensagem = `*Acionamento de Troca/SOS:* ${numeroSOS}\n*Data:* ${dataAtual}\n*Veículo:* ${form.veiculo}\n*Motorista:* ${form.motorista_id || ""} ${form.motorista_nome}\n*Linha:* ${form.linha}\n*Local:* ${form.local_ocorrencia}\n*Defeito:* ${form.reclamacao_motorista}\n*Plantonista:* ${form.plantonista}`;
+      
+      await navigator.clipboard.writeText(mensagem);
+      alert("Solicitação registrada! Mensagem copiada para o WhatsApp ✅");
+
+      // Resetar
       setForm({
-        numero_sos: "",
         plantonista: "",
         veiculo: "",
         motorista_id: "",
@@ -85,127 +89,92 @@ export default function SolicitacaoSOS() {
         local_ocorrencia: "",
         linha: "",
         tabela_operacional: "",
-        acao_motorista: "",
       });
-      gerarNumeroSOS();
+      setNumeroSOS((prev) => prev + 1);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar: " + err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Solicitação de SOS</h1>
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-4">
-        {/* Número SOS */}
+      {/* Cabeçalho */}
+      <div className="flex justify-between mb-4">
         <div>
-          <label className="text-sm text-gray-500">Número do SOS</label>
-          <input
-            type="text"
-            className="border p-2 rounded w-full bg-gray-100"
-            value={form.numero_sos}
-            readOnly
-          />
+          <p className="text-sm text-gray-500">Número do SOS</p>
+          <p className="text-xl font-semibold text-blue-600">{numeroSOS || "..."}</p>
         </div>
+        <div className="text-right">
+          <p className="text-sm text-gray-500">Data e Hora</p>
+          <p className="text-xl font-semibold text-gray-700">{dataAtual} • {horaAtual}</p>
+        </div>
+      </div>
 
-        {/* Plantonista */}
+      {/* Formulário */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm text-gray-500">Plantonista</label>
+          <label className="text-sm text-gray-600">Plantonista</label>
           <input
             type="text"
-            className="border p-2 rounded w-full"
+            className="w-full border rounded p-2"
             value={form.plantonista}
             onChange={(e) => setForm({ ...form, plantonista: e.target.value })}
           />
         </div>
 
-        {/* Prefixo */}
         <div>
-          <label className="text-sm text-gray-500">Prefixo do Veículo</label>
-          <select
-            className="border p-2 rounded w-full"
-            value={form.veiculo}
-            onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
-          >
-            <option value="">Selecione...</option>
-            {prefixos.map((p) => (
-              <option key={p.codigo} value={p.codigo}>
-                {p.codigo}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Motorista */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-sm text-gray-500">Motorista</label>
-            <select
-              className="border p-2 rounded w-full"
-              value={form.motorista_nome}
-              onChange={(e) => {
-                const nome = e.target.value;
-                const motorista = motoristas.find((m) => m.nome === nome);
-                setForm({
-                  ...form,
-                  motorista_nome: nome,
-                  motorista_id: motorista ? motorista.chapa : "",
-                });
-              }}
-            >
-              <option value="">Selecione...</option>
-              {motoristas.map((m) => (
-                <option key={m.chapa} value={m.nome}>
-                  {m.nome} ({m.chapa})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-sm text-gray-500">Chapa</label>
-            <input
-              type="text"
-              className="border p-2 rounded w-full bg-gray-100"
-              value={form.motorista_id}
-              readOnly
-            />
-          </div>
-        </div>
-
-        {/* Reclamação */}
-        <div>
-          <label className="text-sm text-gray-500">Reclamação do Motorista</label>
-          <textarea
-            rows={3}
-            className="border p-2 rounded w-full"
-            value={form.reclamacao_motorista}
-            onChange={(e) =>
-              setForm({ ...form, reclamacao_motorista: e.target.value })
-            }
-          ></textarea>
-        </div>
-
-        {/* Local */}
-        <div>
-          <label className="text-sm text-gray-500">Local da Ocorrência</label>
+          <label className="text-sm text-gray-600">Prefixo do Veículo</label>
           <input
             type="text"
-            className="border p-2 rounded w-full"
-            value={form.local_ocorrencia}
-            onChange={(e) =>
-              setForm({ ...form, local_ocorrencia: e.target.value })
-            }
+            className="w-full border rounded p-2"
+            value={form.veiculo}
+            onChange={(e) => setForm({ ...form, veiculo: e.target.value })}
           />
         </div>
 
-        {/* Linha */}
         <div>
-          <label className="text-sm text-gray-500">Linha</label>
+          <label className="text-sm text-gray-600">Chapa do Motorista</label>
+          <input
+            type="text"
+            className="w-full border rounded p-2"
+            value={form.motorista_id}
+            onChange={(e) => setForm({ ...form, motorista_id: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600">Nome do Motorista</label>
+          <input
+            type="text"
+            className="w-full border rounded p-2"
+            value={form.motorista_nome}
+            onChange={(e) => setForm({ ...form, motorista_nome: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600">Local</label>
+          <input
+            type="text"
+            className="w-full border rounded p-2"
+            value={form.local_ocorrencia}
+            onChange={(e) => setForm({ ...form, local_ocorrencia: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600">Linha</label>
           <select
-            className="border p-2 rounded w-full"
+            className="w-full border rounded p-2"
             value={form.linha}
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
-            <option value="">Selecione...</option>
+            <option value="">Selecione</option>
             {linhas.map((l) => (
               <option key={l.codigo} value={l.codigo}>
                 {l.codigo} - {l.descricao}
@@ -214,50 +183,41 @@ export default function SolicitacaoSOS() {
           </select>
         </div>
 
-        {/* Tabela Operacional */}
         <div>
-          <label className="text-sm text-gray-500">Tabela Operacional</label>
+          <label className="text-sm text-gray-600">Tabela Operacional</label>
           <select
-            className="border p-2 rounded w-full"
+            className="w-full border rounded p-2"
             value={form.tabela_operacional}
-            onChange={(e) =>
-              setForm({ ...form, tabela_operacional: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, tabela_operacional: e.target.value })}
           >
-            <option value="">Selecione...</option>
-            <option value="1MANHA">1MANHÃ</option>
-            <option value="2MANHA">2MANHÃ</option>
-            <option value="TARDE">TARDE</option>
-            <option value="NOITE">NOITE</option>
+            <option value="">Selecione</option>
+            {tabelas.map((t) => (
+              <option key={t.codigo} value={t.codigo}>
+                {t.descricao}
+              </option>
+            ))}
           </select>
         </div>
 
-        {/* Ação Motorista */}
-        <div>
-          <label className="text-sm text-gray-500">Ação do Motorista</label>
-          <select
-            className="border p-2 rounded w-full"
-            value={form.acao_motorista}
-            onChange={(e) =>
-              setForm({ ...form, acao_motorista: e.target.value })
-            }
-          >
-            <option value="">Selecione...</option>
-            <option value="Recolheu">Recolheu</option>
-            <option value="Seguiu Viagem">Seguiu Viagem</option>
-            <option value="Aguardou no Local">Aguardou no Local</option>
-          </select>
+        <div className="md:col-span-2">
+          <label className="text-sm text-gray-600">Reclamação / Defeito</label>
+          <textarea
+            rows="3"
+            className="w-full border rounded p-2"
+            value={form.reclamacao_motorista}
+            onChange={(e) => setForm({ ...form, reclamacao_motorista: e.target.value })}
+          />
         </div>
+      </div>
 
-        <div className="text-right">
-          <button
-            onClick={salvarSOS}
-            disabled={loading}
-            className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Salvando..." : "Emitir Solicitação"}
-          </button>
-        </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={salvarSOS}
+          disabled={loading}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+        >
+          {loading ? "Salvando..." : "Enviar SOS"}
+        </button>
       </div>
     </div>
   );
