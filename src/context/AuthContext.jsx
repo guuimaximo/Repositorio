@@ -1,29 +1,51 @@
-import { createContext, useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/context/AuthContext.jsx
+import { createContext, useContext, useState, useEffect } from "react";
 
-const AuthContext = createContext();
+export const AuthContext = createContext(); // ✅ Exporta o contexto diretamente
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario] = useState(null);
-  const navigate = useNavigate();
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("user");
+    return saved ? JSON.parse(saved) : null;
+  });
 
-  const login = (user) => {
-    setUsuario(user);
-    navigate("/"); // ✅ redireciona para o dashboard
+  // Sessão expira após 1 hora de inatividade
+  useEffect(() => {
+    let timeout;
+    function resetTimer() {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setUser(null);
+        localStorage.removeItem("user");
+      }, 60 * 60 * 1000); // 1 hora
+    }
+
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keypress", resetTimer);
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keypress", resetTimer);
+    };
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem("user", JSON.stringify(userData));
   };
 
   const logout = () => {
-    setUsuario(null);
-    navigate("/login");
+    setUser(null);
+    localStorage.removeItem("user");
   };
 
   return (
-    <AuthContext.Provider value={{ usuario, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export const useAuth = () => useContext(AuthContext);
