@@ -16,7 +16,8 @@ import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 // 🆕 Intervenções (SOS)
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
-import SOSTratamento from "./pages/SOSTratamento"; // ✅ Nova página (manutenção)
+import SOSTratamento from "./pages/SOSTratamento";
+import SOSCentral from "./pages/SOSCentral"; // ✅ Nova página (Central de SOS)
 
 export default function App() {
   return (
@@ -40,7 +41,8 @@ export default function App() {
         {/* 🆕 Intervenções (SOS) */}
         <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
         <Route path="/sos-fechamento" element={<SOSFechamento />} />
-        <Route path="/sos-tratamento" element={<SOSTratamento />} /> {/* ✅ Novo */}
+        <Route path="/sos-tratamento" element={<SOSTratamento />} />
+        <Route path="/sos-central" element={<SOSCentral />} /> {/* ✅ Adicionado */}
       </Route>
 
       {/* Redirecionamento padrão */}
