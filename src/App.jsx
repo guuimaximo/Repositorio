@@ -2,7 +2,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 
-// Páginas principais
+// --- Login e Cadastro ---
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+
+// --- Páginas principais ---
 import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
@@ -13,16 +17,36 @@ import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
 import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
-// 🆕 Intervenções (SOS)
+// --- Intervenções (SOS) ---
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
-import SOSCentral from "./pages/SOSCentral"; // ✅ Nova página (Central de SOS)
+import SOSCentral from "./pages/SOSCentral";
+
+// --- Middleware para proteger rotas ---
+function ProtectedRoute({ children }) {
+  const user = JSON.parse(localStorage.getItem("usuario"));
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      {/* 🔐 Rotas públicas */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+
+      {/* 🔒 Rotas protegidas */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         {/* Início */}
         <Route path="/" element={<Dashboard />} />
 
@@ -38,15 +62,15 @@ export default function App() {
         <Route path="/cobrancas" element={<CobrancasAvarias />} />
         <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-        {/* 🆕 Intervenções (SOS) */}
+        {/* Intervenções (SOS) */}
         <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
         <Route path="/sos-fechamento" element={<SOSFechamento />} />
         <Route path="/sos-tratamento" element={<SOSTratamento />} />
-        <Route path="/sos-central" element={<SOSCentral />} /> {/* ✅ Adicionado */}
+        <Route path="/sos-central" element={<SOSCentral />} />
       </Route>
 
       {/* Redirecionamento padrão */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
