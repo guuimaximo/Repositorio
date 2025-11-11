@@ -20,8 +20,7 @@ import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
 
 import Usuarios from "./pages/Usuarios"; // 👈 tela de configuração
-import RequireAuth from "./routes/RequireAuth"; // 👈 novo
-import RequireLevel from "./routes/RequireLevel"; // 👈 novo
+import RequireAuth from "./routes/RequireAuth"; // mantém só a proteção geral
 
 export default function App() {
   return (
@@ -59,15 +58,8 @@ export default function App() {
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
 
-          {/* Configurações (somente Administrador) */}
-          <Route
-            path="/usuarios"
-            element={
-              <RequireLevel levels={["Administrador"]}>
-                <Usuarios />
-              </RequireLevel>
-            }
-          />
+          {/* ⚙️ Configurações — acesso direto */}
+          <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 
         {/* 🚫 Redireciona rotas inexistentes */}
