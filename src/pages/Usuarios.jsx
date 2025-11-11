@@ -1,7 +1,8 @@
+// src/pages/Usuarios.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import {
-  FaUserShield, FaUserCheck, FaUserTimes, FaSync, FaKey
+  FaUserShield, FaUserCheck, FaUserTimes, FaSync
 } from "react-icons/fa";
 
 export default function Usuarios() {
@@ -37,8 +38,12 @@ export default function Usuarios() {
       .update({ nivel })
       .eq("id", id);
 
-    if (error) return alert("Erro ao atualizar nível!");
-    alert("Nível atualizado com sucesso ✅");
+    if (error) {
+      console.error(error.message);
+      return alert("Erro ao atualizar nível!");
+    }
+
+    alert(`Nível atualizado para "${nivel}" ✅`);
     carregarUsuarios();
   }
 
@@ -90,7 +95,6 @@ export default function Usuarios() {
               <th className="py-2 px-4 text-left">ID</th>
               <th className="py-2 px-4 text-left">Nome</th>
               <th className="py-2 px-4 text-left">Login</th>
-              <th className="py-2 px-4 text-left">E-mail</th>
               <th className="py-2 px-4 text-center">Nível</th>
               <th className="py-2 px-4 text-center">Status</th>
               <th className="py-2 px-4 text-center">Ações</th>
@@ -99,36 +103,34 @@ export default function Usuarios() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center py-6 text-gray-600">
+                <td colSpan="6" className="text-center py-6 text-gray-600">
                   Carregando...
                 </td>
               </tr>
             ) : filtrados.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center py-6 text-gray-600">
+                <td colSpan="6" className="text-center py-6 text-gray-600">
                   Nenhum usuário encontrado.
                 </td>
               </tr>
             ) : (
               filtrados.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-t hover:bg-gray-50 transition-all"
-                >
+                <tr key={u.id} className="border-t hover:bg-gray-50 transition-all">
                   <td className="py-2 px-4">{u.id}</td>
                   <td className="py-2 px-4">{u.nome}</td>
                   <td className="py-2 px-4">{u.login}</td>
-                  <td className="py-2 px-4">{u.email || "—"}</td>
                   <td className="py-2 px-4 text-center">
                     <select
-                      value={u.nivel || ""}
+                      value={u.nivel || "Pendente"}
                       onChange={(e) => atualizarNivel(u.id, e.target.value)}
                       className="border rounded px-2 py-1 text-sm"
                     >
-                      <option value="">—</option>
+                      <option value="Pendente">Pendente</option>
+                      <option value="CCO">CCO</option>
+                      <option value="Manutenção">Manutenção</option>
+                      <option value="Tratativa">Tratativa</option>
+                      <option value="Gestor">Gestor</option>
                       <option value="Administrador">Administrador</option>
-                      <option value="Supervisor">Supervisor</option>
-                      <option value="Padrão">Padrão</option>
                     </select>
                   </td>
                   <td className="py-2 px-4 text-center">
