@@ -1,4 +1,4 @@
-import { useState, useContext } from "react";
+import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
@@ -34,27 +34,60 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // 🔒 Controle de acesso
   const nivel = user?.nivel || "";
 
-  const podeVer = (secao) => {
-    switch (secao) {
-      case "tratativas":
-        return ["CCO", "Manutenção", "Tratativa", "Gestor", "Administrador"].includes(nivel);
-      case "avarias":
-        return ["Manutenção", "Tratativa", "Gestor", "Administrador"].includes(nivel);
-      case "sos":
-        return ["CCO", "Manutenção", "Gestor", "Administrador"].includes(nivel);
-      case "config":
-        return nivel === "Administrador";
+  // 🔒 Regras de acesso finas (link a link)
+  const can = (route) => {
+    if (nivel === "Administrador") return true;
+    if (nivel === "Gestor") return !route.startsWith("config");
+
+    switch (route) {
+      // Tratativas
+      case "tratativas:solicitar":
+        return ["CCO", "Manutenção", "Tratativa"].includes(nivel);
+      case "tratativas:central":
+        return ["Tratativa"].includes(nivel); // Gestor vê (regra geral acima)
+      // Avarias
+      case "avarias:lancar":
+      case "avarias:revisao":
+        return ["Manutenção"].includes(nivel); // Gestor vê (regra geral)
+      case "avarias:aprovar":
+        return false; // Somente Gestor/Adm (Gestor já passa na regra geral)
+      case "avarias:cobrancas":
+        return ["Tratativa"].includes(nivel); // Gestor vê (regra geral)
+      // SOS
+      case "sos:solicitacao":
+      case "sos:fechamento":
+        return ["CCO", "Manutenção"].includes(nivel); // Gestor vê (regra geral)
+      case "sos:tratamento":
+      case "sos:central":
+        return ["Manutenção"].includes(nivel); // Gestor vê (regra geral)
+      // Config
+      case "config:usuarios":
+        return false; // Só Adm (Gestor barrado pela regra do prefixo)
       default:
         return true;
     }
   };
 
+  // Mostrar seção só se houver pelo menos 1 sublink liberado
+  const showTratativas = useMemo(() =>
+    can("tratativas:solicitar") || can("tratativas:central") || nivel === "Gestor" || nivel === "Administrador"
+  , [nivel]);
+
+  const showAvarias = useMemo(() =>
+    can("avarias:lancar") || can("avarias:revisao") || can("avarias:aprovar") || can("avarias:cobrancas") || nivel === "Gestor" || nivel === "Administrador"
+  , [nivel]);
+
+  const showSOS = useMemo(() =>
+    can("sos:solicitacao") || can("sos:fechamento") || can("sos:tratamento") || can("sos:central") || nivel === "Gestor" || nivel === "Administrador"
+  , [nivel]);
+
+  const showConfig = useMemo(() => nivel === "Administrador", [nivel]);
+
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
-      {/* Cabeçalho */}
+      {/* Cabeçalho (logo + saudação) */}
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
@@ -74,7 +107,7 @@ export default function Sidebar() {
         </NavLink>
 
         {/* 2️⃣ Tratativas */}
-        {podeVer("tratativas") && (
+        {showTratativas && (
           <>
             <button
               onClick={() => setTratativasOpen(!tratativasOpen)}
@@ -87,19 +120,23 @@ export default function Sidebar() {
             </button>
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                <NavLink to="/solicitar" className={subNavLinkClass}>
-                  <FaPenSquare /> <span>Solicitação</span>
-                </NavLink>
-                <NavLink to="/central" className={subNavLinkClass}>
-                  <FaListAlt /> <span>Central</span>
-                </NavLink>
+                {(can("tratativas:solicitar") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/solicitar" className={subNavLinkClass}>
+                    <FaPenSquare /> <span>Solicitação</span>
+                  </NavLink>
+                )}
+                {(can("tratativas:central") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/central" className={subNavLinkClass}>
+                    <FaListAlt /> <span>Central</span>
+                  </NavLink>
+                )}
               </div>
             )}
           </>
         )}
 
         {/* 3️⃣ Avarias */}
-        {podeVer("avarias") && (
+        {showAvarias && (
           <>
             <button
               onClick={() => setAvariasOpen(!avariasOpen)}
@@ -112,25 +149,33 @@ export default function Sidebar() {
             </button>
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                <NavLink to="/lancar-avaria" className={subNavLinkClass}>
-                  <FaWrench /> <span>Lançamento</span>
-                </NavLink>
-                <NavLink to="/avarias-em-revisao" className={subNavLinkClass}>
-                  <FaUndo /> <span>Pendências de Revisão</span>
-                </NavLink>
-                <NavLink to="/aprovar-avarias" className={subNavLinkClass}>
-                  <FaClipboardCheck /> <span>Aprovações</span>
-                </NavLink>
-                <NavLink to="/cobrancas" className={subNavLinkClass}>
-                  <FaMoneyBill /> <span>Cobranças</span>
-                </NavLink>
+                {(can("avarias:lancar") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/lancar-avaria" className={subNavLinkClass}>
+                    <FaWrench /> <span>Lançamento</span>
+                  </NavLink>
+                )}
+                {(can("avarias:revisao") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/avarias-em-revisao" className={subNavLinkClass}>
+                    <FaUndo /> <span>Pendências de Revisão</span>
+                  </NavLink>
+                )}
+                {(can("avarias:aprovar") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/aprovar-avarias" className={subNavLinkClass}>
+                    <FaClipboardCheck /> <span>Aprovações</span>
+                  </NavLink>
+                )}
+                {(can("avarias:cobrancas") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/cobrancas" className={subNavLinkClass}>
+                    <FaMoneyBill /> <span>Cobranças</span>
+                  </NavLink>
+                )}
               </div>
             )}
           </>
         )}
 
         {/* 4️⃣ Intervenções (SOS) */}
-        {podeVer("sos") && (
+        {showSOS && (
           <>
             <button
               onClick={() => setIntervencoesOpen(!intervencoesOpen)}
@@ -143,25 +188,33 @@ export default function Sidebar() {
             </button>
             {intervencoesOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                <NavLink to="/sos-solicitacao" className={subNavLinkClass}>
-                  <FaPenSquare /> <span>Solicitação</span>
-                </NavLink>
-                <NavLink to="/sos-fechamento" className={subNavLinkClass}>
-                  <FaCheckDouble /> <span>Fechamento</span>
-                </NavLink>
-                <NavLink to="/sos-tratamento" className={subNavLinkClass}>
-                  <FaScrewdriver /> <span>Manutenção</span>
-                </NavLink>
-                <NavLink to="/sos-central" className={subNavLinkClass}>
-                  <FaEye /> <span>Central</span>
-                </NavLink>
+                {(can("sos:solicitacao") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/sos-solicitacao" className={subNavLinkClass}>
+                    <FaPenSquare /> <span>Solicitação</span>
+                  </NavLink>
+                )}
+                {(can("sos:fechamento") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/sos-fechamento" className={subNavLinkClass}>
+                    <FaCheckDouble /> <span>Fechamento</span>
+                  </NavLink>
+                )}
+                {(can("sos:tratamento") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/sos-tratamento" className={subNavLinkClass}>
+                    <FaScrewdriver /> <span>Manutenção</span>
+                  </NavLink>
+                )}
+                {(can("sos:central") || nivel === "Gestor" || nivel === "Administrador") && (
+                  <NavLink to="/sos-central" className={subNavLinkClass}>
+                    <FaEye /> <span>Central</span>
+                  </NavLink>
+                )}
               </div>
             )}
           </>
         )}
 
         {/* 👑 Configurações (somente Administrador) */}
-        {podeVer("config") && (
+        {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
             <button
