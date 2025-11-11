@@ -1,49 +1,67 @@
 // src/pages/Login.jsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
-import { useAuth } from "../context/AuthContext"; // ✅ usa o contexto de autenticação
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth(); // ✅ função de login do contexto
+  const location = useLocation();
+  const { login: doLogin } = useAuth();
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+
+  const nextPath = location.state?.from?.pathname || "/";
 
   // 🔐 LOGIN
   async function handleEntrar(e) {
     e.preventDefault();
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("usuarios_aprovadores")
-      .select("*")
-      .eq("login", loginInput)
-      .eq("senha", senha)
-      .eq("ativo", true)
-      .single();
-
-    setLoading(false);
-
-    if (error || !data) {
-      alert("Login ou senha incorretos ou conta inativa.");
+    const loginTrim = loginInput.trim();
+    const senhaTrim = senha.trim();
+    if (!loginTrim || !senhaTrim) {
+      alert("Informe login e senha.");
       return;
     }
 
-    // ✅ salva no AuthContext e no localStorage
-    login(data);
-    navigate("/");
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("usuarios_aprovadores")
+      .select("*")
+      .eq("login", loginTrim)
+      .eq("senha", senhaTrim)
+      .eq("ativo", true)
+      .single();
+    setLoading(false);
+
+    if (error || !data) {
+      alert("Login ou senha incorretos, ou conta inativa.");
+      return;
+    }
+
+    if (data.nivel === "Pendente") {
+      alert("Seu cadastro ainda está pendente de aprovação pelo administrador.");
+      return;
+    }
+
+    // ✅ Persiste sessão via AuthContext (grava no localStorage com lastActivity)
+    doLogin(data);
+    navigate(nextPath, { replace: true });
   }
 
   // 🆕 CADASTRO
   async function handleCadastro(e) {
     e.preventDefault();
-    if (!nome || !loginInput || !senha) {
+    const nomeTrim = nome.trim();
+    const loginTrim = loginInput.trim();
+    const senhaTrim = senha.trim();
+
+    if (!nomeTrim || !loginTrim || !senhaTrim) {
       alert("Preencha todos os campos!");
       return;
     }
@@ -51,24 +69,26 @@ export default function Login() {
     setLoading(true);
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
-        nome,
-        login: loginInput,
-        senha,
-        ativo: false,
-        nivel: "Pendente",
+        nome: nomeTrim,
+        login: loginTrim,
+        senha: senhaTrim,
+        email: null,
+        ativo: false,          // aguardará aprovação
+        nivel: "Pendente",     // precisa estar permitido no CHECK da tabela
       },
     ]);
-
     setLoading(false);
+
     if (error) {
       alert("Erro ao cadastrar: " + error.message);
-    } else {
-      alert("Cadastro enviado! Aguarde aprovação do administrador.");
-      setIsCadastro(false);
-      setNome("");
-      setLoginInput("");
-      setSenha("");
+      return;
     }
+
+    alert("Cadastro enviado! Aguarde aprovação do administrador.");
+    setIsCadastro(false);
+    setNome("");
+    setLoginInput("");
+    setSenha("");
   }
 
   return (
@@ -97,6 +117,7 @@ export default function Login() {
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
+                autoComplete="name"
               />
             </div>
           )}
@@ -110,6 +131,7 @@ export default function Login() {
               value={loginInput}
               onChange={(e) => setLoginInput(e.target.value)}
               className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
+              autoComplete="username"
             />
           </div>
 
@@ -117,12 +139,23 @@ export default function Login() {
             <label className="block text-sm font-medium text-gray-600">
               Senha
             </label>
-            <input
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
-            />
+            <div className="flex gap-2">
+              <input
+                type={mostrarSenha ? "text" : "password"}
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarSenha((v) => !v)}
+                className="px-3 py-2 border rounded-md text-sm text-gray-600 hover:bg-gray-50"
+                title={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {mostrarSenha ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
           </div>
 
           <button
@@ -143,6 +176,7 @@ export default function Login() {
             <button
               onClick={() => setIsCadastro(false)}
               className="text-blue-600 hover:underline"
+              type="button"
             >
               Já possui conta? Faça login
             </button>
@@ -150,6 +184,7 @@ export default function Login() {
             <button
               onClick={() => setIsCadastro(true)}
               className="text-blue-600 hover:underline"
+              type="button"
             >
               Não possui conta? Cadastre-se
             </button>
