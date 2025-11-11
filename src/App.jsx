@@ -69,10 +69,6 @@ export default function App() {
             }
           />
         </Route>
-
-        {/* Qualquer outra rota cai no login */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
     </AuthProvider>
   );
 }
