@@ -19,18 +19,18 @@ import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
 
-import Usuarios from "./pages/Usuarios";                // 👈 tela de configuração
-import RequireAuth from "./routes/RequireAuth";         // 👈 novo
-import RequireLevel from "./routes/RequireLevel";       // 👈 novo
+import Usuarios from "./pages/Usuarios"; // 👈 tela de configuração
+import RequireAuth from "./routes/RequireAuth"; // 👈 novo
+import RequireLevel from "./routes/RequireLevel"; // 👈 novo
 
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Login público */}
+        {/* 🔓 Login público */}
         <Route path="/login" element={<Login />} />
 
-        {/* Área protegida */}
+        {/* 🔐 Área protegida */}
         <Route
           element={
             <RequireAuth>
@@ -59,7 +59,7 @@ export default function App() {
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
 
-          {/* Configurações → somente Administrador */}
+          {/* Configurações (somente Administrador) */}
           <Route
             path="/usuarios"
             element={
@@ -69,5 +69,10 @@ export default function App() {
             }
           />
         </Route>
+
+        {/* 🚫 Redireciona rotas inexistentes */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
