@@ -1,131 +1,60 @@
 // src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import RequireAuth from "./components/RequireAuth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
-import ProtectedRoute from "./components/ProtectedRoute";
 
-// Páginas
+// Páginas principais
 import Dashboard from "./pages/Dashboard";
 import CentralTratativas from "./pages/CentralTratativas";
+import TratarTratativa from "./pages/TratarTratativa";
+import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
-import CobrancasAvarias from "./pages/CobrancasAvarias";
 import LancarAvaria from "./pages/LancarAvaria";
-import AvariasEmRevisao from "./pages/AvariasEmRevisao";
+import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
+import AvariasEmRevisao from "./pages/AvariasEmRevisao";
+
+// SOS
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
-import Usuarios from "./pages/Usuarios";
 
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Público */}
         <Route path="/login" element={<Login />} />
 
-        <Route element={<Layout />}>
-          {/* Dashboard → todos */}
-          <Route path="/" element={<Dashboard />} />
+        {/* Protegido (cai na tela de login se tentar acessar direto) */}
+        <Route element={<RequireAuth />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
 
-          {/* Tratativas */}
-          <Route
-            path="/solicitar"
-            element={
-              <ProtectedRoute niveisPermitidos={["CCO", "Manutenção", "Tratativa", "Gestor"]}>
-                <SolicitacaoTratativa />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/central"
-            element={
-              <ProtectedRoute niveisPermitidos={["Tratativa", "Gestor"]}>
-                <CentralTratativas />
-              </ProtectedRoute>
-            }
-          />
+            {/* Tratativas */}
+            <Route path="/central" element={<CentralTratativas />} />
+            <Route path="/tratar/:id" element={<TratarTratativa />} />
+            <Route path="/consultar/:id" element={<ConsultarTratativa />} />
+            <Route path="/solicitar" element={<SolicitacaoTratativa />} />
 
-          {/* Avarias */}
-          <Route
-            path="/lancar-avaria"
-            element={
-              <ProtectedRoute niveisPermitidos={["Manutenção"]}>
-                <LancarAvaria />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/avarias-em-revisao"
-            element={
-              <ProtectedRoute niveisPermitidos={["Manutenção"]}>
-                <AvariasEmRevisao />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/aprovar-avarias"
-            element={
-              <ProtectedRoute niveisPermitidos={["Gestor"]}>
-                <AprovacaoAvarias />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cobrancas"
-            element={
-              <ProtectedRoute niveisPermitidos={["Tratativa", "Gestor"]}>
-                <CobrancasAvarias />
-              </ProtectedRoute>
-            }
-          />
+            {/* Avarias */}
+            <Route path="/lancar-avaria" element={<LancarAvaria />} />
+            <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
+            <Route path="/cobrancas" element={<CobrancasAvarias />} />
+            <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
-          {/* SOS */}
-          <Route
-            path="/sos-solicitacao"
-            element={
-              <ProtectedRoute niveisPermitidos={["CCO", "Manutenção"]}>
-                <SolicitacaoSOS />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sos-fechamento"
-            element={
-              <ProtectedRoute niveisPermitidos={["CCO", "Manutenção"]}>
-                <SOSFechamento />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sos-tratamento"
-            element={
-              <ProtectedRoute niveisPermitidos={["Manutenção"]}>
-                <SOSTratamento />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sos-central"
-            element={
-              <ProtectedRoute niveisPermitidos={["Manutenção"]}>
-                <SOSCentral />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Configuração de Usuários → apenas Admin */}
-          <Route
-            path="/usuarios"
-            element={
-              <ProtectedRoute niveisPermitidos={["Administrador"]}>
-                <Usuarios />
-              </ProtectedRoute>
-            }
-          />
+            {/* SOS */}
+            <Route path="/sos-solicitacao" element={<SolicitacaoSOS />} />
+            <Route path="/sos-fechamento" element={<SOSFechamento />} />
+            <Route path="/sos-tratamento" element={<SOSTratamento />} />
+            <Route path="/sos-central" element={<SOSCentral />} />
+          </Route>
         </Route>
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
