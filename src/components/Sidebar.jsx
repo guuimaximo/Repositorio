@@ -1,3 +1,4 @@
+// src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -8,6 +9,42 @@ import {
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
+// mapa de acesso por nível
+const ACCESS = {
+  Administrador: "ALL",
+  Gestor: [
+    "/",
+    "/solicitar", "/central", // Tratativas
+    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias", "/cobrancas", // Avarias
+    "/sos-solicitacao", "/sos-fechamento", "/sos-tratamento", "/sos-central", // SOS
+  ],
+  Tratativa: [
+    "/",
+    "/solicitar", "/central", // Tratativas
+    "/cobrancas",            // Avarias (apenas cobranças)
+  ],
+  Manutenção: [
+    "/",
+    "/solicitar",            // Tratativas
+    "/lancar-avaria", "/avarias-em-revisao", // Avarias
+    "/sos-fechamento", "/sos-tratamento", "/sos-central", // SOS
+  ],
+  CCO: [
+    "/",
+    "/solicitar",            // Tratativas
+    "/sos-solicitacao", "/sos-fechamento", // SOS
+  ],
+};
+
+// helper de acesso
+function canSee(user, path) {
+  if (!user?.nivel) return false;
+  if (user.nivel === "Administrador") return true;
+  if (user.nivel === "Gestor") return ACCESS.Gestor.includes(path);
+  const allowed = ACCESS[user.nivel] || [];
+  return allowed.includes(path);
+}
+
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
@@ -16,6 +53,37 @@ export default function Sidebar() {
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  const isAdmin = user?.nivel === "Administrador";
+  const isGestor = user?.nivel === "Gestor";
+
+  // links definidos com path para validar acesso
+  const links = useMemo(() => ({
+    inicio: { path: "/", label: "Início", icon: <FaHome /> },
+
+    tratativas: [
+      { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
+      { path: "/central", label: "Central", icon: <FaListAlt /> },
+    ],
+
+    avarias: [
+      { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
+      { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
+      { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
+      { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
+    ],
+
+    sos: [
+      { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
+      { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
+      { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
+      { path: "/sos-central", label: "Central", icon: <FaEye /> },
+    ],
+
+    configuracoes: [
+      { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
+    ],
+  }), []);
 
   const handleLogout = () => {
     if (confirm("Deseja realmente sair?")) {
@@ -34,60 +102,15 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  const nivel = user?.nivel || "";
-
-  // 🔒 Regras de acesso finas (link a link)
-  const can = (route) => {
-    if (nivel === "Administrador") return true;
-    if (nivel === "Gestor") return !route.startsWith("config");
-
-    switch (route) {
-      // Tratativas
-      case "tratativas:solicitar":
-        return ["CCO", "Manutenção", "Tratativa"].includes(nivel);
-      case "tratativas:central":
-        return ["Tratativa"].includes(nivel); // Gestor vê (regra geral acima)
-      // Avarias
-      case "avarias:lancar":
-      case "avarias:revisao":
-        return ["Manutenção"].includes(nivel); // Gestor vê (regra geral)
-      case "avarias:aprovar":
-        return false; // Somente Gestor/Adm (Gestor já passa na regra geral)
-      case "avarias:cobrancas":
-        return ["Tratativa"].includes(nivel); // Gestor vê (regra geral)
-      // SOS
-      case "sos:solicitacao":
-      case "sos:fechamento":
-        return ["CCO", "Manutenção"].includes(nivel); // Gestor vê (regra geral)
-      case "sos:tratamento":
-      case "sos:central":
-        return ["Manutenção"].includes(nivel); // Gestor vê (regra geral)
-      // Config
-      case "config:usuarios":
-        return false; // Só Adm (Gestor barrado pela regra do prefixo)
-      default:
-        return true;
-    }
-  };
-
-  // Mostrar seção só se houver pelo menos 1 sublink liberado
-  const showTratativas = useMemo(() =>
-    can("tratativas:solicitar") || can("tratativas:central") || nivel === "Gestor" || nivel === "Administrador"
-  , [nivel]);
-
-  const showAvarias = useMemo(() =>
-    can("avarias:lancar") || can("avarias:revisao") || can("avarias:aprovar") || can("avarias:cobrancas") || nivel === "Gestor" || nivel === "Administrador"
-  , [nivel]);
-
-  const showSOS = useMemo(() =>
-    can("sos:solicitacao") || can("sos:fechamento") || can("sos:tratamento") || can("sos:central") || nivel === "Gestor" || nivel === "Administrador"
-  , [nivel]);
-
-  const showConfig = useMemo(() => nivel === "Administrador", [nivel]);
+  // decide exibição por seção
+  const showTratativas = links.tratativas.some(l => canSee(user, l.path));
+  const showAvarias = links.avarias.some(l => canSee(user, l.path));
+  const showSOS = links.sos.some(l => canSee(user, l.path));
+  const showConfig = isAdmin; // somente Administrador
 
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
-      {/* Cabeçalho (logo + saudação) */}
+      {/* Cabeçalho */}
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
@@ -101,12 +124,14 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* 1️⃣ Início */}
-        <NavLink to="/" className={navLinkClass}>
-          <FaHome /> <span>Início</span>
-        </NavLink>
+        {/* Início */}
+        {canSee(user, links.inicio.path) && (
+          <NavLink to={links.inicio.path} className={navLinkClass}>
+            {links.inicio.icon} <span>{links.inicio.label}</span>
+          </NavLink>
+        )}
 
-        {/* 2️⃣ Tratativas */}
+        {/* Tratativas */}
         {showTratativas && (
           <>
             <button
@@ -120,22 +145,19 @@ export default function Sidebar() {
             </button>
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {(can("tratativas:solicitar") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/solicitar" className={subNavLinkClass}>
-                    <FaPenSquare /> <span>Solicitação</span>
-                  </NavLink>
-                )}
-                {(can("tratativas:central") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/central" className={subNavLinkClass}>
-                    <FaListAlt /> <span>Central</span>
-                  </NavLink>
+                {links.tratativas.map(link =>
+                  canSee(user, link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
                 )}
               </div>
             )}
           </>
         )}
 
-        {/* 3️⃣ Avarias */}
+        {/* Avarias */}
         {showAvarias && (
           <>
             <button
@@ -149,32 +171,19 @@ export default function Sidebar() {
             </button>
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {(can("avarias:lancar") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/lancar-avaria" className={subNavLinkClass}>
-                    <FaWrench /> <span>Lançamento</span>
-                  </NavLink>
-                )}
-                {(can("avarias:revisao") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/avarias-em-revisao" className={subNavLinkClass}>
-                    <FaUndo /> <span>Pendências de Revisão</span>
-                  </NavLink>
-                )}
-                {(can("avarias:aprovar") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/aprovar-avarias" className={subNavLinkClass}>
-                    <FaClipboardCheck /> <span>Aprovações</span>
-                  </NavLink>
-                )}
-                {(can("avarias:cobrancas") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/cobrancas" className={subNavLinkClass}>
-                    <FaMoneyBill /> <span>Cobranças</span>
-                  </NavLink>
+                {links.avarias.map(link =>
+                  canSee(user, link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
                 )}
               </div>
             )}
           </>
         )}
 
-        {/* 4️⃣ Intervenções (SOS) */}
+        {/* Intervenções (SOS) */}
         {showSOS && (
           <>
             <button
@@ -188,32 +197,19 @@ export default function Sidebar() {
             </button>
             {intervencoesOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {(can("sos:solicitacao") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/sos-solicitacao" className={subNavLinkClass}>
-                    <FaPenSquare /> <span>Solicitação</span>
-                  </NavLink>
-                )}
-                {(can("sos:fechamento") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/sos-fechamento" className={subNavLinkClass}>
-                    <FaCheckDouble /> <span>Fechamento</span>
-                  </NavLink>
-                )}
-                {(can("sos:tratamento") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/sos-tratamento" className={subNavLinkClass}>
-                    <FaScrewdriver /> <span>Manutenção</span>
-                  </NavLink>
-                )}
-                {(can("sos:central") || nivel === "Gestor" || nivel === "Administrador") && (
-                  <NavLink to="/sos-central" className={subNavLinkClass}>
-                    <FaEye /> <span>Central</span>
-                  </NavLink>
+                {links.sos.map(link =>
+                  canSee(user, link.path) ? (
+                    <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
+                      {link.icon} <span>{link.label}</span>
+                    </NavLink>
+                  ) : null
                 )}
               </div>
             )}
           </>
         )}
 
-        {/* 👑 Configurações (somente Administrador) */}
+        {/* Configurações (somente Administrador) */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
@@ -237,7 +233,7 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* 🚪 Logout */}
+      {/* Logout */}
       <div className="p-3 border-t border-blue-600">
         <button
           onClick={handleLogout}
