@@ -7,7 +7,7 @@ import {
   FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
-import { AuthContext } from "../context/AuthContext"; // ✅ Contexto de autenticação
+import { AuthContext } from "../context/AuthContext";
 
 export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
@@ -15,7 +15,7 @@ export default function Sidebar() {
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
-  const { user, logout } = useContext(AuthContext); // ✅ Pega usuário e logout
+  const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -38,9 +38,16 @@ export default function Sidebar() {
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
       {/* Cabeçalho */}
-      <div className="p-4 flex items-center justify-center gap-2 border-b border-blue-600">
-        <img src={logoInova} alt="Logo InovaQuatai" className="h-8 w-auto" />
-        <span className="font-bold text-xl tracking-tight">INOVAQUATAI</span>
+      <div className="p-4 border-b border-blue-600 flex flex-col items-center">
+        <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
+        {user && (
+          <div className="text-center">
+            <p className="text-sm font-semibold text-white">
+              Olá, {user.nome?.split(" ")[0]} 👋
+            </p>
+            <p className="text-xs text-blue-200">Seja bem-vindo!</p>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
@@ -124,7 +131,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* 👑 5️⃣ Configurações (somente Administrador) */}
+        {/* 👑 Configurações (somente Administrador) */}
         {user?.nivel === "Administrador" && (
           <>
             <hr className="my-3 border-blue-500" />
