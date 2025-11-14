@@ -26,7 +26,7 @@ const ACCESS = {
   Manutenção: [
     "/",
     "/solicitar",            // Tratativas
-    "/lancar-avaria", "/avarias-em-revisao", // Avarias
+    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias",// Avarias
     "/sos-fechamento", "/sos-tratamento", "/sos-central", // SOS
   ],
   CCO: [
