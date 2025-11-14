@@ -43,4 +43,7 @@ jobs:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_API_KEY: ${{ secrets.SUPABASE_API_KEY }}
         
-      run: python pipeline/etl_motorista_athena.py
+      run: |
+        echo "Navegando para o diretório do script..."
+        cd src/pipeline
+        python etl_motorista_athena.py
