@@ -1,0 +1,7 @@
+supabase
+python-dotenv
+sqlalchemy>=2.0
+pyathena>=3.0
+pandas>=1.5
+boto3>=1.26
+psycopg2-binary
