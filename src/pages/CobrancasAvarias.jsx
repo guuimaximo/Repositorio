@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com botões dinâmicos: 💰 Cobrar / ✏️ Editar / 👁️ Detalhes)
+// (Atualizado com coluna: Número da Avaria)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
@@ -199,6 +199,10 @@ export default function CobrancasAvarias() {
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-blue-600 text-white text-left">
+
+              {/* NOVA COLUNA */}
+              <th className="p-3">Nº Avaria</th>
+
               <th className="p-3">Data Aprovação</th>
               <th className="p-3">Motorista</th>
               <th className="p-3">Prefixo</th>
@@ -209,28 +213,29 @@ export default function CobrancasAvarias() {
               <th className="p-3">Ações</th>
             </tr>
           </thead>
+
           <tbody>
             {loading ? (
               <tr>
-                <td
-                  colSpan="8"
-                  className="text-center p-6 text-gray-500"
-                >
+                <td colSpan="9" className="text-center p-6 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : cobrancas.length === 0 ? (
               <tr>
-                <td
-                  colSpan="8"
-                  className="text-center p-6 text-gray-500"
-                >
+                <td colSpan="9" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
             ) : (
               cobrancas.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
+
+                  {/* NOVA COLUNA */}
+                  <td className="p-3 text-gray-700">
+                    {c.numero_da_avaria || "-"}
+                  </td>
+
                   <td className="p-3 text-gray-700">
                     {new Date(c.created_at).toLocaleDateString()}
                   </td>
@@ -289,7 +294,6 @@ export default function CobrancasAvarias() {
         </table>
       </div>
 
-      {/* Modal */}
       {modalOpen && (
         <CobrancaDetalheModal
           avaria={selectedAvaria}
