@@ -14,7 +14,6 @@ export default function Avarias() {
     concluidas: 0,
   });
 
-  // === Buscar avarias do Supabase ===
   const carregarAvarias = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -38,7 +37,6 @@ export default function Avarias() {
 
       setAvarias(filtradas);
 
-      // Calcular resumo
       setResumo({
         total: data.length,
         pendentes: data.filter((a) => a.status === "Pendente").length,
@@ -53,7 +51,6 @@ export default function Avarias() {
     carregarAvarias();
   }, [filtro, statusFiltro]);
 
-  // === Enviar avaria para cobrança ===
   const enviarParaCobranca = async (avaria) => {
     const { error } = await supabase.from("cobrancas_avarias").insert([
       {
@@ -134,6 +131,11 @@ export default function Avarias() {
             <tr className="bg-blue-600 text-white text-left">
               <th className="p-3">Data</th>
               <th className="p-3">Prefixo</th>
+
+              {/* 🔵 NOVA COLUNA */
+              }
+              <th className="p-3">Nº Avaria</th>
+
               <th className="p-3">Motorista</th>
               <th className="p-3">Tipo</th>
               <th className="p-3">Valor</th>
@@ -144,13 +146,13 @@ export default function Avarias() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center p-6">
+                <td colSpan="8" className="text-center p-6">
                   Carregando...
                 </td>
               </tr>
             ) : avarias.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center p-6 text-gray-500">
+                <td colSpan="8" className="text-center p-6 text-gray-500">
                   Nenhuma avaria encontrada.
                 </td>
               </tr>
@@ -159,9 +161,14 @@ export default function Avarias() {
                 <tr key={a.id} className="border-b hover:bg-gray-50">
                   <td className="p-3">{new Date(a.created_at).toLocaleDateString()}</td>
                   <td className="p-3">{a.prefixo}</td>
+
+                  {/* 🔵 NOVA COLUNA MOSTRANDO O NÚMERO */}
+                  <td className="p-3">{a.numero_da_avaria || "-"}</td>
+
                   <td className="p-3">{a.motorista_chapa}</td>
                   <td className="p-3">{a.tipo_avaria}</td>
                   <td className="p-3">R$ {a.valor_estimado?.toFixed(2) || "-"}</td>
+
                   <td className="p-3">
                     <span
                       className={`px-2 py-1 rounded text-sm ${
@@ -175,6 +182,7 @@ export default function Avarias() {
                       {a.status}
                     </span>
                   </td>
+
                   <td className="p-3">
                     {a.status === "Pendente" ? (
                       <button
@@ -189,6 +197,7 @@ export default function Avarias() {
                       </button>
                     )}
                   </td>
+
                 </tr>
               ))
             )}
@@ -199,7 +208,6 @@ export default function Avarias() {
   );
 }
 
-// Componente para card de resumo
 function CardResumo({ titulo, valor, cor }) {
   return (
     <div className={`${cor} rounded-lg p-4 shadow text-center`}>
