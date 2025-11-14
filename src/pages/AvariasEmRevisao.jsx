@@ -22,6 +22,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
       .from('cobrancas_avarias')
       .select('*')
       .eq('avaria_id', avaria.id);
+
     if (!error && data) {
       setItens(data);
       setDescricao(avaria.descricao || '');
@@ -29,14 +30,12 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
       setValorTotal(avaria.valor_total_orcamento || 0);
       setObservacao(avaria.observacao_operacao || '');
 
-      // 🔧 Trata urls_evidencias (array ou string)
       let urls = [];
-      if (Array.isArray(avaria.urls_evidencias)) {
-        urls = avaria.urls_evidencias;
-      } else if (typeof avaria.urls_evidencias === 'string') {
+      if (Array.isArray(avaria.urls_evidencias)) urls = avaria.urls_evidencias;
+      else if (typeof avaria.urls_evidencias === 'string')
         urls = avaria.urls_evidencias.split(',').map(u => u.trim());
-      }
-      setUrlsEvidencias(urls.filter(u => u));
+
+      setUrlsEvidencias(urls.filter(Boolean));
     }
     setLoadingItens(false);
   }
@@ -47,7 +46,6 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
   const formatCurrency = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  // ➕ Adicionar novo item
   const adicionarItem = () => {
     const novo = {
       id: Date.now(),
@@ -61,7 +59,6 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     setItens(prev => [...prev, novo]);
   };
 
-  // 🗑️ Remover item
   const removerItem = async (id, novo) => {
     if (!novo) {
       await supabase.from('cobrancas_avarias').delete().eq('id', id);
@@ -69,7 +66,6 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     setItens(prev => prev.filter(i => i.id !== id));
   };
 
-  // 💾 Atualiza todos os itens e avaria
   async function salvarAlteracoes(statusFinal = null) {
     for (const item of itens) {
       if (item.novo) {
@@ -107,6 +103,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     alert(statusFinal
       ? 'Correções salvas e avaria reenviada para aprovação!'
       : 'Correções salvas com sucesso!');
+
     onAtualizarLista();
     onClose();
   }
@@ -116,16 +113,19 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 p-4 z-40">
       <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-2xl font-bold text-gray-800">Editar Avaria #{avaria.id}</h2>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-900">
-            ✕
-          </button>
+          <h2 className="text-2xl font-bold text-gray-800">
+            Editar Avaria #{avaria.id}
+          </h2>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-900">✕</button>
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto">
-          {/* Dados Principais */}
+
+          {/* === Dados Principais === */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
             <div>
               <label className="text-sm text-gray-500">Prefixo</label>
               <input
@@ -135,14 +135,23 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
                 onChange={(e) => setPrefixo(e.target.value)}
               />
             </div>
+
             <div>
               <label className="text-sm text-gray-500">Motorista</label>
               <p>{avaria.motoristaId || '—'}</p>
             </div>
+
             <div>
               <label className="text-sm text-gray-500">Data</label>
               <p>{new Date(avaria.dataAvaria).toLocaleDateString('pt-BR')}</p>
             </div>
+
+            {/* ---- NOVO: Nº da Avaria ---- */}
+            <div>
+              <label className="text-sm text-gray-500">Nº da Avaria</label>
+              <p className="font-medium">{avaria.numero_da_avaria || '-'}</p>
+            </div>
+
           </div>
 
           {/* Descrição */}
@@ -156,7 +165,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             />
           </div>
 
-          {/* Observação / Motivo */}
+          {/* Observação */}
           <div>
             <label className="text-sm text-gray-500">Observação / Motivo de Reprovação</label>
             <textarea
@@ -171,19 +180,14 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
           <div>
             <h3 className="font-semibold text-gray-800 mb-2">Evidências (Fotos e Vídeos)</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {urlsEvidencias.length > 0 ? (
+              {urlsEvidencias?.length > 0 ? (
                 urlsEvidencias.map((url, index) => (
-                  <a
-                    key={index}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="border rounded-lg overflow-hidden hover:opacity-80"
-                  >
+                  <a key={index} href={url} target="_blank" rel="noopener noreferrer"
+                    className="border rounded-lg overflow-hidden hover:opacity-80">
                     {url.match(/\.(mp4|mov|webm)$/i) ? (
                       <video controls src={url} className="w-full h-32 object-cover" />
                     ) : (
-                      <img src={url} alt={`Evidência ${index + 1}`} className="w-full h-32 object-cover" />
+                      <img src={url} className="w-full h-32 object-cover" />
                     )}
                   </a>
                 ))
@@ -204,51 +208,56 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
                 <FaPlus /> Adicionar Item
               </button>
             </div>
+
             {loadingItens ? (
               <p>Carregando...</p>
             ) : itens.length > 0 ? (
               itens.map(item => (
                 <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
+
                   <input
                     className="border p-1 rounded"
                     value={item.descricao || ''}
                     onChange={(e) => handleEditChange(item.id, 'descricao', e.target.value)}
                     placeholder="Descrição"
                   />
+
                   <input
                     className="border p-1 rounded text-center"
                     type="number"
                     value={item.qtd || 0}
                     onChange={(e) => handleEditChange(item.id, 'qtd', e.target.value)}
-                    placeholder="Qtd"
                   />
+
                   <input
                     className="border p-1 rounded text-center"
                     type="number"
                     value={item.valorUnitario || 0}
                     onChange={(e) => handleEditChange(item.id, 'valorUnitario', e.target.value)}
-                    placeholder="Valor Unitário"
                   />
+
                   <select
                     className="border p-1 rounded"
-                    value={item.tipo || ''}
+                    value={item.tipo}
                     onChange={(e) => handleEditChange(item.id, 'tipo', e.target.value)}
                   >
                     <option value="Peca">Peça</option>
                     <option value="Servico">Serviço</option>
                   </select>
+
                   <button
                     onClick={() => removerItem(item.id, item.novo)}
                     className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                    title="Excluir Item"
                   >
                     <FaTrash />
                   </button>
+
                 </div>
               ))
             ) : (
               <p className="text-gray-500 text-sm">Nenhum item encontrado.</p>
             )}
+
           </div>
 
           {/* Total */}
@@ -259,9 +268,10 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               className="border p-1 rounded text-right ml-2 w-40"
               value={valorTotal}
               onChange={(e) => setValorTotal(e.target.value)}
-            />{' '}
+            />
             ({formatCurrency(valorTotal)})
           </div>
+
         </div>
 
         {/* Botões */}
@@ -272,6 +282,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
           >
             <FaSave /> Salvar Correções
           </button>
+
           <button
             onClick={() => salvarAlteracoes('Pendente de Aprovação')}
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-1"
@@ -279,6 +290,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             <FaUndo /> Salvar e Reenviar
           </button>
         </div>
+
       </div>
     </div>
   );
@@ -297,6 +309,7 @@ export default function AvariasEmRevisao() {
       .select('*')
       .eq('status', 'Reprovado')
       .order('aprovado_em', { ascending: false });
+
     if (!error) setAvarias(data || []);
     setLoading(false);
   }
@@ -306,12 +319,17 @@ export default function AvariasEmRevisao() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Pendências de Revisão</h1>
+
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full border">
           <thead className="bg-yellow-600 text-white">
             <tr>
               <th className="py-2 px-3 text-left">Data</th>
               <th className="py-2 px-3 text-left">Prefixo</th>
+
+              {/* ---- NOVO ---- */}
+              <th className="py-2 px-3 text-left">Nº Avaria</th>
+
               <th className="py-2 px-3 text-left">Tipo</th>
               <th className="py-2 px-3 text-left">Valor</th>
               <th className="py-2 px-3 text-left">Reprovado por</th>
@@ -319,26 +337,39 @@ export default function AvariasEmRevisao() {
               <th className="py-2 px-3 text-left">Ações</th>
             </tr>
           </thead>
+
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="text-center p-4">Carregando...</td></tr>
+              <tr><td colSpan="8" className="text-center p-4">Carregando...</td></tr>
             ) : avarias.length === 0 ? (
-              <tr><td colSpan="7" className="text-center p-4 text-gray-600">Nenhuma pendência encontrada.</td></tr>
+              <tr><td colSpan="8" className="text-center p-4 text-gray-600">Nenhuma pendência encontrada.</td></tr>
             ) : (
               avarias.map(a => (
                 <tr key={a.id} className="border-t hover:bg-gray-50">
+
                   <td className="py-2 px-3">{new Date(a.dataAvaria).toLocaleDateString('pt-BR')}</td>
                   <td className="py-2 px-3">{a.prefixo}</td>
+
+                  {/* ---- NOVA COLUNA ---- */}
+                  <td className="py-2 px-3">{a.numero_da_avaria || '-'}</td>
+
                   <td className="py-2 px-3">{a.tipoOcorrencia}</td>
+
                   <td className="py-2 px-3 font-medium">
-                    {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL'
+                    })}
                   </td>
+
                   <td className="py-2 px-3">{a.aprovado_por || '—'}</td>
+
                   <td className="py-2 px-3">
                     <p className="text-sm bg-yellow-50 border rounded p-2 min-h-[48px] text-gray-800">
                       {a.observacao_operacao || 'Sem observação registrada.'}
                     </p>
                   </td>
+
                   <td className="py-2 px-3">
                     <button
                       onClick={() => setSelected(a)}
@@ -347,10 +378,12 @@ export default function AvariasEmRevisao() {
                       <FaEdit /> Editar
                     </button>
                   </td>
+
                 </tr>
               ))
             )}
           </tbody>
+
         </table>
       </div>
 
@@ -361,6 +394,7 @@ export default function AvariasEmRevisao() {
           onAtualizarLista={carregar}
         />
       )}
+
     </div>
   );
 }
