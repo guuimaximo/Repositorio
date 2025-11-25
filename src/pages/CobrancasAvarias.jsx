@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com coluna: Número da Avaria)
+// (Atualizado com valores nos cards + coluna Número da Avaria)
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
@@ -28,8 +28,12 @@ export default function CobrancasAvarias() {
     pendentes: 0,
     cobradas: 0,
     canceladas: 0,
+    totalAprovadoValue: 0,
+    pendentesTotalValue: 0,
+    cobradasTotalValue: 0,
     canceladasTotalValue: 0,
   });
+
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
 
@@ -71,26 +75,36 @@ export default function CobrancasAvarias() {
 
     if (error) {
       console.error("Erro ao carregar resumo:", error);
-      setResumo({
-        total: 0,
-        pendentes: 0,
-        cobradas: 0,
-        canceladas: 0,
-        canceladasTotalValue: 0,
-      });
-    } else {
-      const canceladas = data.filter((c) => c.status_cobranca === "Cancelada");
-      setResumo({
-        total: data.length,
-        pendentes: data.filter((c) => c.status_cobranca === "Pendente").length,
-        cobradas: data.filter((c) => c.status_cobranca === "Cobrada").length,
-        canceladas: canceladas.length,
-        canceladasTotalValue: canceladas.reduce(
-          (sum, a) => sum + (a.valor_total_orcamento || 0),
-          0
-        ),
-      });
+      return;
     }
+
+    const pendentes = data.filter((c) => c.status_cobranca === "Pendente");
+    const cobradas = data.filter((c) => c.status_cobranca === "Cobrada");
+    const canceladas = data.filter((c) => c.status_cobranca === "Cancelada");
+
+    setResumo({
+      total: data.length,
+      pendentes: pendentes.length,
+      cobradas: cobradas.length,
+      canceladas: canceladas.length,
+
+      totalAprovadoValue: data.reduce(
+        (sum, a) => sum + (a.valor_total_orcamento || 0),
+        0
+      ),
+      pendentesTotalValue: pendentes.reduce(
+        (sum, a) => sum + (a.valor_total_orcamento || 0),
+        0
+      ),
+      cobradasTotalValue: cobradas.reduce(
+        (sum, a) => sum + (a.valor_total_orcamento || 0),
+        0
+      ),
+      canceladasTotalValue: canceladas.reduce(
+        (sum, a) => sum + (a.valor_total_orcamento || 0),
+        0
+      ),
+    });
   };
 
   const carregarTudo = async () => {
@@ -174,16 +188,19 @@ export default function CobrancasAvarias() {
         <CardResumo
           titulo="Total Aprovado"
           valor={resumo.total}
+          subValor={formatCurrency(resumo.totalAprovadoValue)}
           cor="bg-blue-100 text-blue-700"
         />
         <CardResumo
           titulo="Pendentes Cobrança"
           valor={resumo.pendentes}
+          subValor={formatCurrency(resumo.pendentesTotalValue)}
           cor="bg-yellow-100 text-yellow-700"
         />
         <CardResumo
           titulo="Cobradas"
           valor={resumo.cobradas}
+          subValor={formatCurrency(resumo.cobradasTotalValue)}
           cor="bg-green-100 text-green-700"
         />
         <CardResumo
@@ -199,10 +216,7 @@ export default function CobrancasAvarias() {
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-blue-600 text-white text-left">
-
-              {/* NOVA COLUNA */}
               <th className="p-3">Nº Avaria</th>
-
               <th className="p-3">Data Aprovação</th>
               <th className="p-3">Motorista</th>
               <th className="p-3">Prefixo</th>
@@ -230,12 +244,9 @@ export default function CobrancasAvarias() {
             ) : (
               cobrancas.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
-
-                  {/* NOVA COLUNA */}
                   <td className="p-3 text-gray-700">
                     {c.numero_da_avaria || "-"}
                   </td>
-
                   <td className="p-3 text-gray-700">
                     {new Date(c.created_at).toLocaleDateString()}
                   </td>
