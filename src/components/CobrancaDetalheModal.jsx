@@ -1,9 +1,9 @@
 // src/components/CobrancaDetalheModal.jsx
-// Versão completa com impressão "verde", edição de Motorista/Data e exibição de Evidências
+// Versão: Tratativa + edição de Motorista/Data/Observações antes da cobrança + Nº Avaria
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { FaTimes, FaEdit, FaSave } from 'react-icons/fa';
+import { FaTimes } from 'react-icons/fa';
 import CampoMotorista from './CampoMotorista';
 
 // Helper para converter string (BRL ou US) para número
@@ -22,18 +22,16 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const [observacaoOperacao, setObservacaoOperacao] = useState('');
   const [numParcelas, setNumParcelas] = useState(1);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
-  const [needsMotoristaSelection, setNeedsMotoristaSelection] = useState(false);
   const [selectedMotorista, setSelectedMotorista] = useState({ chapa: '', nome: '' });
   const [dataAvaria, setDataAvaria] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [isEditing, setIsEditing] = useState(false); // edição da cobrança (quando já Cobrada)
+  const [tratativaTexto, setTratativaTexto] = useState('');
 
   useEffect(() => {
     async function carregarDados() {
       if (!avaria) return;
       setLoadingItens(true);
       setIsEditing(false);
-      setIsEditingInfo(false);
 
       setValorCobrado(
         avaria.valor_cobrado !== undefined && avaria.valor_cobrado !== null
@@ -44,13 +42,14 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       setNumParcelas(avaria.numero_parcelas || 1);
       setMotivoCancelamento(avaria.motivo_cancelamento_cobranca || '');
 
-      // Motorista
+      // Motorista vindo da avaria (fallback)
       if (avaria.motoristaId) {
-        setNeedsMotoristaSelection(false);
         const parts = String(avaria.motoristaId).split(' - ');
-        setSelectedMotorista({ chapa: parts[0] || '', nome: parts[1] || parts[0] || '' });
+        setSelectedMotorista({
+          chapa: parts[0] || '',
+          nome: parts[1] || parts[0] || '',
+        });
       } else {
-        setNeedsMotoristaSelection(true);
         setSelectedMotorista({ chapa: '', nome: '' });
       }
 
@@ -64,6 +63,25 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         else if (typeof avaria.urls_evidencias === 'string')
           urls = avaria.urls_evidencias.split(',').map((u) => u.trim());
         setUrlsEvidencias((urls || []).filter(Boolean));
+      } else {
+        setUrlsEvidencias([]);
+      }
+
+      // Tratativa
+      if (avaria.urls_tratativa) {
+        if (Array.isArray(avaria.urls_tratativa)) {
+          setTratativaTexto(avaria.urls_tratativa.join('\n'));
+        } else if (typeof avaria.urls_tratativa === 'string') {
+          setTratativaTexto(
+            avaria.urls_tratativa
+              .split(/\n|,/)
+              .map((u) => u.trim())
+              .filter(Boolean)
+              .join('\n')
+          );
+        }
+      } else {
+        setTratativaTexto('');
       }
 
       // Itens do orçamento
@@ -88,12 +106,85 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       ? '-'
       : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+  const motoristaAtual = () => {
+    if (selectedMotorista && selectedMotorista.chapa) return selectedMotorista;
+    if (avaria.motoristaId) {
+      const parts = String(avaria.motoristaId).split(' - ');
+      return { chapa: parts[0] || '', nome: parts[1] || parts[0] || '' };
+    }
+    return { chapa: '', nome: '' };
+  };
+
+  const podeEditarBasico = avaria.status_cobranca === 'Pendente';
+  const somenteLeituraOperacao = avaria.status_cobranca !== 'Pendente' && !isEditing;
+  const dataAvariaFmt = new Date(dataAvaria).toLocaleDateString('pt-BR');
+
+  // --- SALVAR INFORMAÇÕES BÁSICAS (antes da cobrança) ---
+  const handleSalvarInfo = async () => {
+    const m = motoristaAtual();
+    if (!m.chapa) {
+      alert('⚠️ Selecione o motorista antes de salvar.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('avarias')
+      .update({
+        motoristaId: `${m.chapa} - ${m.nome}`,
+        dataAvaria,
+        observacao_operacao: observacaoOperacao,
+      })
+      .eq('id', avaria.id);
+
+    if (error) {
+      alert('Erro ao salvar informações: ' + error.message);
+    } else {
+      alert('✅ Informações salvas com sucesso!');
+    }
+  };
+
+  // --- SALVAR STATUS ---
+  const handleSalvarStatus = (novoStatus) => {
+    const valorNumerico = parseCurrency(valorCobrado);
+
+    const urlsTratativaArray = tratativaTexto
+      .split(/\n|,/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+
+    const m = motoristaAtual();
+
+    const updateData = {
+      status_cobranca: novoStatus,
+      valor_cobrado: valorNumerico,
+      numero_parcelas: Number(numParcelas) || 1,
+      observacao_operacao: observacaoOperacao,
+      motivo_cancelamento_cobranca: novoStatus === 'Cancelada' ? motivoCancelamento : null,
+      data_cobranca: new Date(),
+      urls_tratativa: urlsTratativaArray.length > 0 ? urlsTratativaArray : null,
+    };
+
+    if (m.chapa) {
+      updateData.motoristaId = `${m.chapa} - ${m.nome}`;
+    }
+
+    if (!window.confirm(`Confirma marcar como ${novoStatus.toLowerCase()}?`)) return;
+
+    onAtualizarStatus(avaria.id, novoStatus, updateData);
+    if (isEditing) setIsEditing(false);
+  };
+
   // --- IMPRESSÃO ---
   const handlePrint = () => {
     const baseUrl = window.location.origin;
     let printContents = document.getElementById('printable-area').innerHTML;
-    printContents = printContents.replace(/src="(\/[^\"]+)"/g, (_m, path) => `src="${baseUrl}${path}"`);
-    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    printContents = printContents.replace(
+      /src="(\/[^\"]+)"/g,
+      (_m, path) => `src="${baseUrl}${path}"`
+    );
+    const styles = Array.from(
+      document.querySelectorAll('link[rel="stylesheet"], style')
+    )
       .map((el) => el.outerHTML)
       .join('\n');
     const printWindow = window.open('', '_blank');
@@ -122,48 +213,6 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
     }, 500);
   };
 
-  // --- SALVAR EDIÇÃO DE MOTORISTA/DATA ---
-  const handleSalvarInfo = async () => {
-    if (!selectedMotorista.chapa) {
-      alert('⚠️ Selecione o motorista antes de salvar.');
-      return;
-    }
-    const { error } = await supabase
-      .from('avarias')
-      .update({
-        motoristaId: `${selectedMotorista.chapa} - ${selectedMotorista.nome}`,
-        dataAvaria,
-      })
-      .eq('id', avaria.id);
-    if (error) alert('Erro ao salvar motorista/data: ' + error.message);
-    else {
-      alert('✅ Motorista/Data atualizados!');
-      setIsEditingInfo(false);
-      onAtualizarStatus();
-    }
-  };
-
-  // --- SALVAR STATUS ---
-  const handleSalvarStatus = (novoStatus) => {
-    const valorNumerico = parseCurrency(valorCobrado);
-    const updateData = {
-      status_cobranca: novoStatus,
-      valor_cobrado: valorNumerico,
-      numero_parcelas: Number(numParcelas) || 1,
-      observacao_operacao: observacaoOperacao,
-      motivo_cancelamento_cobranca: novoStatus === 'Cancelada' ? motivoCancelamento : null,
-      data_cobranca: new Date(),
-    };
-    if (selectedMotorista.chapa)
-      updateData.motoristaId = `${selectedMotorista.chapa} - ${selectedMotorista.nome}`;
-    if (!window.confirm(`Confirma marcar como ${novoStatus.toLowerCase()}?`)) return;
-    onAtualizarStatus(avaria.id, novoStatus, updateData);
-    if (isEditing) setIsEditing(false);
-  };
-
-  const somenteLeitura = !(isEditing || avaria.status_cobranca === 'Pendente') && !isEditingInfo;
-  const dataAvariaFmt = new Date(dataAvaria).toLocaleDateString('pt-BR');
-
   return (
     <>
       {/* === Modal === */}
@@ -180,61 +229,36 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
           {/* Corpo */}
           <div className="p-6 space-y-6 overflow-y-auto">
             {/* Identificação */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b pb-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 block">Prefixo</label>
                 <p className="font-medium text-gray-900">{avaria.prefixo}</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 block">Motorista</label>
-                {isEditingInfo ? (
-                  <CampoMotorista
-                    onSelect={(motorista) => setSelectedMotorista(motorista)}
-                    initialValue={selectedMotorista}
-                  />
-                ) : (
-                  <p className="font-medium text-gray-900">{selectedMotorista.nome || 'N/A'}</p>
-                )}
+                <label className="text-xs font-medium text-gray-500 block">Nº Avaria</label>
+                <p className="font-medium text-gray-900">
+                  {avaria.numero_da_avaria || '-'}
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <CampoMotorista
+                  label="Motorista"
+                  value={selectedMotorista}
+                  onChange={setSelectedMotorista}
+                  disabled={!podeEditarBasico}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 block">Data da Avaria</label>
-                {isEditingInfo ? (
-                  <input
-                    type="date"
-                    value={dataAvaria.slice(0, 10)}
-                    onChange={(e) => setDataAvaria(e.target.value)}
-                    className="border rounded p-1 w-full"
-                  />
-                ) : (
-                  <p className="font-medium text-gray-900">{dataAvariaFmt}</p>
-                )}
+                <input
+                  type="date"
+                  value={dataAvaria.slice(0, 10)}
+                  onChange={(e) => setDataAvaria(e.target.value)}
+                  className="border rounded p-1 w-full disabled:bg-gray-100"
+                  disabled={!podeEditarBasico}
+                />
               </div>
             </div>
-
-            {/* Botão editar motorista/data */}
-            {!isEditingInfo ? (
-              <button
-                onClick={() => setIsEditingInfo(true)}
-                className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-md text-sm flex items-center gap-1"
-              >
-                <FaEdit /> Editar Motorista / Data
-              </button>
-            ) : (
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={handleSalvarInfo}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm flex items-center gap-1"
-                >
-                  <FaSave /> Salvar
-                </button>
-                <button
-                  onClick={() => setIsEditingInfo(false)}
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded-md text-sm"
-                >
-                  Cancelar
-                </button>
-              </div>
-            )}
 
             {/* Evidências */}
             <div>
@@ -298,24 +322,24 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               )}
             </div>
 
-            {/* Operação */}
+            {/* Operação + Tratativa */}
             <div className="border-t pt-4">
               <h3 className="text-xl font-semibold mb-2">🧮 Detalhes da Operação</h3>
               <label className="block text-sm font-medium">Observações</label>
               <textarea
                 value={observacaoOperacao}
                 onChange={(e) => setObservacaoOperacao(e.target.value)}
-                readOnly={somenteLeitura}
+                readOnly={somenteLeituraOperacao}
                 className="w-full border rounded-md p-2 mb-3"
               />
               <label className="block text-sm font-medium">Motivo do Cancelamento</label>
               <textarea
                 value={motivoCancelamento}
                 onChange={(e) => setMotivoCancelamento(e.target.value)}
-                readOnly={somenteLeitura}
+                readOnly={somenteLeituraOperacao}
                 className="w-full border rounded-md p-2 mb-3"
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium">Nº de Parcelas</label>
                   <input
@@ -323,7 +347,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     min="1"
                     value={numParcelas}
                     onChange={(e) => setNumParcelas(Number(e.target.value))}
-                    readOnly={somenteLeitura}
+                    readOnly={somenteLeituraOperacao}
                     className="w-full border rounded-md p-2"
                   />
                 </div>
@@ -334,10 +358,25 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                     placeholder="Ex: 1.234,56"
                     value={valorCobrado}
                     onChange={(e) => setValorCobrado(e.target.value)}
-                    readOnly={somenteLeitura}
+                    readOnly={somenteLeituraOperacao}
                     className="w-full border rounded-md p-2"
                   />
                 </div>
+              </div>
+
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold mb-1">📎 Tratativa (links / anexos)</h3>
+                <p className="text-xs text-gray-500 mb-1">
+                  Cole aqui os links da tratativa (PDF da resposta, pasta do Drive, protocolo, etc.).  
+                  Use uma linha para cada link.
+                </p>
+                <textarea
+                  value={tratativaTexto}
+                  onChange={(e) => setTratativaTexto(e.target.value)}
+                  readOnly={somenteLeituraOperacao}
+                  className="w-full border rounded-md p-2 h-24"
+                  placeholder="https://drive.google.com/...\nhttps://minha-tratativa.com/..."
+                />
               </div>
             </div>
           </div>
@@ -350,7 +389,16 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             >
               🖨️ Imprimir
             </button>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap justify-end">
+              {podeEditarBasico && (
+                <button
+                  onClick={handleSalvarInfo}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                >
+                  💾 Salvar Informações
+                </button>
+              )}
+
               {avaria.status_cobranca === 'Pendente' && (
                 <>
                   <button
@@ -367,6 +415,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   </button>
                 </>
               )}
+
               {avaria.status_cobranca === 'Cobrada' && !isEditing && (
                 <button
                   onClick={() => {
@@ -418,35 +467,64 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         <section className="mb-2">
           <div className="grid grid-cols-3 gap-2">
             <div><span className="text-gray-600">Prefixo:</span> <strong>{avaria.prefixo}</strong></div>
-            <div><span className="text-gray-600">Motorista:</span> <strong>{selectedMotorista?.nome || 'N/A'}</strong></div>
+            <div><span className="text-gray-600">Nº Avaria:</span> <strong>{avaria.numero_da_avaria || '-'}</strong></div>
+            <div><span className="text-gray-600">Motorista:</span> <strong>{motoristaAtual().nome || 'N/A'}</strong></div>
             <div><span className="text-gray-600">Data Avaria:</span> <strong>{dataAvariaFmt}</strong></div>
-            <div className="col-span-3"><span className="text-gray-600">Descrição:</span> <strong>{avaria.descricao || 'Não informada'}</strong></div>
+            <div className="col-span-3">
+              <span className="text-gray-600">Descrição:</span>{' '}
+              <strong>{avaria.descricao || 'Não informada'}</strong>
+            </div>
           </div>
         </section>
 
-        {/* Tabelas e Totais */}
+        {/* Peças */}
         <section className="mb-2 nobreak">
           <h2 className="text-[12px] font-bold mb-1">Peças</h2>
           <table className="w-full border border-gray-300 border-collapse compact">
-            <thead><tr className="bg-gray-100"><th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th>Total</th></tr></thead>
+            <thead>
+              <tr className="bg-gray-100">
+                <th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th>Total</th>
+              </tr>
+            </thead>
             <tbody>
-              {pecas.length === 0 ? <tr><td colSpan="4" className="border p-2 text-center">Sem peças</td></tr> :
+              {pecas.length === 0 ? (
+                <tr><td colSpan="4" className="border p-2 text-center">Sem peças</td></tr>
+              ) : (
                 pecas.map((i) => (
-                  <tr key={i.id}><td className="border">{i.descricao}</td><td className="border text-center">{i.qtd}</td><td className="border text-right">{formatCurrency(i.valorUnitario)}</td><td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td></tr>
-                ))}
+                  <tr key={i.id}>
+                    <td className="border">{i.descricao}</td>
+                    <td className="border text-center">{i.qtd}</td>
+                    <td className="border text-right">{formatCurrency(i.valorUnitario)}</td>
+                    <td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </section>
 
+        {/* Serviços */}
         <section className="mb-2 nobreak">
           <h2 className="text-[12px] font-bold mb-1">Serviços</h2>
           <table className="w-full border border-gray-300 border-collapse compact">
-            <thead><tr className="bg-gray-100"><th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th>Total</th></tr></thead>
+            <thead>
+              <tr className="bg-gray-100">
+                <th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th>Total</th>
+              </tr>
+            </thead>
             <tbody>
-              {servicos.length === 0 ? <tr><td colSpan="4" className="border p-2 text-center">Sem serviços</td></tr> :
+              {servicos.length === 0 ? (
+                <tr><td colSpan="4" className="border p-2 text-center">Sem serviços</td></tr>
+              ) : (
                 servicos.map((i) => (
-                  <tr key={i.id}><td className="border">{i.descricao}</td><td className="border text-center">{i.qtd}</td><td className="border text-right">{formatCurrency(i.valorUnitario)}</td><td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td></tr>
-                ))}
+                  <tr key={i.id}>
+                    <td className="border">{i.descricao}</td>
+                    <td className="border text-center">{i.qtd}</td>
+                    <td className="border text-right">{formatCurrency(i.valorUnitario)}</td>
+                    <td className="border text-right">{formatCurrency(i.qtd * i.valorUnitario)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </section>
@@ -455,27 +533,61 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         <section className="mb-2 nobreak">
           <div className="w-full flex justify-end">
             <div className="w-[260px]">
-              <div className="flex justify-between border-b py-1"><span>Subtotal Peças</span><span>{formatCurrency(pecas.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span></div>
-              <div className="flex justify-between border-b py-1"><span>Subtotal Serviços</span><span>{formatCurrency(servicos.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span></div>
-              <div className="flex justify-between border-b py-1"><span>Valor Total</span><span>{formatCurrency(avaria.valor_total_orcamento)}</span></div>
-              <div className="flex justify-between py-1 font-bold"><span>Valor Cobrado</span><span>{formatCurrency(parseCurrency(valorCobrado) ?? 0)}</span></div>
-              <div className="flex justify-between py-1"><span>Parcelas</span><span>{numParcelas}</span></div>
+              <div className="flex justify-between border-b py-1">
+                <span>Subtotal Peças</span>
+                <span>{formatCurrency(pecas.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span>
+              </div>
+              <div className="flex justify-between border-b py-1">
+                <span>Subtotal Serviços</span>
+                <span>{formatCurrency(servicos.reduce((a, i) => a + i.qtd * i.valorUnitario, 0))}</span>
+              </div>
+              <div className="flex justify-between border-b py-1">
+                <span>Valor Total</span>
+                <span>{formatCurrency(avaria.valor_total_orcamento)}</span>
+              </div>
+              <div className="flex justify-between py-1 font-bold">
+                <span>Valor Cobrado</span>
+                <span>{formatCurrency(parseCurrency(valorCobrado) ?? 0)}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span>Parcelas</span>
+                <span>{numParcelas}</span>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Observações */}
-        <section className="mb-3 nobreak">
+        <section className="mb-2 nobreak">
           <span>Observações:</span>
           <div className="border rounded p-2 min-h-[40px]">{observacaoOperacao}</div>
+        </section>
+
+        {/* Tratativa */}
+        <section className="mb-3 nobreak">
+          <span>Tratativa (links/anexos):</span>
+          <div className="border rounded p-2 min-h-[40px]">
+            {tratativaTexto
+              ? tratativaTexto.split('\n').map((linha, idx) => <div key={idx}>{linha}</div>)
+              : '—'}
+          </div>
         </section>
 
         {/* Assinaturas */}
         <section className="mt-4 nobreak">
           <div className="grid grid-cols-3 gap-4 text-center">
-            <div><div className="h-12" /><div className="border-t pt-1">Gerente de Manutenção</div></div>
-            <div><div className="h-12" /><div className="border-t pt-1">Responsável pela Cobrança</div></div>
-            <div><div className="h-12" /><div className="border-t pt-1">{selectedMotorista?.nome || 'Motorista'}</div></div>
+            <div>
+              <div className="h-12" />
+              <div className="border-t pt-1">Gerente de Manutenção</div>
+            </div>
+            <div>
+              <div className="h-12" />
+              <div className="border-t pt-1">Responsável pela Cobrança</div>
+            </div>
+            <div>
+              <div className="h-12" />
+              <div className="border-t pt-1">{motoristaAtual().nome || 'Motorista'}</div>
+            </div>
           </div>
         </section>
       </div>
