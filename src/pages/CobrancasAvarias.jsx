@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { FaTimes } from 'react-icons/fa';
-import CampoMotorista from './CampoMotorista';
+import CampoMotorista from "../components/CampoMotorista";
 
 // Helper para converter string (BRL ou US) para número
 const parseCurrency = (value) => {
