@@ -1,5 +1,6 @@
 // src/components/CobrancaDetalheModal.jsx
 // Versão: Tratativa + edição de Motorista/Data/Observações antes da cobrança + Nº Avaria
+// OBS: Certifique-se de criar o bucket "tratativas-avarias" no Supabase Storage (público).
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
@@ -26,7 +27,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const [dataAvaria, setDataAvaria] = useState('');
   const [isEditing, setIsEditing] = useState(false); // edição da cobrança (quando já Cobrada)
   const [tratativaTexto, setTratativaTexto] = useState('');
-  const [salvandoInfo, setSalvandoInfo] = useState(false); // <-- NOVO: loading do salvar informações
+  const [salvandoInfo, setSalvandoInfo] = useState(false); // loading do salvar informações
 
   useEffect(() => {
     async function carregarDados() {
@@ -68,7 +69,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         setUrlsEvidencias([]);
       }
 
-      // Tratativa
+      // Tratativa (pode ter vindo como array ou string)
       if (avaria.urls_tratativa) {
         if (Array.isArray(avaria.urls_tratativa)) {
           setTratativaTexto(avaria.urls_tratativa.join('\n'));
@@ -120,6 +121,56 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const somenteLeituraOperacao = avaria.status_cobranca !== 'Pendente' && !isEditing;
   const dataAvariaFmt = new Date(dataAvaria).toLocaleDateString('pt-BR');
 
+  // --- UPLOAD DE ARQUIVOS DE TRATATIVA (imagens / PDFs etc) ---
+  const handleUploadTratativaFiles = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const bucketName = 'tratativas-avarias'; // bucket novo no Supabase
+    const novosLinks = [];
+
+    for (const file of files) {
+      try {
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
+        const path = `avaria-${avaria.id}/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(path, file);
+
+        if (uploadError) {
+          console.error(uploadError);
+          alert(`Erro ao enviar arquivo de tratativa: ${uploadError.message}`);
+          continue;
+        }
+
+        const { data: publicData } = supabase.storage
+          .from(bucketName)
+          .getPublicUrl(path);
+
+        const publicUrl = publicData?.publicUrl;
+        if (publicUrl) {
+          novosLinks.push(publicUrl);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Erro inesperado ao enviar arquivo de tratativa.');
+      }
+    }
+
+    if (novosLinks.length > 0) {
+      setTratativaTexto((prev) => {
+        const base = prev && prev.trim().length > 0 ? prev.trim() + '\n' : '';
+        return base + novosLinks.join('\n');
+      });
+    }
+
+    // Reseta o input para poder subir o mesmo arquivo novamente se precisar
+    event.target.value = '';
+  };
+
   // --- SALVAR INFORMAÇÕES BÁSICAS (antes da cobrança) ---
   const handleSalvarInfo = async () => {
     const m = motoristaAtual();
@@ -155,7 +206,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         if (error) throw error;
       }
 
-      alert('✅ Informações salvas com sucesso!');
+      alert('✅ Informações básicas salvas com sucesso!');
     } catch (err) {
       console.error(err);
       alert('Erro ao salvar informações: ' + err.message);
@@ -233,6 +284,12 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       printWindow.close();
     }, 500);
   };
+
+  // Lista de URLs de tratativa (para exibir thumbnails)
+  const tratativaUrls = tratativaTexto
+    .split('\n')
+    .map((u) => u.trim())
+    .filter(Boolean);
 
   return (
     <>
@@ -388,7 +445,19 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               <div className="mt-4">
                 <h3 className="text-lg font-semibold mb-1">📎 Tratativa (links / anexos)</h3>
                 <p className="text-xs text-gray-500 mb-1">
-                  Cole aqui os links da tratativa (PDF da resposta, pasta do Drive, protocolo, etc.).  
+                  Faça upload dos arquivos da tratativa (imagens, PDFs, etc.).  
+                  Eles serão salvos no bucket <strong>tratativas-avarias</strong> e listados abaixo.
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf,video/*"
+                  onChange={handleUploadTratativaFiles}
+                  disabled={somenteLeituraOperacao}
+                  className="mb-3 block text-sm"
+                />
+                <p className="text-xs text-gray-500 mb-1">
+                  Você também pode colar manualmente links (Drive, etc.).  
                   Use uma linha para cada link.
                 </p>
                 <textarea
@@ -398,6 +467,33 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   className="w-full border rounded-md p-2 h-24"
                   placeholder="https://drive.google.com/...\nhttps://minha-tratativa.com/..."
                 />
+
+                {tratativaUrls.length > 0 && (
+                  <div className="mt-3">
+                    <h4 className="text-sm font-semibold mb-1">Anexos da tratativa</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {tratativaUrls.map((url, i) => (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="border rounded-lg overflow-hidden hover:opacity-80"
+                        >
+                          {url.match(/\.(mp4|mov|webm)$/i) ? (
+                            <video controls src={url} className="w-full h-24 object-cover" />
+                          ) : url.match(/\.(jpe?g|png|gif|webp|bmp)$/i) ? (
+                            <img src={url} alt={`Tratativa ${i + 1}`} className="w-full h-24 object-cover" />
+                          ) : (
+                            <div className="w-full h-24 flex items-center justify-center text-xs p-2">
+                              {url}
+                            </div>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -593,8 +689,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
         <section className="mb-3 nobreak">
           <span>Tratativa (links/anexos):</span>
           <div className="border rounded p-2 min-h-[40px]">
-            {tratativaTexto
-              ? tratativaTexto.split('\n').map((linha, idx) => <div key={idx}>{linha}</div>)
+            {tratativaUrls.length
+              ? tratativaUrls.map((linha, idx) => <div key={idx}>{linha}</div>)
               : '—'}
           </div>
         </section>
