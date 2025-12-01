@@ -1,7 +1,7 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com valores nos cards + coluna Número da Avaria)
+// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna)
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { FaSearch } from "react-icons/fa";
 import CobrancaDetalheModal from "../components/CobrancaDetalheModal";
@@ -36,6 +36,12 @@ export default function CobrancasAvarias() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
+
+  // sortConfig: key = campo, direction = 'asc' | 'desc'
+  const [sortConfig, setSortConfig] = useState({
+    key: "created_at",
+    direction: "desc",
+  });
 
   const formatCurrency = (value) =>
     value === null || value === undefined
@@ -155,6 +161,70 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
+  // valor usado internamente para ordenação em cada coluna
+  const getSortValue = (item, key) => {
+    switch (key) {
+      case "numero_da_avaria":
+        return Number(item.numero_da_avaria) || 0;
+      case "data_avaria": {
+        const dataRaw = item.dataAvaria || item.data_avaria || item.created_at;
+        return dataRaw ? new Date(dataRaw).getTime() : 0;
+      }
+      case "motoristaId":
+        return item.motoristaId || "";
+      case "prefixo":
+        return item.prefixo || "";
+      case "tipoOcorrencia":
+        return item.tipoOcorrencia || "";
+      case "valor_total_orcamento":
+        return Number(item.valor_total_orcamento) || 0;
+      case "valor_cobrado":
+        return Number(item.valor_cobrado) || 0;
+      case "status_cobranca":
+        return item.status_cobranca || "";
+      case "created_at":
+      default:
+        return item.created_at
+          ? new Date(item.created_at).getTime()
+          : 0;
+    }
+  };
+
+  const sortedCobrancas = useMemo(() => {
+    const data = [...cobrancas];
+    if (!sortConfig.key) return data;
+
+    data.sort((a, b) => {
+      const vA = getSortValue(a, sortConfig.key);
+      const vB = getSortValue(b, sortConfig.key);
+
+      if (vA === vB) return 0;
+      if (vA > vB) return sortConfig.direction === "asc" ? 1 : -1;
+      return sortConfig.direction === "asc" ? -1 : 1;
+    });
+
+    return data;
+  }, [cobrancas, sortConfig]);
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        // alterna asc <-> desc
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      // primeira vez: ascendente
+      return { key, direction: "asc" };
+    });
+  };
+
+  const renderSortIndicator = (key) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === "asc" ? " ▲" : " ▼";
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-4 text-gray-700">
@@ -227,14 +297,54 @@ export default function CobrancasAvarias() {
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-blue-600 text-white text-left">
-              <th className="p-3">Nº Avaria</th>
-              <th className="p-3">Data da Avaria</th>
-              <th className="p-3">Motorista</th>
-              <th className="p-3">Prefixo</th>
-              <th className="p-3">Tipo Avaria</th>
-              <th className="p-3">Valor Orçado</th>
-              <th className="p-3">Valor Cobrado</th>
-              <th className="p-3">Status Cobrança</th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("numero_da_avaria")}
+              >
+                Nº Avaria{renderSortIndicator("numero_da_avaria")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("data_avaria")}
+              >
+                Data da Avaria{renderSortIndicator("data_avaria")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("motoristaId")}
+              >
+                Motorista{renderSortIndicator("motoristaId")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("prefixo")}
+              >
+                Prefixo{renderSortIndicator("prefixo")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("tipoOcorrencia")}
+              >
+                Tipo Avaria{renderSortIndicator("tipoOcorrencia")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("valor_total_orcamento")}
+              >
+                Valor Orçado{renderSortIndicator("valor_total_orcamento")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("valor_cobrado")}
+              >
+                Valor Cobrado{renderSortIndicator("valor_cobrado")}
+              </th>
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("status_cobranca")}
+              >
+                Status Cobrança{renderSortIndicator("status_cobranca")}
+              </th>
               <th className="p-3">Ações</th>
             </tr>
           </thead>
@@ -246,14 +356,14 @@ export default function CobrancasAvarias() {
                   Carregando...
                 </td>
               </tr>
-            ) : cobrancas.length === 0 ? (
+            ) : sortedCobrancas.length === 0 ? (
               <tr>
                 <td colSpan="9" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
             ) : (
-              cobrancas.map((c) => (
+              sortedCobrancas.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
                   <td className="p-3 text-gray-700">
                     {c.numero_da_avaria || "-"}
