@@ -26,6 +26,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   const [dataAvaria, setDataAvaria] = useState('');
   const [isEditing, setIsEditing] = useState(false); // edição da cobrança (quando já Cobrada)
   const [tratativaTexto, setTratativaTexto] = useState('');
+  const [salvandoInfo, setSalvandoInfo] = useState(false); // <-- NOVO: loading do salvar informações
 
   useEffect(() => {
     async function carregarDados() {
@@ -122,24 +123,44 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
   // --- SALVAR INFORMAÇÕES BÁSICAS (antes da cobrança) ---
   const handleSalvarInfo = async () => {
     const m = motoristaAtual();
+
     if (!m.chapa) {
       alert('⚠️ Selecione o motorista antes de salvar.');
       return;
     }
 
-    const { error } = await supabase
-      .from('avarias')
-      .update({
-        motoristaId: `${m.chapa} - ${m.nome}`,
-        dataAvaria,
-        observacao_operacao: observacaoOperacao,
-      })
-      .eq('id', avaria.id);
+    const updateData = {
+      motoristaId: `${m.chapa} - ${m.nome}`,
+      dataAvaria,
+      observacao_operacao: observacaoOperacao,
+    };
 
-    if (error) {
-      alert('Erro ao salvar informações: ' + error.message);
-    } else {
+    try {
+      setSalvandoInfo(true);
+
+      if (onAtualizarStatus) {
+        // Usa o mesmo fluxo do pai, mantendo o status atual (normalmente "Pendente")
+        await onAtualizarStatus(
+          avaria.id,
+          avaria.status_cobranca || 'Pendente',
+          updateData
+        );
+      } else {
+        // Fallback: salva direto no Supabase se não tiver callback do pai
+        const { error } = await supabase
+          .from('avarias')
+          .update(updateData)
+          .eq('id', avaria.id);
+
+        if (error) throw error;
+      }
+
       alert('✅ Informações salvas com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar informações: ' + err.message);
+    } finally {
+      setSalvandoInfo(false);
     }
   };
 
@@ -393,9 +414,14 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               {podeEditarBasico && (
                 <button
                   onClick={handleSalvarInfo}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                  disabled={salvandoInfo}
+                  className={`px-4 py-2 rounded-md flex items-center gap-2 text-white ${
+                    salvandoInfo
+                      ? 'bg-blue-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
-                  💾 Salvar Informações
+                  {salvandoInfo ? '⏳ Salvando...' : '💾 Salvar Informações'}
                 </button>
               )}
 
