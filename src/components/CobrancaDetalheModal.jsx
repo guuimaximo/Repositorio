@@ -234,6 +234,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
       motivo_cancelamento_cobranca: novoStatus === 'Cancelada' ? motivoCancelamento : null,
       data_cobranca: new Date(),
       urls_tratativa: urlsTratativaArray.length > 0 ? urlsTratativaArray : null,
+      // NOVO: garantir que data da avaria também seja atualizada na edição da cobrança
+      dataAvaria,
     };
 
     if (m.chapa) {
@@ -323,7 +325,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   label="Motorista"
                   value={selectedMotorista}
                   onChange={setSelectedMotorista}
-                  disabled={!podeEditarBasico}
+                  // NOVO: permitir edição também quando isEditing === true (cobrança já cobrada)
+                  disabled={!(podeEditarBasico || isEditing)}
                 />
               </div>
               <div>
@@ -333,7 +336,8 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   value={dataAvaria.slice(0, 10)}
                   onChange={(e) => setDataAvaria(e.target.value)}
                   className="border rounded p-1 w-full disabled:bg-gray-100"
-                  disabled={!podeEditarBasico}
+                  // NOVO: permitir edição também quando isEditing === true
+                  disabled={!(podeEditarBasico || isEditing)}
                 />
               </div>
             </div>
@@ -445,7 +449,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
               <div className="mt-4">
                 <h3 className="text-lg font-semibold mb-1">📎 Tratativa (links / anexos)</h3>
                 <p className="text-xs text-gray-500 mb-1">
-                  Faça upload dos arquivos da tratativa (imagens, PDFs, etc.).  
+                  Faça upload dos arquivos da tratativa (imagens, PDFs, etc).  
                   Eles serão salvos no bucket <strong>tratativas-avarias</strong> e listados abaixo.
                 </p>
                 <input
@@ -542,7 +546,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                 <button
                   onClick={() => {
                     setIsEditing(true);
-                    alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
+                    alert('✏️ Edição liberada. Faça os ajustes (motorista, data, valores) e salve novamente como "Cobrada".');
                   }}
                   className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
                 >
