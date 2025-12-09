@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna)
+// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna + data de aprovação + delta em dias)
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
@@ -161,6 +161,31 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
+  // NOVO: formata a data de aprovação (coluna 'aprovada_em') exibindo apenas a data
+  const formatarDataAprovacao = (c) => {
+    const dataRaw = c.aprovada_em;
+    if (!dataRaw) return "-";
+    const d = new Date(dataRaw);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("pt-BR");
+  };
+
+  // NOVO: calcula o delta em dias entre data da avaria e data de aprovação
+  const calcularDeltaDias = (c) => {
+    const dataAvariaRaw = c.dataAvaria || c.data_avaria || c.created_at;
+    const dataAprovRaw = c.aprovada_em;
+    if (!dataAvariaRaw || !dataAprovRaw) return null;
+
+    const dA = new Date(dataAvariaRaw);
+    const dB = new Date(dataAprovRaw);
+
+    if (Number.isNaN(dA.getTime()) || Number.isNaN(dB.getTime())) return null;
+
+    const diffMs = dB.getTime() - dA.getTime();
+    const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return diffDias;
+  };
+
   // valor usado internamente para ordenação em cada coluna
   const getSortValue = (item, key) => {
     switch (key) {
@@ -169,6 +194,12 @@ export default function CobrancasAvarias() {
       case "data_avaria": {
         const dataRaw = item.dataAvaria || item.data_avaria || item.created_at;
         return dataRaw ? new Date(dataRaw).getTime() : 0;
+      }
+      case "aprovada_em":
+        return item.aprovada_em ? new Date(item.aprovada_em).getTime() : 0;
+      case "delta_dias": {
+        const delta = calcularDeltaDias(item);
+        return delta ?? 0;
       }
       case "motoristaId":
         return item.motoristaId || "";
@@ -184,9 +215,7 @@ export default function CobrancasAvarias() {
         return item.status_cobranca || "";
       case "created_at":
       default:
-        return item.created_at
-          ? new Date(item.created_at).getTime()
-          : 0;
+        return item.created_at ? new Date(item.created_at).getTime() : 0;
     }
   };
 
@@ -309,6 +338,20 @@ export default function CobrancasAvarias() {
               >
                 Data da Avaria{renderSortIndicator("data_avaria")}
               </th>
+              {/* NOVO: Data de Aprovação */}
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("aprovada_em")}
+              >
+                Data Aprovação{renderSortIndicator("aprovada_em")}
+              </th>
+              {/* NOVO: Delta em dias (letra vermelha) */}
+              <th
+                className="p-3 cursor-pointer select-none"
+                onClick={() => handleSort("delta_dias")}
+              >
+                Δ (dias){renderSortIndicator("delta_dias")}
+              </th>
               <th
                 className="p-3 cursor-pointer select-none"
                 onClick={() => handleSort("motoristaId")}
@@ -352,75 +395,92 @@ export default function CobrancasAvarias() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="9" className="text-center p-6 text-gray-500">
+                <td colSpan="11" className="text-center p-6 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : sortedCobrancas.length === 0 ? (
               <tr>
-                <td colSpan="9" className="text-center p-6 text-gray-500">
+                <td colSpan="11" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
             ) : (
-              sortedCobrancas.map((c) => (
-                <tr key={c.id} className="border-b hover:bg-gray-50">
-                  <td className="p-3 text-gray-700">
-                    {c.numero_da_avaria || "-"}
-                  </td>
-                  <td className="p-3 text-gray-700">
-                    {formatarDataAvaria(c)}
-                  </td>
-                  <td className="p-3 text-gray-700">{c.motoristaId || "-"}</td>
-                  <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
-                  <td className="p-3 text-gray-700">
-                    {c.tipoOcorrencia || "-"}
-                  </td>
-                  <td className="p-3 text-gray-700">
-                    {formatCurrency(c.valor_total_orcamento)}
-                  </td>
-                  <td className="p-3 text-gray-900 font-medium">
-                    {formatCurrency(c.valor_cobrado)}
-                  </td>
-                  <td className="p-3">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        c.status_cobranca === "Cobrada"
-                          ? "bg-green-100 text-green-800"
-                          : c.status_cobranca === "Cancelada"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {c.status_cobranca || "Pendente"}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    {c.status_cobranca === "Pendente" ? (
-                      <button
-                        onClick={() => handleVerDetalhes(c)}
-                        className="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600 text-sm"
+              sortedCobrancas.map((c) => {
+                const deltaDias = calcularDeltaDias(c);
+                return (
+                  <tr key={c.id} className="border-b hover:bg-gray-50">
+                    <td className="p-3 text-gray-700">
+                      {c.numero_da_avaria || "-"}
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      {formatarDataAvaria(c)}
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      {formatarDataAprovacao(c)}
+                    </td>
+                    <td className="p-3">
+                      {deltaDias !== null ? (
+                        <span className="text-red-600 font-semibold">
+                          {deltaDias}d
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      {c.motoristaId || "-"}
+                    </td>
+                    <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
+                    <td className="p-3 text-gray-700">
+                      {c.tipoOcorrencia || "-"}
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      {formatCurrency(c.valor_total_orcamento)}
+                    </td>
+                    <td className="p-3 text-gray-900 font-medium">
+                      {formatCurrency(c.valor_cobrado)}
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          c.status_cobranca === "Cobrada"
+                            ? "bg-green-100 text-green-800"
+                            : c.status_cobranca === "Cancelada"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
                       >
-                        💰 Cobrar
-                      </button>
-                    ) : c.status_cobranca === "Cobrada" ? (
-                      <button
-                        onClick={() => handleVerDetalhes(c)}
-                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm"
-                      >
-                        ✏️ Editar
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleVerDetalhes(c)}
-                        className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
-                      >
-                        👁️ Detalhes
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))
+                        {c.status_cobranca || "Pendente"}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      {c.status_cobranca === "Pendente" ? (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600 text-sm"
+                        >
+                          💰 Cobrar
+                        </button>
+                      ) : c.status_cobranca === "Cobrada" ? (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm"
+                        >
+                          ✏️ Editar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                        >
+                          👁️ Detalhes
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
