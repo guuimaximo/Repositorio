@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// Versão revisada: (Valores nos cards + Nº Avaria + ordenação + data de aprovação + delta em dias + filtro de período)
+// Versão revisada: (Remoção da coluna 'Tipo Avaria' e ajuste de ordenação/filtros)
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
@@ -75,13 +75,13 @@ export default function CobrancasAvarias() {
     }
 
     if (filtro) {
+      // **AJUSTE: Removido 'tipoOcorrencia' da busca.**
       query = query.or(
-        `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,tipoOcorrencia.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
+        `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
       );
     }
 
     // Filtro de período por data da avaria
-    // **Nota: Mantendo "dataAvaria" como no seu código para a query, ajuste se for "data_avaria" no seu DB.**
     if (dataInicio) {
       query = query.gte("dataAvaria", dataInicio);
     }
@@ -152,7 +152,6 @@ export default function CobrancasAvarias() {
 
   const carregarTudo = async () => {
     setLoading(true);
-    // Carrega o resumo e a lista em paralelo
     await Promise.all([carregarResumo(), carregarCobrancas()]);
     setLoading(false);
   };
@@ -173,7 +172,6 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
-  // Função para atualizar o status e recarregar os dados
   const handleAtualizarStatusCobranca = async (
     avariaId,
     novoStatus,
@@ -187,7 +185,7 @@ export default function CobrancasAvarias() {
     if (!error) {
       alert(`✅ Cobrança marcada como ${novoStatus}!`);
       handleCloseModal();
-      carregarTudo(); // Recarrega dados e resumo
+      carregarTudo(); 
     } else {
       alert(`❌ Erro ao atualizar status: ${error.message}`);
     }
@@ -203,39 +201,33 @@ export default function CobrancasAvarias() {
   const formatarDataAvaria = (c) => formatarData(c.dataAvaria || c.data_avaria || c.created_at);
   const formatarDataAprovacao = (c) => formatarData(c.aprovado_em);
 
-  // Calcula a diferença em dias entre a data da avaria e a data de aprovação
   const calcularDeltaDias = (c) => {
     const dataAvariaRaw = c.dataAvaria || c.data_avaria || c.created_at;
     const dataAprovRaw = c.aprovado_em;
     if (!dataAvariaRaw || !dataAprovRaw) return null;
 
-    // Converte para objeto Date
     const dA = new Date(dataAvariaRaw);
     const dB = new Date(dataAprovRaw);
 
     if (Number.isNaN(dA.getTime()) || Number.isNaN(dB.getTime())) return null;
 
     const diffMs = dB.getTime() - dA.getTime();
-    // 1000ms * 60s * 60m * 24h = 86,400,000 milissegundos em um dia
     const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24));
     return diffDias;
   };
 
   // --- Lógica de Ordenação ---
 
-  // valor usado internamente para ordenação em cada coluna
   const getSortValue = (item, key) => {
     switch (key) {
       case "numero_da_avaria":
       case "valor_total_orcamento":
       case "valor_cobrado":
       case "delta_dias":
-        // Retorna o valor numérico ou 0 para ordenação
         if (key === "delta_dias") return calcularDeltaDias(item) ?? 0;
         return Number(item[key]) || 0;
 
       case "data_avaria": {
-        // Usa a data mais provável
         const dataRaw = item.dataAvaria || item.data_avaria || item.created_at;
         return dataRaw ? new Date(dataRaw).getTime() : 0;
       }
@@ -246,8 +238,7 @@ export default function CobrancasAvarias() {
       case "motoristaId":
       case "prefixo":
       case "status_cobranca":
-      case "tipoOcorrencia":
-        // Retorna a string para ordenação alfabética
+        // **AJUSTE: Removido 'tipoOcorrencia'**
         return item[key] || "";
         
       default:
@@ -255,7 +246,6 @@ export default function CobrancasAvarias() {
     }
   };
 
-  // Aplica a ordenação na lista de cobranças visíveis
   const sortedCobrancas = useMemo(() => {
     const data = [...cobrancas];
     if (!sortConfig.key) return data;
@@ -264,13 +254,11 @@ export default function CobrancasAvarias() {
       const vA = getSortValue(a, sortConfig.key);
       const vB = getSortValue(b, sortConfig.key);
 
-      // Tratamento para ordenação alfabética (strings)
       if (typeof vA === 'string' && typeof vB === 'string') {
         const comparison = vA.localeCompare(vB);
         return sortConfig.direction === "asc" ? comparison : -comparison;
       }
       
-      // Tratamento para ordenação numérica ou por data
       if (vA === vB) return 0;
       if (vA > vB) return sortConfig.direction === "asc" ? 1 : -1;
       return sortConfig.direction === "asc" ? -1 : 1;
@@ -281,14 +269,13 @@ export default function CobrancasAvarias() {
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
-      // Se a mesma coluna for clicada, inverte a direção
       if (prev.key === key) {
         return {
           key,
           direction: prev.direction === "asc" ? "desc" : "asc",
         };
       }
-      // Se for uma nova coluna, define a direção padrão (asc para texto, desc para data/número)
+      
       const isDateOrNumber = [
         "created_at",
         "data_avaria",
@@ -322,7 +309,8 @@ export default function CobrancasAvarias() {
           <FaSearch className="text-gray-400 mr-2" />
           <input
             type="text"
-            placeholder="Buscar (motorista, prefixo, tipo, nº avaria...)"
+            // **AJUSTE: Removido "tipo" da descrição do placeholder.**
+            placeholder="Buscar (motorista, prefixo, nº avaria...)"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
             className="flex-1 outline-none py-1"
@@ -444,12 +432,7 @@ export default function CobrancasAvarias() {
               >
                 Prefixo{renderSortIndicator("prefixo")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("tipoOcorrencia")}
-              >
-                Tipo Avaria{renderSortIndicator("tipoOcorrencia")}
-              </th>
+              {/* Coluna 'Tipo Avaria' removida */}
               <th
                 className="p-3 cursor-pointer select-none whitespace-nowrap text-right"
                 onClick={() => handleSort("valor_total_orcamento")}
@@ -475,20 +458,20 @@ export default function CobrancasAvarias() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="11" className="text-center p-6 text-gray-500">
+                <td colSpan="10" className="text-center p-6 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : sortedCobrancas.length === 0 ? (
               <tr>
-                <td colSpan="11" className="text-center p-6 text-gray-500">
+                <td colSpan="10" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
             ) : (
               sortedCobrancas.map((c) => {
                 const deltaDias = calcularDeltaDias(c);
-                const statusCobranca = c.status_cobranca || "Pendente"; // Define "Pendente" como padrão
+                const statusCobranca = c.status_cobranca || "Pendente"; 
                 
                 return (
                   <tr key={c.id} className="border-b hover:bg-gray-50">
@@ -517,7 +500,7 @@ export default function CobrancasAvarias() {
                     </td>
                     <td className="p-3 text-gray-700">{c.motoristaId || "-"}</td>
                     <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
-                    <td className="p-3 text-gray-700">{c.tipoOcorrencia || "-"}</td>
+                    {/* Coluna 'Tipo Avaria' removida */}
                     <td className="p-3 text-gray-700 text-right whitespace-nowrap">
                       {formatCurrency(c.valor_total_orcamento)}
                     </td>
