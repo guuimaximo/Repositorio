@@ -161,9 +161,9 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
-  // NOVO: formata a data de aprovação (coluna 'aprovada_em') exibindo apenas a data
+  // NOVO: formata a data de aprovação (coluna 'aprovado_em') exibindo apenas a data
   const formatarDataAprovacao = (c) => {
-    const dataRaw = c.aprovada_em;
+    const dataRaw = c.aprovado_em;
     if (!dataRaw) return "-";
     const d = new Date(dataRaw);
     if (Number.isNaN(d.getTime())) return "-";
@@ -173,7 +173,7 @@ export default function CobrancasAvarias() {
   // NOVO: calcula o delta em dias entre data da avaria e data de aprovação
   const calcularDeltaDias = (c) => {
     const dataAvariaRaw = c.dataAvaria || c.data_avaria || c.created_at;
-    const dataAprovRaw = c.aprovada_em;
+    const dataAprovRaw = c.aprovado_em;
     if (!dataAvariaRaw || !dataAprovRaw) return null;
 
     const dA = new Date(dataAvariaRaw);
@@ -195,8 +195,8 @@ export default function CobrancasAvarias() {
         const dataRaw = item.dataAvaria || item.data_avaria || item.created_at;
         return dataRaw ? new Date(dataRaw).getTime() : 0;
       }
-      case "aprovada_em":
-        return item.aprovada_em ? new Date(item.aprovada_em).getTime() : 0;
+      case "aprovado_em":
+        return item.aprovado_em ? new Date(item.aprovado_em).getTime() : 0;
       case "delta_dias": {
         const delta = calcularDeltaDias(item);
         return delta ?? 0;
@@ -341,9 +341,9 @@ export default function CobrancasAvarias() {
               {/* NOVO: Data de Aprovação */}
               <th
                 className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("aprovada_em")}
+                onClick={() => handleSort("aprovado_em")}
               >
-                Data Aprovação{renderSortIndicator("aprovada_em")}
+                Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
               {/* NOVO: Delta em dias (letra vermelha) */}
               <th
