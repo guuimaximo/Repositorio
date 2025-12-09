@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna + data de aprovação + delta em dias)
+// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna + data de aprovação + delta em dias + filtro de período)
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
@@ -37,6 +37,10 @@ export default function CobrancasAvarias() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
 
+  // NOVO: Filtro de período
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
   // sortConfig: key = campo, direction = 'asc' | 'desc'
   const [sortConfig, setSortConfig] = useState({
     key: "created_at",
@@ -65,6 +69,16 @@ export default function CobrancasAvarias() {
         `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,tipoOcorrencia.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
       );
 
+    // NOVO: filtro de período pela data da avaria (coluna data_avaria)
+    if (dataInicio) {
+      query = query.gte("data_avaria", dataInicio);
+    }
+    if (dataFim) {
+      // Considera o fim do dia
+      const fimISO = `${dataFim}T23:59:59`;
+      query = query.lte("data_avaria", fimISO);
+    }
+
     const { data, error } = await query;
     if (error) {
       console.error("Erro ao carregar lista de cobranças:", error);
@@ -75,10 +89,21 @@ export default function CobrancasAvarias() {
   };
 
   const carregarResumo = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("avarias")
-      .select("status_cobranca, valor_total_orcamento")
+      .select("status_cobranca, valor_total_orcamento, data_avaria")
       .eq("status", "Aprovado");
+
+    // Mesmo filtro de data para manter os cards alinhados ao período
+    if (dataInicio) {
+      query = query.gte("data_avaria", dataInicio);
+    }
+    if (dataFim) {
+      const fimISO = `${dataFim}T23:59:59`;
+      query = query.lte("data_avaria", fimISO);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Erro ao carregar resumo:", error);
@@ -122,7 +147,7 @@ export default function CobrancasAvarias() {
 
   useEffect(() => {
     carregarTudo();
-  }, [filtro, statusFiltro]);
+  }, [filtro, statusFiltro, dataInicio, dataFim]);
 
   const handleVerDetalhes = (avaria) => {
     setSelectedAvaria(avaria);
@@ -262,7 +287,7 @@ export default function CobrancasAvarias() {
 
       {/* Filtros */}
       <div className="bg-white p-4 shadow rounded-lg mb-6 flex flex-wrap gap-3 items-center">
-        <div className="flex items-center border rounded-md px-2 flex-1">
+        <div className="flex items-center border rounded-md px-2 flex-1 min-w-[220px]">
           <FaSearch className="text-gray-400 mr-2" />
           <input
             type="text"
@@ -272,6 +297,29 @@ export default function CobrancasAvarias() {
             className="flex-1 outline-none py-1"
           />
         </div>
+
+        {/* NOVO: Período - Data Início / Data Fim */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-500 mb-1">Início</label>
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="border rounded-md p-2 text-sm"
+            />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-500 mb-1">Fim</label>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="border rounded-md p-2 text-sm"
+            />
+          </div>
+        </div>
+
         <select
           className="border rounded-md p-2"
           value={statusFiltro}
@@ -286,6 +334,8 @@ export default function CobrancasAvarias() {
           onClick={() => {
             setFiltro("");
             setStatusFiltro("");
+            setDataInicio("");
+            setDataFim("");
           }}
           className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md px-4 py-2"
         >
