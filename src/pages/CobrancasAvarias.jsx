@@ -1,5 +1,5 @@
 // src/pages/CobrancasAvarias.jsx
-// (Atualizado com valores nos cards + coluna Número da Avaria + ordenação por coluna + data de aprovação + delta em dias + filtro de período)
+// (Valores nos cards + Nº Avaria + ordenação + data de aprovação + delta em dias + filtro de período)
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
@@ -23,6 +23,7 @@ export default function CobrancasAvarias() {
   const [filtro, setFiltro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("");
   const [loading, setLoading] = useState(true);
+
   const [resumo, setResumo] = useState({
     total: 0,
     pendentes: 0,
@@ -37,7 +38,7 @@ export default function CobrancasAvarias() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAvaria, setSelectedAvaria] = useState(null);
 
-  // NOVO: Filtro de período
+  // NOVO: Filtro de período (data da avaria)
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
@@ -62,19 +63,21 @@ export default function CobrancasAvarias() {
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
 
-    if (statusFiltro) query = query.eq("status_cobranca", statusFiltro);
+    if (statusFiltro) {
+      query = query.eq("status_cobranca", statusFiltro);
+    }
 
-    if (filtro)
+    if (filtro) {
       query = query.or(
         `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,tipoOcorrencia.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
       );
+    }
 
     // NOVO: filtro de período pela data da avaria (coluna data_avaria)
     if (dataInicio) {
       query = query.gte("data_avaria", dataInicio);
     }
     if (dataFim) {
-      // Considera o fim do dia
       const fimISO = `${dataFim}T23:59:59`;
       query = query.lte("data_avaria", fimISO);
     }
@@ -119,7 +122,6 @@ export default function CobrancasAvarias() {
       pendentes: pendentes.length,
       cobradas: cobradas.length,
       canceladas: canceladas.length,
-
       totalAprovadoValue: data.reduce(
         (sum, a) => sum + (a.valor_total_orcamento || 0),
         0
@@ -186,7 +188,7 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
-  // NOVO: formata a data de aprovação (coluna 'aprovado_em') exibindo apenas a data
+  // Data de aprovação (coluna 'aprovado_em')
   const formatarDataAprovacao = (c) => {
     const dataRaw = c.aprovado_em;
     if (!dataRaw) return "-";
@@ -195,7 +197,7 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
-  // NOVO: calcula o delta em dias entre data da avaria e data de aprovação
+  // Delta em dias entre data da avaria e data de aprovação
   const calcularDeltaDias = (c) => {
     const dataAvariaRaw = c.dataAvaria || c.data_avaria || c.created_at;
     const dataAprovRaw = c.aprovado_em;
@@ -287,7 +289,7 @@ export default function CobrancasAvarias() {
 
       {/* Filtros */}
       <div className="bg-white p-4 shadow rounded-lg mb-6 flex flex-wrap gap-3 items-center">
-        <div className="flex items-center border rounded-md px-2 flex-1 min-w-[220px]">
+        <div className="flex items-center border rounded-md px-2 flex-1">
           <FaSearch className="text-gray-400 mr-2" />
           <input
             type="text"
@@ -298,7 +300,7 @@ export default function CobrancasAvarias() {
           />
         </div>
 
-        {/* NOVO: Período - Data Início / Data Fim */}
+        {/* Período - Data Início / Data Fim */}
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex flex-col">
             <label className="text-xs text-gray-500 mb-1">Início</label>
@@ -330,6 +332,7 @@ export default function CobrancasAvarias() {
           <option value="Cobrada">Cobradas</option>
           <option value="Cancelada">Canceladas</option>
         </select>
+
         <button
           onClick={() => {
             setFiltro("");
@@ -388,14 +391,12 @@ export default function CobrancasAvarias() {
               >
                 Data da Avaria{renderSortIndicator("data_avaria")}
               </th>
-              {/* NOVO: Data de Aprovação */}
               <th
                 className="p-3 cursor-pointer select-none"
                 onClick={() => handleSort("aprovado_em")}
               >
                 Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
-              {/* NOVO: Delta em dias (letra vermelha) */}
               <th
                 className="p-3 cursor-pointer select-none"
                 onClick={() => handleSort("delta_dias")}
@@ -522,7 +523,10 @@ export default function CobrancasAvarias() {
                       ) : (
                         <button
                           onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                          className="flex items
+                          
+
+                            center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                         >
                           👁️ Detalhes
                         </button>
