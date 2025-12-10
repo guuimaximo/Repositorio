@@ -485,12 +485,26 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                           className="border rounded-lg overflow-hidden hover:opacity-80"
                         >
                           {url.match(/\.(mp4|mov|webm)$/i) ? (
+                            // Vídeo: mostra só o player
                             <video controls src={url} className="w-full h-24 object-cover" />
                           ) : url.match(/\.(jpe?g|png|gif|webp|bmp)$/i) ? (
-                            <img src={url} alt={`Tratativa ${i + 1}`} className="w-full h-24 object-cover" />
+                            // Imagem: miniatura da imagem
+                            <img
+                              src={url}
+                              alt={`Tratativa ${i + 1}`}
+                              className="w-full h-24 object-cover"
+                            />
+                          ) : url.match(/\.pdf$/i) ? (
+                            // PDF: card genérico sem mostrar link
+                            <div className="w-full h-24 flex flex-col items-center justify-center text-xs p-2">
+                              <span className="text-2xl">📄</span>
+                              <span className="mt-1">PDF</span>
+                            </div>
                           ) : (
-                            <div className="w-full h-24 flex items-center justify-center text-xs p-2">
-                              {url}
+                            // Qualquer outro tipo: card genérico sem URL
+                            <div className="w-full h-24 flex flex-col items-center justify-center text-xs p-2">
+                              <span className="text-2xl">📎</span>
+                              <span className="mt-1">Arquivo</span>
                             </div>
                           )}
                         </a>
