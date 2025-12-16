@@ -27,7 +27,14 @@ function LoginModal({ onConfirm, onCancel, title = 'Aprovação Restrita' }) {
       alert('Login ou senha incorretos!');
       return;
     }
-    onConfirm({ nome: data.nome, login: data.login });
+
+    // NOVO: devolve também o nível (para controlar exclusão)
+    onConfirm({
+      nome: data.nome,
+      login: data.login,
+      nivel: data.nivel,   // 'Administrador' (ex.)
+      email: data.email,
+    });
   }
 
   return (
@@ -72,7 +79,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [itens, setItens] = useState([]);
   const [loadingItens, setLoadingItens] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [editorInfo, setEditorInfo] = useState(null); // {nome, login}
+  const [editorInfo, setEditorInfo] = useState(null); // {nome, login, nivel}
   const [descricao, setDescricao] = useState('');
   const [prefixo, setPrefixo] = useState('');
   const [valorTotal, setValorTotal] = useState(0);
@@ -80,7 +87,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginTitle, setLoginTitle] = useState('Aprovação Restrita');
-  const [acaoPendente, setAcaoPendente] = useState(null); // 'approve' | 'reject' | 'edit'
+  const [acaoPendente, setAcaoPendente] = useState(null); // 'approve' | 'reject' | 'edit' | 'delete'
   const [motivoReprovacao, setMotivoReprovacao] = useState('');
 
   useEffect(() => {
@@ -101,6 +108,7 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       setPrefixo(avaria.prefixo || '');
       setValorTotal(avaria.valor_total_orcamento || 0);
       setObservacao(avaria.observacao_operacao || '');
+
       // Evidências: aceita array ou string
       let urls = [];
       if (Array.isArray(avaria.urls_evidencias)) {
@@ -125,12 +133,11 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
     setLoginModalOpen(true);
   }
 
-  async function onLoginConfirm({ nome }) {
+  async function onLoginConfirm({ nome, login, nivel }) {
     setLoginModalOpen(false);
 
     if (acaoPendente === 'edit') {
-      // habilita modo edição
-      setEditorInfo({ nome });
+      setEditorInfo({ nome, login, nivel });
       setEditMode(true);
       return;
     }
@@ -148,6 +155,20 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       await confirmarReprovacao(nome, motivoReprovacao.trim());
       return;
     }
+
+    // NOVO: exclusão de avaria (somente Administrador)
+    if (acaoPendente === 'delete') {
+      const isAdmin =
+        String(nivel || '').toLowerCase() === 'administrador' ||
+        String(nivel || '').toLowerCase() === 'administrator';
+
+      if (!isAdmin) {
+        alert('❌ Sem permissão. Apenas usuários Administrador podem excluir.');
+        return;
+      }
+      await confirmarExclusao(nome);
+      return;
+    }
   }
 
   // ---- ITENS: edição básica (salvos com botão "Salvar") ----
@@ -156,7 +177,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
   };
 
   async function salvarAlteracoes() {
-    // Atualiza itens existentes
     for (const item of itens) {
       if (item.id && !item.__novo) {
         const { error } = await supabase
@@ -175,7 +195,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       }
     }
 
-    // Atualiza avaria
     const { error: errAvaria } = await supabase
       .from('avarias')
       .update({
@@ -224,7 +243,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
     setItens((prev) => [...prev, data]);
   }
 
-  // Remover item
   async function removerItem(id) {
     if (!editMode) {
       alert('Entre em modo de edição para remover itens.');
@@ -255,7 +273,6 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
       status: 'Aprovado',
       aprovado_por: nomeAprovador,
       aprovado_em: new Date().toISOString(),
-      // mantém observacao_operacao como está
       status_cobranca: 'Pendente',
     };
 
@@ -287,6 +304,39 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
     onAtualizarStatus();
   }
 
+  // NOVO: excluir avaria (e itens vinculados) — somente Administrador
+  async function confirmarExclusao(nomeAprovador) {
+    const ok = window.confirm(
+      `ATENÇÃO: isso irá EXCLUIR definitivamente a avaria e seus itens.\n\nConfirmar exclusão?`
+    );
+    if (!ok) return;
+
+    // remove itens da avaria primeiro (caso não haja cascade)
+    const { error: errItens } = await supabase
+      .from('cobrancas_avarias')
+      .delete()
+      .eq('avaria_id', avaria.id);
+
+    if (errItens) {
+      alert('Erro ao excluir itens: ' + errItens.message);
+      return;
+    }
+
+    const { error: errAvaria } = await supabase
+      .from('avarias')
+      .delete()
+      .eq('id', avaria.id);
+
+    if (errAvaria) {
+      alert('Erro ao excluir avaria: ' + errAvaria.message);
+      return;
+    }
+
+    alert(`🗑️ Avaria excluída por ${nomeAprovador}.`);
+    onClose();
+    onAtualizarStatus();
+  }
+
   if (!avaria) return null;
 
   return (
@@ -311,6 +361,16 @@ function DetalheAvariaModal({ avaria, onClose, onAtualizarStatus }) {
                 <FaSave /> Salvar
               </button>
             )}
+
+            {/* NOVO: Excluir Avaria (só Administrador via login) */}
+            <button
+              onClick={() => solicitarLogin('delete', 'Excluir Avaria (Administrador)')}
+              className="bg-red-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-red-700"
+              title="Excluir avaria (apenas Administrador)"
+            >
+              <FaTrash /> Excluir
+            </button>
+
             <button onClick={onClose} className="text-gray-600 hover:text-gray-900">
               <FaTimes size={20} />
             </button>
