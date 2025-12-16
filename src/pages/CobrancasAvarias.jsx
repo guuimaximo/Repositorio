@@ -48,16 +48,47 @@ export default function CobrancasAvarias() {
     direction: "desc",
   });
 
-  const [user, setUser] = useState(null);  // Estado para o usuário logado
+  // =========================================================
+  // NOVO: Permissão de exclusão via tabela usuarios_aprovadores
+  // =========================================================
+  const [canDelete, setCanDelete] = useState(false);
+
+  const carregarPermissaoExclusao = async () => {
+    const { data: uData, error: uErr } = await supabase.auth.getUser();
+    const user = uData?.user || null;
+
+    if (uErr || !user?.email) {
+      setCanDelete(false);
+      return;
+    }
+
+    const { data: ua, error: uaErr } = await supabase
+      .from("usuarios_aprovadores")
+      .select("nivel, status_cadastro")
+      .ilike("email", user.email) // case-insensitive
+      .maybeSingle();
+
+    if (uaErr) {
+      console.warn("Erro ao validar permissão de exclusão:", uaErr.message);
+      setCanDelete(false);
+      return;
+    }
+
+    setCanDelete(
+      ua?.nivel === "Administrador" && ua?.status_cadastro === "Aprovado"
+    );
+  };
 
   useEffect(() => {
-    // Verificando usuário logado
-    const fetchUser = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      setUser(userData);  // Defina o usuário logado
-    };
-    fetchUser();
+    carregarPermissaoExclusao();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      carregarPermissaoExclusao();
+    });
+
+    return () => listener?.subscription?.unsubscribe?.();
   }, []);
+  // =========================================================
 
   const formatCurrency = (value) =>
     value === null || value === undefined
@@ -84,6 +115,7 @@ export default function CobrancasAvarias() {
       );
     }
 
+    // Se no banco for "data_avaria", troque "dataAvaria" por "data_avaria"
     if (dataInicio) {
       query = query.gte("dataAvaria", dataInicio);
     }
@@ -122,6 +154,7 @@ export default function CobrancasAvarias() {
       return;
     }
 
+    // considerar null/undefined como "Pendente"
     const pendentes = data.filter(
       (c) => (c.status_cobranca || "Pendente") === "Pendente"
     );
@@ -172,23 +205,52 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
-  const handleExcluirAvaria = async (avariaId) => {
-    if (user?.role === "Administrador") {
-      const { error } = await supabase
-        .from("avarias")
-        .delete()
-        .eq("id", avariaId);
+  const handleAtualizarStatusCobranca = async (
+    avariaId,
+    novoStatus,
+    updateData
+  ) => {
+    const { error } = await supabase
+      .from("avarias")
+      .update(updateData)
+      .eq("id", avariaId);
 
-      if (!error) {
-        alert(`✅ Avaria excluída com sucesso`);
-        carregarTudo();
-      } else {
-        alert(`❌ Erro ao excluir avaria: ${error.message}`);
-      }
+    if (!error) {
+      alert(`✅ Cobrança marcada como ${novoStatus}`);
+      handleCloseModal();
+      carregarTudo();
     } else {
-      alert("❌ Você não tem permissão para excluir esta avaria.");
+      alert(`❌ Erro ao atualizar status: ${error.message}`);
     }
   };
+
+  // =========================================
+  // NOVO: Excluir avaria (somente Admin)
+  // =========================================
+  const handleExcluirAvaria = async (avaria) => {
+    if (!canDelete) {
+      alert("❌ Você não tem permissão para excluir avarias.");
+      return;
+    }
+    if (!avaria?.id) return;
+
+    const ok = window.confirm(
+      `Tem certeza que deseja EXCLUIR a avaria Nº ${avaria.numero_da_avaria || "-"}?\n\nEssa ação remove o registro.`
+    );
+    if (!ok) return;
+
+    const { error } = await supabase.from("avarias").delete().eq("id", avaria.id);
+
+    if (error) {
+      alert(`❌ Erro ao excluir: ${error.message}`);
+      return;
+    }
+
+    alert("✅ Avaria excluída com sucesso.");
+    handleCloseModal();
+    carregarTudo();
+  };
+  // =========================================
 
   const formatarDataAvaria = (c) => {
     const dataRaw = c.dataAvaria || c.data_avaria || c.created_at;
@@ -490,4 +552,73 @@ export default function CobrancasAvarias() {
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td
+                    <td className="p-3 text-gray-700">
+                      {c.motoristaId || "-"}
+                    </td>
+                    <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
+                    <td className="p-3 text-gray-700">
+                      {c.tipoOcorrencia || "-"}
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      {formatCurrency(c.valor_total_orcamento)}
+                    </td>
+                    <td className="p-3 text-gray-900 font-medium">
+                      {formatCurrency(c.valor_cobrado)}
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          statusCobranca === "Cobrada"
+                            ? "bg-green-100 text-green-800"
+                            : statusCobranca === "Cancelada"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {statusCobranca}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      {statusCobranca === "Pendente" ? (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600 text-sm"
+                        >
+                          💰 Cobrar
+                        </button>
+                      ) : statusCobranca === "Cobrada" ? (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm"
+                        >
+                          ✏️ Editar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleVerDetalhes(c)}
+                          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                        >
+                          👁️ Detalhes
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalOpen && (
+        <CobrancaDetalheModal
+          avaria={selectedAvaria}
+          onClose={handleCloseModal}
+          onAtualizarStatus={handleAtualizarStatusCobranca}
+          canDelete={canDelete}
+          onExcluir={() => handleExcluirAvaria(selectedAvaria)}
+        />
+      )}
+    </div>
+  );
+}
