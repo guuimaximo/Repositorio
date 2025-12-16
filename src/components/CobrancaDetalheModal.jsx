@@ -15,7 +15,13 @@ const parseCurrency = (value) => {
   return Number.isNaN(num) ? null : num;
 };
 
-export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatus }) {
+export default function CobrancaDetalheModal({
+  avaria,
+  onClose,
+  onAtualizarStatus,
+  canDelete,   // NOVO
+  onExcluir,   // NOVO
+}) {
   const [itensOrcamento, setItensOrcamento] = useState([]);
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
   const [loadingItens, setLoadingItens] = useState(false);
@@ -421,6 +427,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                 readOnly={somenteLeituraOperacao}
                 className="w-full border rounded-md p-2 mb-3"
               />
+
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium">Nº de Parcelas</label>
@@ -485,23 +492,19 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                           className="border rounded-lg overflow-hidden hover:opacity-80"
                         >
                           {url.match(/\.(mp4|mov|webm)$/i) ? (
-                            // Vídeo: mostra só o player
                             <video controls src={url} className="w-full h-24 object-cover" />
                           ) : url.match(/\.(jpe?g|png|gif|webp|bmp)$/i) ? (
-                            // Imagem: miniatura da imagem
                             <img
                               src={url}
                               alt={`Tratativa ${i + 1}`}
                               className="w-full h-24 object-cover"
                             />
                           ) : url.match(/\.pdf$/i) ? (
-                            // PDF: card genérico sem mostrar link
                             <div className="w-full h-24 flex flex-col items-center justify-center text-xs p-2">
                               <span className="text-2xl">📄</span>
                               <span className="mt-1">PDF</span>
                             </div>
                           ) : (
-                            // Qualquer outro tipo: card genérico sem URL
                             <div className="w-full h-24 flex flex-col items-center justify-center text-xs p-2">
                               <span className="text-2xl">📎</span>
                               <span className="mt-1">Arquivo</span>
@@ -524,6 +527,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
             >
               🖨️ Imprimir
             </button>
+
             <div className="flex gap-3 flex-wrap justify-end">
               {podeEditarBasico && (
                 <button
@@ -567,6 +571,7 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   ✏️ Editar Cobrança
                 </button>
               )}
+
               {isEditing && (
                 <button
                   onClick={() => handleSalvarStatus('Cobrada')}
@@ -575,6 +580,21 @@ export default function CobrancaDetalheModal({ avaria, onClose, onAtualizarStatu
                   💾 Salvar Alterações
                 </button>
               )}
+
+              {/* ===========================
+                  NOVO: Botão Excluir Avaria
+                  =========================== */}
+              {canDelete && typeof onExcluir === 'function' && (
+                <button
+                  onClick={onExcluir}
+                  className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                  title="Excluir avaria (apenas Administrador)"
+                >
+                  🗑️ Excluir Avaria
+                </button>
+              )}
+              {/* =========================== */}
+
               <button
                 onClick={onClose}
                 className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded-md flex items-center gap-2"
