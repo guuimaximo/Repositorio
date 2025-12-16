@@ -48,6 +48,17 @@ export default function CobrancasAvarias() {
     direction: "desc",
   });
 
+  const [user, setUser] = useState(null);  // Estado para o usuário logado
+
+  useEffect(() => {
+    // Verificando usuário logado
+    const fetchUser = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      setUser(userData);  // Defina o usuário logado
+    };
+    fetchUser();
+  }, []);
+
   const formatCurrency = (value) =>
     value === null || value === undefined
       ? "-"
@@ -73,7 +84,6 @@ export default function CobrancasAvarias() {
       );
     }
 
-    // Se no banco for "data_avaria", troque "dataAvaria" por "data_avaria"
     if (dataInicio) {
       query = query.gte("dataAvaria", dataInicio);
     }
@@ -112,7 +122,6 @@ export default function CobrancasAvarias() {
       return;
     }
 
-    // considerar null/undefined como "Pendente"
     const pendentes = data.filter(
       (c) => (c.status_cobranca || "Pendente") === "Pendente"
     );
@@ -154,8 +163,6 @@ export default function CobrancasAvarias() {
   }, [filtro, statusFiltro, dataInicio, dataFim]);
 
   const handleVerDetalhes = (avaria) => {
-    // debug opcional:
-    // console.log("Abrindo modal para avaria:", avaria);
     setSelectedAvaria(avaria);
     setModalOpen(true);
   };
@@ -165,22 +172,21 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
-  const handleAtualizarStatusCobranca = async (
-    avariaId,
-    novoStatus,
-    updateData
-  ) => {
-    const { error } = await supabase
-      .from("avarias")
-      .update(updateData)
-      .eq("id", avariaId);
+  const handleExcluirAvaria = async (avariaId) => {
+    if (user?.role === "Administrador") {
+      const { error } = await supabase
+        .from("avarias")
+        .delete()
+        .eq("id", avariaId);
 
-    if (!error) {
-      alert(`✅ Cobrança marcada como ${novoStatus}`);
-      handleCloseModal();
-      carregarTudo();
+      if (!error) {
+        alert(`✅ Avaria excluída com sucesso`);
+        carregarTudo();
+      } else {
+        alert(`❌ Erro ao excluir avaria: ${error.message}`);
+      }
     } else {
-      alert(`❌ Erro ao atualizar status: ${error.message}`);
+      alert("❌ Você não tem permissão para excluir esta avaria.");
     }
   };
 
@@ -484,71 +490,4 @@ export default function CobrancasAvarias() {
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="p-3 text-gray-700">
-                      {c.motoristaId || "-"}
-                    </td>
-                    <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
-                    <td className="p-3 text-gray-700">
-                      {c.tipoOcorrencia || "-"}
-                    </td>
-                    <td className="p-3 text-gray-700">
-                      {formatCurrency(c.valor_total_orcamento)}
-                    </td>
-                    <td className="p-3 text-gray-900 font-medium">
-                      {formatCurrency(c.valor_cobrado)}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          statusCobranca === "Cobrada"
-                            ? "bg-green-100 text-green-800"
-                            : statusCobranca === "Cancelada"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {statusCobranca}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      {statusCobranca === "Pendente" ? (
-                        <button
-                          onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600 text-sm"
-                        >
-                          💰 Cobrar
-                        </button>
-                      ) : statusCobranca === "Cobrada" ? (
-                        <button
-                          onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm"
-                        >
-                          ✏️ Editar
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleVerDetalhes(c)}
-                          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
-                        >
-                          👁️ Detalhes
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {modalOpen && (
-        <CobrancaDetalheModal
-          avaria={selectedAvaria}
-          onClose={handleCloseModal}
-          onAtualizarStatus={handleAtualizarStatusCobranca}
-        />
-      )}
-    </div>
-  );
-}
+                    <td
