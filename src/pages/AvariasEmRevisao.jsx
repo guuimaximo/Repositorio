@@ -2,45 +2,53 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { FaUndo, FaEdit, FaSave, FaPlus, FaTrash, FaLock } from 'react-icons/fa';
 
-
 // ======================================================================
-// ========================== MODAL DE LOGIN (ADM) =======================
+// ========================== MODAL LOGIN (ADMIN) =========================
 // ======================================================================
-function LoginModal({ onConfirm, onCancel, title = 'Ação Restrita (Administrador)' }) {
+function LoginModal({
+  onConfirm,
+  onCancel,
+  title = 'Exclusão Restrita (Administrador)',
+  actionLabel = 'Autorizar exclusão',
+}) {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
     setLoading(true);
+
     const { data, error } = await supabase
       .from('usuarios_aprovadores')
-      .select('*')
+      .select('nome, login, nivel, ativo')
       .eq('login', login)
       .eq('senha', senha)
       .eq('ativo', true)
       .single();
+
     setLoading(false);
 
     if (error || !data) {
-      alert('Login ou senha incorretos!');
+      alert('Login ou senha incorretos (ou usuário inativo).');
       return;
     }
 
-    onConfirm({
-      nome: data.nome,
-      login: data.login,
-      nivel: data.nivel, // 'Administrador'
-      email: data.email,
-    });
+    const nivel = String(data.nivel || '').trim().toLowerCase();
+    if (nivel !== 'administrador') {
+      alert('Sem permissão. Apenas Administrador pode excluir.');
+      return;
+    }
+
+    onConfirm({ nome: data.nome, login: data.login, nivel: data.nivel });
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-80">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
           <FaLock /> {title}
         </h2>
+
         <input
           type="text"
           placeholder="Login"
@@ -48,6 +56,7 @@ function LoginModal({ onConfirm, onCancel, title = 'Ação Restrita (Administrad
           value={login}
           onChange={(e) => setLogin(e.target.value)}
         />
+
         <input
           type="password"
           placeholder="Senha"
@@ -55,6 +64,7 @@ function LoginModal({ onConfirm, onCancel, title = 'Ação Restrita (Administrad
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
         />
+
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
             Cancelar
@@ -62,16 +72,15 @@ function LoginModal({ onConfirm, onCancel, title = 'Ação Restrita (Administrad
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            {loading ? 'Verificando...' : 'Entrar'}
+            {loading ? 'Verificando...' : actionLabel}
           </button>
         </div>
       </div>
     </div>
   );
 }
-
 
 // ======================================================================
 // ======================= MODAL DE EDIÇÃO TOTAL ========================
@@ -93,10 +102,9 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   // Evidências
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
 
-  // NOVO: controle de permissão (somente Administrador pode excluir)
+  // ===== NOVO: login para excluir =====
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [loginTitle, setLoginTitle] = useState('Ação Restrita (Administrador)');
-  const [acaoPendente, setAcaoPendente] = useState(null); // 'delete_item' | 'delete_evidencia'
+  const [acaoPendente, setAcaoPendente] = useState(null); // 'excluir_item' | 'excluir_evidencia'
   const [pendencia, setPendencia] = useState(null); // { id, novo } | { idx }
 
   useEffect(() => {
@@ -119,7 +127,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     setMotoristaId(avaria.motoristaId || '');
     setTipoOcorrencia(avaria.tipoOcorrencia || '');
     setNumeroAvaria(avaria.numero_da_avaria || '');
-    setDataAvaria(avaria.dataAvaria?.split('T')[0] || '');
+    setDataAvaria(avaria.dataAvaria?.split("T")[0] || '');
 
     setDescricao(avaria.descricao || '');
     setObservacao(avaria.observacao_operacao || '');
@@ -129,7 +137,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     let urls = [];
     if (Array.isArray(avaria.urls_evidencias)) urls = avaria.urls_evidencias;
     else if (typeof avaria.urls_evidencias === 'string')
-      urls = avaria.urls_evidencias.split(',').map((u) => u.trim());
+      urls = avaria.urls_evidencias.split(',').map(u => u.trim());
 
     setUrlsEvidencias(urls.filter(Boolean));
 
@@ -137,28 +145,27 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   }
 
   const handleItemChange = (id, field, value) => {
-    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+    setItens(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
   const adicionarEvidencia = (url) => {
     if (!url) return;
-    setUrlsEvidencias((prev) => [...prev, url]);
+    setUrlsEvidencias(prev => [...prev, url]);
   };
 
-  // NOVO: solicitar login antes de excluir evidência
-  const solicitarExcluirEvidencia = (idx) => {
-    setAcaoPendente('delete_evidencia');
+  // ====== NOVO: pedir login antes de excluir evidência ======
+  const pedirExcluirEvidencia = (idx) => {
+    setAcaoPendente('excluir_evidencia');
     setPendencia({ idx });
-    setLoginTitle('Excluir Evidência (Administrador)');
     setLoginModalOpen(true);
   };
 
   const removerEvidencia = (idx) => {
-    setUrlsEvidencias((prev) => prev.filter((_, i) => i !== idx));
+    setUrlsEvidencias(prev => prev.filter((_, i) => i !== idx));
   };
 
   const adicionarItem = () => {
-    setItens((prev) => [
+    setItens(prev => [
       ...prev,
       {
         id: Date.now(),
@@ -167,16 +174,15 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
         valorUnitario: 0,
         tipo: 'Peca',
         novo: true,
-        avaria_id: avaria.id,
-      },
+        avaria_id: avaria.id
+      }
     ]);
   };
 
-  // NOVO: solicitar login antes de excluir item
-  const solicitarExcluirItem = (id, novo) => {
-    setAcaoPendente('delete_item');
+  // ====== NOVO: pedir login antes de excluir item ======
+  const pedirExcluirItem = (id, novo) => {
+    setAcaoPendente('excluir_item');
     setPendencia({ id, novo });
-    setLoginTitle('Excluir Item (Administrador)');
     setLoginModalOpen(true);
   };
 
@@ -184,33 +190,22 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     if (!novo) {
       const { error } = await supabase.from('cobrancas_avarias').delete().eq('id', id);
       if (error) {
-        alert('Erro ao remover item: ' + error.message);
+        alert('Erro ao excluir item: ' + error.message);
         return;
       }
     }
-    setItens((prev) => prev.filter((i) => i.id !== id));
+    setItens(prev => prev.filter(i => i.id !== id));
   };
 
-  // NOVO: callback do login (valida Administrador)
-  async function onLoginConfirm({ nivel }) {
+  // ====== NOVO: confirmação do login ======
+  async function onLoginConfirm() {
     setLoginModalOpen(false);
 
-    const isAdmin =
-      String(nivel || '').toLowerCase() === 'administrador' ||
-      String(nivel || '').toLowerCase() === 'administrator';
-
-    if (!isAdmin) {
-      alert('❌ Sem permissão. Apenas usuários Administrador podem excluir.');
-      setPendencia(null);
-      setAcaoPendente(null);
-      return;
-    }
-
-    if (acaoPendente === 'delete_item' && pendencia?.id) {
+    if (acaoPendente === 'excluir_item' && pendencia?.id) {
       await removerItem(pendencia.id, pendencia.novo);
     }
 
-    if (acaoPendente === 'delete_evidencia' && typeof pendencia?.idx === 'number') {
+    if (acaoPendente === 'excluir_evidencia' && typeof pendencia?.idx === 'number') {
       removerEvidencia(pendencia.idx);
     }
 
@@ -223,27 +218,24 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
     // Atualiza / Insere itens
     for (const item of itens) {
       if (item.novo) {
-        const { error } = await supabase.from('cobrancas_avarias').insert([
-          {
-            descricao: item.descricao,
-            qtd: item.qtd,
-            valorUnitario: item.valorUnitario,
-            tipo: item.tipo,
-            avaria_id: avaria.id,
-          },
-        ]);
+        const { error } = await supabase.from('cobrancas_avarias').insert([{
+          descricao: item.descricao,
+          qtd: item.qtd,
+          valorUnitario: item.valorUnitario,
+          tipo: item.tipo,
+          avaria_id: avaria.id
+        }]);
         if (error) {
           alert('Erro ao inserir item: ' + error.message);
           return;
         }
       } else {
-        const { error } = await supabase
-          .from('cobrancas_avarias')
+        const { error } = await supabase.from('cobrancas_avarias')
           .update({
             descricao: item.descricao,
             qtd: item.qtd,
             valorUnitario: item.valorUnitario,
-            tipo: item.tipo,
+            tipo: item.tipo
           })
           .eq('id', item.id);
 
@@ -264,7 +256,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
       descricao,
       observacao_operacao: observacao,
       valor_total_orcamento: valorTotal,
-      urls_evidencias: urlsEvidencias,
+      urls_evidencias: urlsEvidencias
     };
 
     if (statusFinal) updateData.status = statusFinal;
@@ -284,22 +276,22 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-40">
       <div className="bg-white w-full max-w-5xl rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-2xl font-bold">Editar Avaria #{avaria.id}</h2>
-          <button onClick={onClose} className="text-gray-700 hover:text-black text-xl">
-            ✕
-          </button>
+          <button onClick={onClose} className="text-gray-700 hover:text-black text-xl">✕</button>
         </div>
 
         {/* BODY */}
         <div className="p-6 space-y-6">
+
           {/* ================== CAMPOS BÁSICOS ================== */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
             <div>
               <label className="text-sm text-gray-500">Prefixo</label>
-              <input
-                className="border p-2 rounded w-full"
+              <input className="border p-2 rounded w-full"
                 value={prefixo}
                 onChange={(e) => setPrefixo(e.target.value)}
               />
@@ -307,8 +299,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
             <div>
               <label className="text-sm text-gray-500">Motorista</label>
-              <input
-                className="border p-2 rounded w-full"
+              <input className="border p-2 rounded w-full"
                 value={motoristaId}
                 onChange={(e) => setMotoristaId(e.target.value)}
               />
@@ -316,8 +307,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
             <div>
               <label className="text-sm text-gray-500">Tipo da Ocorrência</label>
-              <input
-                className="border p-2 rounded w-full"
+              <input className="border p-2 rounded w-full"
                 value={tipoOcorrencia}
                 onChange={(e) => setTipoOcorrencia(e.target.value)}
               />
@@ -325,8 +315,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
             <div>
               <label className="text-sm text-gray-500">Nº da Avaria</label>
-              <input
-                className="border p-2 rounded w-full"
+              <input className="border p-2 rounded w-full"
                 value={numeroAvaria}
                 onChange={(e) => setNumeroAvaria(e.target.value)}
               />
@@ -334,13 +323,12 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
 
             <div>
               <label className="text-sm text-gray-500">Data da Avaria</label>
-              <input
-                type="date"
-                className="border p-2 rounded w-full"
+              <input type="date" className="border p-2 rounded w-full"
                 value={dataAvaria}
                 onChange={(e) => setDataAvaria(e.target.value)}
               />
             </div>
+
           </div>
 
           {/* ================== DESCRIÇÃO ================== */}
@@ -350,7 +338,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               className="border rounded p-2 w-full"
               rows={3}
               value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
+              onChange={e => setDescricao(e.target.value)}
             />
           </div>
 
@@ -361,7 +349,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               className="border rounded p-2 w-full bg-yellow-50"
               rows={3}
               value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
+              onChange={e => setObservacao(e.target.value)}
             />
           </div>
 
@@ -378,9 +366,9 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               <button
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
                 onClick={() => {
-                  const url = document.getElementById('novaEvidencia').value;
+                  const url = document.getElementById("novaEvidencia").value;
                   adicionarEvidencia(url);
-                  document.getElementById('novaEvidencia').value = '';
+                  document.getElementById("novaEvidencia").value = "";
                 }}
               >
                 Adicionar
@@ -391,12 +379,13 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {urlsEvidencias.map((url, index) => (
                 <div key={index} className="relative border rounded overflow-hidden">
+                  {/* ALTERADO: agora pede login */}
                   <button
-                    onClick={() => solicitarExcluirEvidencia(index)}
-                    className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 text-xs"
+                    onClick={() => pedirExcluirEvidencia(index)}
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 text-xs flex items-center gap-1"
                     title="Excluir evidência (Administrador)"
                   >
-                    X
+                    <FaTrash /> Excluir
                   </button>
 
                   {url.match(/\.(mp4|mov|webm)$/i) ? (
@@ -424,11 +413,8 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             {loadingItens ? (
               <p>Carregando...</p>
             ) : (
-              itens.map((item) => (
-                <div
-                  key={item.id}
-                  className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1"
-                >
+              itens.map(item => (
+                <div key={item.id} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded mb-1">
                   <input
                     className="border p-1 rounded"
                     value={item.descricao}
@@ -459,16 +445,18 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
                     <option value="Servico">Serviço</option>
                   </select>
 
+                  {/* ALTERADO: agora pede login */}
                   <button
-                    onClick={() => solicitarExcluirItem(item.id, item.novo)}
-                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                    onClick={() => pedirExcluirItem(item.id, item.novo)}
+                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 flex items-center justify-center gap-2"
                     title="Excluir item (Administrador)"
                   >
-                    <FaTrash />
+                    <FaTrash /> <span className="hidden md:inline">Excluir</span>
                   </button>
                 </div>
               ))
             )}
+
           </div>
 
           {/* ================== TOTAL ================== */}
@@ -481,6 +469,7 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
               onChange={(e) => setValorTotal(e.target.value)}
             />
           </div>
+
         </div>
 
         {/* ================== BOTÕES ================== */}
@@ -499,22 +488,28 @@ function EditarAvariaModal({ avaria, onClose, onAtualizarLista }) {
             <FaUndo /> Salvar e Reenviar
           </button>
         </div>
+
       </div>
 
+      {/* NOVO: modal de login */}
       {loginModalOpen && (
         <LoginModal
-          title={loginTitle}
+          title="Exclusão Restrita (Administrador)"
+          actionLabel="Autorizar exclusão"
           onConfirm={onLoginConfirm}
-          onCancel={() => setLoginModalOpen(false)}
+          onCancel={() => {
+            setLoginModalOpen(false);
+            setPendencia(null);
+            setAcaoPendente(null);
+          }}
         />
       )}
     </div>
   );
 }
 
-
 // ======================================================================
-// =========================== PÁGINA PRINCIPAL ==========================
+// =========================== PÁGINA PRINCIPAL ===========================
 // ======================================================================
 export default function AvariasEmRevisao() {
   const [avarias, setAvarias] = useState([]);
@@ -558,23 +553,13 @@ export default function AvariasEmRevisao() {
 
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan="8" className="text-center p-4">
-                  Carregando...
-                </td>
-              </tr>
+              <tr><td colSpan="8" className="text-center p-4">Carregando...</td></tr>
             ) : avarias.length === 0 ? (
-              <tr>
-                <td colSpan="8" className="text-center p-4 text-gray-600">
-                  Nenhuma pendência.
-                </td>
-              </tr>
+              <tr><td colSpan="8" className="text-center p-4 text-gray-600">Nenhuma pendência.</td></tr>
             ) : (
-              avarias.map((a) => (
+              avarias.map(a => (
                 <tr key={a.id} className="border-t">
-                  <td className="py-2 px-3">
-                    {new Date(a.dataAvaria).toLocaleDateString('pt-BR')}
-                  </td>
+                  <td className="py-2 px-3">{new Date(a.dataAvaria).toLocaleDateString('pt-BR')}</td>
                   <td className="py-2 px-3">{a.prefixo}</td>
                   <td className="py-2 px-3">{a.numero_da_avaria || '-'}</td>
                   <td className="py-2 px-3">{a.tipoOcorrencia}</td>
@@ -582,7 +567,7 @@ export default function AvariasEmRevisao() {
                   <td className="py-2 px-3 font-medium">
                     {(a.valor_total_orcamento || 0).toLocaleString('pt-BR', {
                       style: 'currency',
-                      currency: 'BRL',
+                      currency: 'BRL'
                     })}
                   </td>
 
@@ -602,6 +587,7 @@ export default function AvariasEmRevisao() {
                       <FaEdit /> Editar
                     </button>
                   </td>
+
                 </tr>
               ))
             )}
@@ -616,6 +602,7 @@ export default function AvariasEmRevisao() {
           onAtualizarLista={carregar}
         />
       )}
+
     </div>
   );
 }
