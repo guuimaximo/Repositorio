@@ -13,16 +13,15 @@ import {
 import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// ✅ Tipos que vão pro gráfico (SEM "SEGUIU VIAGEM" e SEM "OUTROS")
-const TIPOS_GRAFICO = ["TROCA", "SOS", "RA", "RECOLHEU", "AVARIA", "IMPROCEDENTE"];
+// ✅ Tipos do gráfico (RA virou RECOLHEU)
+const TIPOS_GRAFICO = ["TROCA", "SOS", "RECOLHEU", "AVARIA", "IMPROCEDENTE"];
 
 // Tipos que podem aparecer na tabela (inclui SEGUIU VIAGEM se vier do banco)
-const TIPOS_TABELA = ["TROCA", "SOS", "RA", "RECOLHEU", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
+const TIPOS_TABELA = ["TROCA", "SOS", "RECOLHEU", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
 
 const COLORS = {
   TROCA: "#16a34a",
   SOS: "#ef4444",
-  RA: "#f59e0b",
   RECOLHEU: "#2563eb",
   AVARIA: "#06b6d4",
   IMPROCEDENTE: "#6b7280",
@@ -60,9 +59,13 @@ function monthRange(ym) {
   return { start: toYMD(first), end: toYMD(last) };
 }
 
+// ✅ Normaliza ocorrência + RA vira RECOLHEU
 function normalizeTipo(oc) {
   const o = String(oc || "").toUpperCase().trim();
-  if (!o) return ""; // ✅ vazio = sem ocorrência
+  if (!o) return ""; // vazio
+
+  // ✅ RA = RECOLHEU
+  if (o === "RA" || o === "R.A" || o === "R.A.") return "RECOLHEU";
 
   if (TIPOS_TABELA.includes(o)) return o;
 
@@ -72,22 +75,58 @@ function normalizeTipo(oc) {
   if (o.includes("TROC")) return "TROCA";
   if (o === "S.O.S") return "SOS";
 
-  // não quero OUTROS no gráfico; na tabela pode mostrar o texto normalizado
+  // mantém texto para tabela, mas no gráfico só entram os TIPOS_GRAFICO
   return o;
 }
 
 function labelOcorrenciaTabela(oc) {
   const n = normalizeTipo(oc);
-  return n ? n : "FECHAR ETIQUETA"; // ✅ regra pedida
+  return n ? n : "FECHAR ETIQUETA";
+}
+
+// ✅ Buscar TODOS os registros do período (para Excel)
+// faz paginação com range() para não estourar limite
+async function fetchAllPeriodo({ dataInicio, dataFim }) {
+  const PAGE = 1000;
+  let from = 0;
+  let all = [];
+
+  while (true) {
+    let q = supabase
+      .from("sos_acionamentos")
+      .select("*")
+      .gte("data_sos", dataInicio)
+      .lte("data_sos", dataFim)
+      .order("data_sos", { ascending: true })
+      .order("hora_sos", { ascending: true });
+
+    const { data, error } = await q.range(from, from + PAGE - 1);
+
+    if (error) throw error;
+
+    const rows = data || [];
+    all = all.concat(rows);
+
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return all;
 }
 
 export default function SOSDashboard() {
   const [mesRef, setMesRef] = useState(() => todayYMD_SP().slice(0, 7)); // YYYY-MM
+
+  // ✅ filtros de período (o Excel vai usar isso)
+  const { start: defaultIni, end: defaultFim } = useMemo(() => monthRange(mesRef), [mesRef]);
+  const [dataInicio, setDataInicio] = useState(defaultIni);
+  const [dataFim, setDataFim] = useState(defaultFim);
+
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
   const [series, setSeries] = useState([]);
-  const [cards, setCards] = useState({ totalMes: 0, porTipo: {} });
+  const [cards, setCards] = useState({ totalPeriodo: 0, porTipo: {} });
   const [doDia, setDoDia] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -97,21 +136,29 @@ export default function SOSDashboard() {
   const channelRef = useRef(null);
 
   const hoje = useMemo(() => todayYMD_SP(), []);
-  const { start: mesIni, end: mesFim } = useMemo(() => monthRange(mesRef), [mesRef]);
+
+  // ✅ quando muda o mês, atualiza automaticamente o período para o mês escolhido
+  useEffect(() => {
+    const { start, end } = monthRange(mesRef);
+    setDataInicio(start);
+    setDataFim(end);
+  }, [mesRef]);
 
   async function fetchDashboard() {
+    if (!dataInicio || !dataFim) return;
+
     setLoading(true);
     setErro("");
 
     try {
-      // MÊS: só o que precisa para o gráfico + cards
-      const { data: mesData, error: mesErr } = await supabase
+      // PERÍODO: só o necessário para gráfico + cards
+      const { data: periodoData, error: periodoErr } = await supabase
         .from("sos_acionamentos")
         .select("id, data_sos, ocorrencia")
-        .gte("data_sos", mesIni)
-        .lte("data_sos", mesFim);
+        .gte("data_sos", dataInicio)
+        .lte("data_sos", dataFim);
 
-      if (mesErr) throw mesErr;
+      if (periodoErr) throw periodoErr;
 
       // DIA: tabela completa (mostra tudo)
       const { data: diaData, error: diaErr } = await supabase
@@ -123,18 +170,17 @@ export default function SOSDashboard() {
       if (diaErr) throw diaErr;
 
       // ------------------------
-      // Gráfico: apenas TIPOS_GRAFICO, sem "SEGUIU VIAGEM" e sem vazios
-      // + remove dias zerados
+      // Gráfico: apenas TIPOS_GRAFICO, sem SEGUIU VIAGEM e sem vazio
       // ------------------------
       const byDay = new Map();
 
-      (mesData || []).forEach((r) => {
-        const day = r.data_sos; // DATE: YYYY-MM-DD
+      (periodoData || []).forEach((r) => {
+        const day = r.data_sos; // YYYY-MM-DD
         if (!day) return;
 
         const tipo = normalizeTipo(r.ocorrencia);
 
-        // ✅ ignora vazio e ignora tipos fora do gráfico
+        // ✅ ignora vazio e ignora o que não entra no gráfico
         if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
 
         if (!byDay.has(day)) {
@@ -146,33 +192,32 @@ export default function SOSDashboard() {
         byDay.get(day)[tipo] = (byDay.get(day)[tipo] || 0) + 1;
       });
 
-      // Ordena e remove dia sem nada (por segurança)
       const chart = Array.from(byDay.values())
         .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
         .sort((a, b) => a.day.localeCompare(b.day));
 
       // ------------------------
-      // Cards: também sem SEGUIU VIAGEM e sem vazios (mantém alinhado ao gráfico)
+      // Cards: alinhado ao gráfico (sem SEGUIU VIAGEM e sem vazio)
       // ------------------------
       const porTipo = {};
       TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
-      (mesData || []).forEach((r) => {
+      (periodoData || []).forEach((r) => {
         const tipo = normalizeTipo(r.ocorrencia);
         if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
         porTipo[tipo] = (porTipo[tipo] || 0) + 1;
       });
 
-      const totalMes = Object.values(porTipo).reduce((acc, v) => acc + (v || 0), 0);
+      const totalPeriodo = Object.values(porTipo).reduce((acc, v) => acc + (v || 0), 0);
 
       setSeries(chart);
-      setCards({ totalMes, porTipo });
+      setCards({ totalPeriodo, porTipo });
       setDoDia(diaData || []);
       setLastUpdate(new Date());
     } catch (e) {
       setErro(e?.message || "Erro ao carregar dashboard.");
       setSeries([]);
-      setCards({ totalMes: 0, porTipo: {} });
+      setCards({ totalPeriodo: 0, porTipo: {} });
       setDoDia([]);
     } finally {
       setLoading(false);
@@ -181,9 +226,7 @@ export default function SOSDashboard() {
 
   function scheduleReload() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchDashboard();
-    }, 600);
+    debounceRef.current = setTimeout(() => fetchDashboard(), 600);
   }
 
   function setupRealtime() {
@@ -211,7 +254,7 @@ export default function SOSDashboard() {
   useEffect(() => {
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesRef]);
+  }, [dataInicio, dataFim]);
 
   useEffect(() => {
     setupRealtime();
@@ -221,31 +264,51 @@ export default function SOSDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeOn]);
 
-  function exportExcel() {
-    const wb = XLSX.utils.book_new();
+  // ✅ Excel agora baixa TODO o período escolhido
+  async function exportExcelPeriodo() {
+    if (!dataInicio || !dataFim) {
+      alert("Selecione um período (Data início e Data fim).");
+      return;
+    }
 
-    // Aba 1: intervenções do dia (tudo)
-    const wsDia = XLSX.utils.json_to_sheet((doDia || []).map((r) => ({
-      ...r,
-      ocorrencia_exibida: labelOcorrenciaTabela(r.ocorrencia),
-    })));
-    XLSX.utils.book_append_sheet(wb, wsDia, "Intervencoes_do_dia");
+    setLoading(true);
+    setErro("");
 
-    // Aba 2: gráfico
-    const wsSerie = XLSX.utils.json_to_sheet(series || []);
-    XLSX.utils.book_append_sheet(wb, wsSerie, "Grafico_por_dia");
+    try {
+      const rowsPeriodo = await fetchAllPeriodo({ dataInicio, dataFim });
 
-    // Aba 3: resumo
-    const resumo = [
-      { chave: "Mes", valor: mesRef },
-      { chave: "Total_mes", valor: cards.totalMes || 0 },
-      ...Object.entries(cards.porTipo || {}).map(([k, v]) => ({ chave: k, valor: v })),
-    ];
-    const wsResumo = XLSX.utils.json_to_sheet(resumo);
-    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+      const wb = XLSX.utils.book_new();
 
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    XLSX.writeFile(wb, `Intervencoes_${mesRef}_${stamp}.xlsx`);
+      // Aba 1: todos os registros do período
+      const wsPeriodo = XLSX.utils.json_to_sheet(
+        (rowsPeriodo || []).map((r) => ({
+          ...r,
+          ocorrencia_exibida: labelOcorrenciaTabela(r.ocorrencia),
+        }))
+      );
+      XLSX.utils.book_append_sheet(wb, wsPeriodo, "Intervencoes_periodo");
+
+      // Aba 2: gráfico (já agregado)
+      const wsSerie = XLSX.utils.json_to_sheet(series || []);
+      XLSX.utils.book_append_sheet(wb, wsSerie, "Grafico_por_dia");
+
+      // Aba 3: resumo
+      const resumo = [
+        { chave: "Periodo_inicio", valor: dataInicio },
+        { chave: "Periodo_fim", valor: dataFim },
+        { chave: "Total_periodo", valor: cards.totalPeriodo || 0 },
+        ...Object.entries(cards.porTipo || {}).map(([k, v]) => ({ chave: k, valor: v })),
+      ];
+      const wsResumo = XLSX.utils.json_to_sheet(resumo);
+      XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      XLSX.writeFile(wb, `Intervencoes_${dataInicio}_a_${dataFim}_${stamp}.xlsx`);
+    } catch (e) {
+      setErro(e?.message || "Erro ao gerar Excel do período.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const tipoCards = useMemo(() => {
@@ -259,9 +322,10 @@ export default function SOSDashboard() {
         <h1 className="text-2xl font-bold text-gray-800">Dashboard - Intervenções (Tempo Real)</h1>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-white shadow rounded-lg p-3 flex items-center gap-3">
+          {/* ✅ Mês + Período */}
+          <div className="bg-white shadow rounded-lg p-3 flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mês</label>
+              <label className="block text-xs text-gray-500 mb-1">Mês (atalho)</label>
               <input
                 type="month"
                 value={mesRef}
@@ -270,7 +334,27 @@ export default function SOSDashboard() {
               />
             </div>
 
-            <div className="flex items-center gap-2 mt-5">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Data início</label>
+              <input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="border rounded-md px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Data fim</label>
+              <input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                className="border rounded-md px-3 py-2"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
               <input
                 id="rt"
                 type="checkbox"
@@ -294,12 +378,12 @@ export default function SOSDashboard() {
           </button>
 
           <button
-            onClick={exportExcel}
+            onClick={exportExcelPeriodo}
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
             <FaDownload />
-            Baixar Excel
+            Baixar Excel (Período)
           </button>
         </div>
       </div>
@@ -311,19 +395,19 @@ export default function SOSDashboard() {
       )}
 
       <div className="text-sm text-gray-600 mb-4">
+        <div><strong>Período:</strong> {dataInicio} até {dataFim}</div>
         <div><strong>Hoje:</strong> {hoje}</div>
-        <div><strong>Período do mês:</strong> {mesIni} até {mesFim}</div>
         <div>
           <strong>Última atualização:</strong>{" "}
           {lastUpdate ? lastUpdate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}
         </div>
       </div>
 
-      {/* Cards (somente tipos do gráfico) */}
+      {/* Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         <div className="bg-white shadow rounded-lg p-4">
-          <p className="text-xs text-gray-500">Intervenções (mês)</p>
-          <p className="text-2xl font-bold text-gray-800">{cards.totalMes || 0}</p>
+          <p className="text-xs text-gray-500">Intervenções (período)</p>
+          <p className="text-2xl font-bold text-gray-800">{cards.totalPeriodo || 0}</p>
         </div>
 
         {tipoCards.map((c) => (
@@ -337,7 +421,7 @@ export default function SOSDashboard() {
       {/* Gráfico */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-gray-800">Intervenções por dia (mês) - por tipo</h2>
+          <h2 className="font-semibold text-gray-800">Intervenções por dia (período) - por tipo</h2>
           <span className="text-xs text-gray-500">Atualiza automaticamente quando Tempo real está ligado</span>
         </div>
 
@@ -358,12 +442,13 @@ export default function SOSDashboard() {
 
         {!loading && series.length === 0 && (
           <div className="mt-3 text-sm text-gray-600">
-            Nenhum registro válido para o gráfico neste mês (somente TROCA/SOS/RA/RECOLHEU/AVARIA/IMPROCEDENTE entram no gráfico).
+            Nenhum registro válido para o gráfico neste período
+            (somente TROCA/SOS/RECOLHEU/AVARIA/IMPROCEDENTE entram no gráfico).
           </div>
         )}
       </div>
 
-      {/* Tabela do dia */}
+      {/* Tabela do dia (mantém como visão rápida) */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="p-4 border-b">
           <h2 className="font-semibold text-gray-800">Intervenções do dia (hoje)</h2>
