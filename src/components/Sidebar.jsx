@@ -5,7 +5,7 @@ import {
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
   FaPenSquare, FaListAlt, FaWrench, FaClipboardCheck, FaUndo, FaCogs,
   FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt,
-  FaDownload // ✅ ADICIONADO (ícone do Dashboard Excel)
+  FaDownload
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -15,27 +15,28 @@ const ACCESS = {
   Administrador: "ALL",
   Gestor: [
     "/",
-    "/solicitar", "/central", // Tratativas
-    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias", "/cobrancas", // Avarias
+    "/solicitar", "/central",
+    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias", "/cobrancas",
     "/sos-solicitacao", "/sos-fechamento", "/sos-tratamento", "/sos-central",
-    "/sos-dashboard", // ✅ ADICIONADO
+    "/sos-dashboard", // ✅
   ],
   Tratativa: [
     "/",
-    "/solicitar", "/central", // Tratativas
-    "/cobrancas",            // Avarias (apenas cobranças)
+    "/solicitar", "/central",
+    "/cobrancas",
   ],
   Manutenção: [
     "/",
-    "/solicitar",            // Tratativas
-    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias",// Avarias
+    "/solicitar",
+    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias",
     "/sos-fechamento", "/sos-tratamento", "/sos-central",
-    "/sos-dashboard", // ✅ ADICIONADO
+    "/sos-dashboard", // ✅
   ],
   CCO: [
     "/",
-    "/solicitar",            // Tratativas
-    "/sos-solicitacao", "/sos-fechamento", // SOS
+    "/solicitar",
+    "/sos-solicitacao", "/sos-fechamento",
+    "/sos-dashboard", // ✅ ADICIONADO (Intervenções > Dashboard)
   ],
 };
 
@@ -59,34 +60,34 @@ export default function Sidebar() {
 
   const isAdmin = user?.nivel === "Administrador";
 
-  // links definidos com path para validar acesso
-  const links = useMemo(() => ({
-    inicio: { path: "/", label: "Início", icon: <FaHome /> },
+  const links = useMemo(
+    () => ({
+      inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-    tratativas: [
-      { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
-      { path: "/central", label: "Central", icon: <FaListAlt /> },
-    ],
+      tratativas: [
+        { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
+        { path: "/central", label: "Central", icon: <FaListAlt /> },
+      ],
 
-    avarias: [
-      { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
-      { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
-      { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
-      { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
-    ],
+      avarias: [
+        { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
+        { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
+        { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
+        { path: "/cobrancas", label: "Cobranças", icon: <FaMoneyBill /> },
+      ],
 
-    sos: [
-      { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
-      { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
-      { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
-      { path: "/sos-central", label: "Central", icon: <FaEye /> },
-      { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> }, // ✅ ADICIONADO
-    ],
+      sos: [
+        { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
+        { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
+        { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
+        { path: "/sos-central", label: "Central", icon: <FaEye /> },
+        { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> }, // ✅
+      ],
 
-    configuracoes: [
-      { path: "/usuarios", label: "Usuários", icon: <FaUserCog /> },
-    ],
-  }), []);
+      configuracoes: [{ path: "/usuarios", label: "Usuários", icon: <FaUserCog /> }],
+    }),
+    []
+  );
 
   const handleLogout = () => {
     if (confirm("Deseja realmente sair?")) {
@@ -105,15 +106,13 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // decide exibição por seção
-  const showTratativas = links.tratativas.some(l => canSee(user, l.path));
-  const showAvarias = links.avarias.some(l => canSee(user, l.path));
-  const showSOS = links.sos.some(l => canSee(user, l.path));
-  const showConfig = isAdmin; // somente Administrador
+  const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
+  const showAvarias = links.avarias.some((l) => canSee(user, l.path));
+  const showSOS = links.sos.some((l) => canSee(user, l.path));
+  const showConfig = isAdmin;
 
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
-      {/* Cabeçalho */}
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
@@ -127,14 +126,12 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* Início */}
         {canSee(user, links.inicio.path) && (
           <NavLink to={links.inicio.path} className={navLinkClass}>
             {links.inicio.icon} <span>{links.inicio.label}</span>
           </NavLink>
         )}
 
-        {/* Tratativas */}
         {showTratativas && (
           <>
             <button
@@ -146,9 +143,10 @@ export default function Sidebar() {
               </div>
               {tratativasOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
+
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.tratativas.map(link =>
+                {links.tratativas.map((link) =>
                   canSee(user, link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
@@ -160,7 +158,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Avarias */}
         {showAvarias && (
           <>
             <button
@@ -172,9 +169,10 @@ export default function Sidebar() {
               </div>
               {avariasOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
+
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.avarias.map(link =>
+                {links.avarias.map((link) =>
                   canSee(user, link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
@@ -186,7 +184,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Intervenções (SOS) */}
         {showSOS && (
           <>
             <button
@@ -198,9 +195,10 @@ export default function Sidebar() {
               </div>
               {intervencoesOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
+
             {intervencoesOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.sos.map(link =>
+                {links.sos.map((link) =>
                   canSee(user, link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
@@ -212,7 +210,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Configurações (somente Administrador) */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
@@ -225,6 +222,7 @@ export default function Sidebar() {
               </div>
               {configOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
+
             {configOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 <NavLink to="/usuarios" className={subNavLinkClass}>
@@ -236,7 +234,6 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* Logout */}
       <div className="p-3 border-t border-blue-600">
         <button
           onClick={handleLogout}
@@ -246,7 +243,6 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Rodapé */}
       <div className="p-3 text-xs text-center border-t border-blue-600 text-blue-200">
         © {new Date().getFullYear()} InovaQuatai
       </div>
