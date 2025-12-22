@@ -1,106 +1,81 @@
 // src/pages/SOSDashboard.jsx
-import React, { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import * as XLSX from "xlsx";
 import { FaDownload } from "react-icons/fa";
 
-/* ===== Helpers de data ===== */
-function monthRange(yyyyMm) {
-  if (!yyyyMm) return { start: "", end: "" };
-  const [y, m] = yyyyMm.split("-").map(Number);
+const PAGE_SIZE = 1000;
 
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const start = `${y}-${pad2(m)}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
-  return { start, end };
+// Converte "YYYY-MM" -> {inicio: "YYYY-MM-01", fim: "YYYY-MM-<ultimo-dia>"}
+function monthToRange(ym) {
+  if (!ym) return { inicio: "", fim: "" };
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return { inicio: "", fim: "" };
+
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const last = new Date(Date.UTC(y, m, 0)); // dia 0 do próximo mês = último dia do mês atual
+
+  const toYMD = (d) => {
+    const yy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  };
+
+  return { inicio: toYMD(first), fim: toYMD(last) };
 }
-
-function formatDateBRFromDateOnly(value) {
-  // "YYYY-MM-DD" -> "DD/MM/YYYY" sem shift
-  if (!value) return "";
-  const s = String(value).trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return "";
-  const [, yyyy, mm, dd] = m;
-  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR");
-}
-
-function formatDateBRFromTimestampUTC(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
-
-/* ===== Colunas/ordem do Excel ===== */
-const EXCEL_COLUMNS = [
-  { key: "numero_sos", label: "Número SOS" },
-  { key: "status", label: "Status" },
-  { key: "plantonista", label: "Plantonista" },
-  { key: "data_sos", label: "Data SOS" },
-  { key: "hora_sos", label: "Hora SOS" },
-  { key: "veiculo", label: "Prefixo" },
-  { key: "motorista_nome", label: "Motorista" },
-  { key: "linha", label: "Linha" },
-  { key: "local_ocorrencia", label: "Local" },
-  { key: "reclamacao_motorista", label: "Reclamação (Motorista)" },
-  { key: "avaliador", label: "Avaliador" },
-  { key: "procedencia_socorrista", label: "Procedência" },
-  { key: "ocorrencia", label: "Ocorrência" },
-  { key: "carro_substituto", label: "Carro Substituto" },
-  { key: "sr_numero", label: "SR (Operação)" },
-  { key: "setor_manutencao", label: "Setor Manutenção" },
-  { key: "grupo_manutencao", label: "Grupo Manutenção" },
-  { key: "problema_encontrado", label: "Problema Encontrado" },
-  { key: "solucionador", label: "Solucionador" },
-  { key: "solucao", label: "Solução" },
-  { key: "data_fechamento", label: "Data Fechamento" },
-  { key: "created_at", label: "Criado em" },
-];
 
 export default function SOSDashboard() {
-  const PAGE_SIZE = 1000;
-
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
-  const [mesAno, setMesAno] = useState(""); // YYYY-MM
-  const [status, setStatus] = useState("Todos");
-
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [lastCount, setLastCount] = useState(null);
+  const [msg, setMsg] = useState("");
 
-  const effectiveRange = useMemo(() => {
-    // se o usuário escolheu mês, ele vira um filtro adicional
-    const mr = monthRange(mesAno);
-    return {
-      startMonth: mr.start,
-      endMonth: mr.end,
-    };
-  }, [mesAno]);
+  // filtros
+  const [status, setStatus] = useState("TODOS"); // TODOS | Aberto | Em Andamento | Fechado
+  const [dataInicio, setDataInicio] = useState(""); // YYYY-MM-DD
+  const [dataFim, setDataFim] = useState(""); // YYYY-MM-DD
+  const [mesRef, setMesRef] = useState(""); // YYYY-MM
 
-  function buildQueryRange(from, to) {
-    let q = supabase
-      .from("sos_acionamentos")
-      .select("*")
-      .order("id", { ascending: true })
-      .range(from, to);
+  // ATENÇÃO: escolha uma coluna de data para filtrar.
+  // Para relatório “geral”, normalmente faz mais sentido filtrar por data_fechamento quando status=Fechado;
+  // e por created_at nos demais.
+  const dateColumn = useMemo(() => {
+    if (status === "Fechado") return "data_fechamento";
+    return "created_at";
+  }, [status]);
 
-    if (status && status !== "Todos") q = q.eq("status", status);
+  function buildQuery() {
+    let q = supabase.from("sos_acionamentos").select("*");
 
-    // Filtro por datas (data_fechamento) - você pode trocar para data_sos se preferir
-    if (dataInicio) q = q.gte("data_fechamento", dataInicio);
-    if (dataFim) q = q.lte("data_fechamento", dataFim);
+    if (status !== "TODOS") {
+      q = q.eq("status", status);
+    }
 
-    // Filtro por mês/ano (também em data_fechamento)
-    if (effectiveRange.startMonth) q = q.gte("data_fechamento", effectiveRange.startMonth);
-    if (effectiveRange.endMonth) q = q.lte("data_fechamento", effectiveRange.endMonth);
+    // 1) filtro por MÊS (YYYY-MM) -> vira um range de datas
+    const { inicio: mesIni, fim: mesFim } = monthToRange(mesRef);
+
+    // 2) filtro por DATA (YYYY-MM-DD) manual
+    // Regra: aplica os dois, mas sem se atrapalhar.
+    // Se usuário preencheu mês e data, a interseção é aplicada (mais restritivo).
+    const ini = dataInicio || mesIni;
+    const fim = dataFim || mesFim;
+
+    // se sua coluna for timestamptz, use limites com hora para evitar “voltar 1 dia”
+    // Como você está no Brasil, isso evita shift de timezone no filtro.
+    if (ini) q = q.gte(dateColumn, `${ini}T00:00:00-03:00`);
+    if (fim) q = q.lte(dateColumn, `${fim}T23:59:59-03:00`);
+
+    // ordenação padrão
+    q = q.order(dateColumn, { ascending: false, nullsFirst: false });
 
     return q;
   }
 
-  async function fetchAllRows() {
+  async function carregarTudo() {
+    setLoading(true);
+    setMsg("");
+    setRows([]);
+
     const all = [];
     let page = 0;
 
@@ -108,101 +83,87 @@ export default function SOSDashboard() {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, error } = await buildQueryRange(from, to);
-      if (error) throw error;
+      const { data, error } = await buildQuery().range(from, to);
 
-      const rows = data || [];
-      all.push(...rows);
-
-      if (rows.length < PAGE_SIZE) break;
-      page += 1;
-    }
-
-    return all;
-  }
-
-  function toExcelRows(rows) {
-    return rows.map((r) => {
-      const out = {};
-      for (const col of EXCEL_COLUMNS) {
-        let v = r[col.key];
-
-        // Formata datas “bonitas” no Excel
-        if (col.key === "data_sos") v = formatDateBRFromDateOnly(r.data_sos);
-        if (col.key === "data_fechamento") v = formatDateBRFromTimestampUTC(r.data_fechamento);
-        if (col.key === "created_at") v = formatDateBRFromTimestampUTC(r.created_at);
-
-        out[col.label] = v ?? "";
+      if (error) {
+        setMsg(`Erro ao buscar dados: ${error.message}`);
+        break;
       }
-      return out;
-    });
-  }
 
-  function makeFileName() {
-    const parts = ["SOS_Intervencoes"];
-    if (status && status !== "Todos") parts.push(status.replace(/\s+/g, "_"));
-    if (mesAno) parts.push(mesAno.replace("-", "_"));
-    if (dataInicio || dataFim) parts.push(`${dataInicio || "inicio"}_a_${dataFim || "fim"}`);
-    return `${parts.join("_")}.xlsx`;
-  }
+      const chunk = data || [];
+      all.push(...chunk);
 
-  async function baixarExcel() {
-    try {
-      setLoading(true);
-      setLastCount(null);
+      if (chunk.length < PAGE_SIZE) {
+        // acabou
+        break;
+      }
 
-      const rows = await fetchAllRows();
-      setLastCount(rows.length);
+      page += 1;
 
-      const excelRows = toExcelRows(rows);
-      const ws = XLSX.utils.json_to_sheet(excelRows);
-
-      // Ajuste simples de largura de colunas
-      ws["!cols"] = EXCEL_COLUMNS.map(() => ({ wch: 22 }));
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Intervencoes");
-
-      XLSX.writeFile(wb, makeFileName());
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao gerar Excel: " + (e?.message || "desconhecido"));
-    } finally {
-      setLoading(false);
+      // proteção simples contra loop infinito em caso de bug
+      if (page > 200) {
+        setMsg("Interrompido por segurança (muitas páginas). Ajuste filtros para reduzir volume.");
+        break;
+      }
     }
+
+    setRows(all);
+    setMsg(all.length ? `Carregado: ${all.length} registros.` : "Nenhum registro encontrado com os filtros atuais.");
+    setLoading(false);
   }
+
+  function baixarExcel() {
+    if (!rows.length) {
+      alert("Não há registros para exportar.");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SOS");
+
+    // nome amigável
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    XLSX.writeFile(wb, `SOS_acionamentos_${stamp}.xlsx`);
+  }
+
+  useEffect(() => {
+    // carrega sem filtro por padrão
+    carregarTudo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Dashboard - Intervenções</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">Dashboard - Intervenções (Exportação)</h1>
 
-      <div className="bg-white shadow rounded-lg p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col">
-          <label className="text-xs text-gray-500">Status</label>
+      <div className="bg-white shadow rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Status</label>
           <select
             className="border rounded-md px-3 py-2"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option>Todos</option>
-            <option>Aberto</option>
-            <option>Em Andamento</option>
-            <option>Fechado</option>
+            <option value="TODOS">TODOS</option>
+            <option value="Aberto">Aberto</option>
+            <option value="Em Andamento">Em Andamento</option>
+            <option value="Fechado">Fechado</option>
           </select>
         </div>
 
-        <div className="flex flex-col">
-          <label className="text-xs text-gray-500">Mês/Ano</label>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Mês (YYYY-MM)</label>
           <input
             type="month"
             className="border rounded-md px-3 py-2"
-            value={mesAno}
-            onChange={(e) => setMesAno(e.target.value)}
+            value={mesRef}
+            onChange={(e) => setMesRef(e.target.value)}
           />
         </div>
 
-        <div className="flex flex-col">
-          <label className="text-xs text-gray-500">Data início</label>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Data início</label>
           <input
             type="date"
             className="border rounded-md px-3 py-2"
@@ -211,8 +172,8 @@ export default function SOSDashboard() {
           />
         </div>
 
-        <div className="flex flex-col">
-          <label className="text-xs text-gray-500">Data fim</label>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Data fim</label>
           <input
             type="date"
             className="border rounded-md px-3 py-2"
@@ -222,23 +183,59 @@ export default function SOSDashboard() {
         </div>
 
         <button
-          onClick={baixarExcel}
+          onClick={carregarTudo}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-60"
           disabled={loading}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2 disabled:opacity-60"
         >
-          <FaDownload />
-          {loading ? "Gerando..." : "Baixar Excel"}
+          {loading ? "Carregando..." : "Aplicar / Recarregar"}
         </button>
 
-        {lastCount !== null && (
-          <span className="text-sm text-gray-600">
-            Registros exportados: <b>{lastCount}</b>
-          </span>
-        )}
+        <button
+          onClick={baixarExcel}
+          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
+          disabled={loading || !rows.length}
+        >
+          <FaDownload /> Baixar Excel
+        </button>
       </div>
 
-      <div className="mt-4 text-sm text-gray-600">
-        Observação: o download traz todos os registros conforme filtros. Se estiver muito grande, pode demorar.
+      <div className="bg-white shadow rounded-lg p-4">
+        <div className="text-sm text-gray-700">
+          <div><strong>Coluna de data usada no filtro:</strong> {dateColumn}</div>
+          <div><strong>Status:</strong> {status}</div>
+          <div className="mt-2">{msg}</div>
+        </div>
+
+        {/* preview simples */}
+        {rows.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="p-2 text-left">Nº SOS</th>
+                  <th className="p-2 text-left">Status</th>
+                  <th className="p-2 text-left">Veículo</th>
+                  <th className="p-2 text-left">Motorista</th>
+                  <th className="p-2 text-left">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 20).map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2">{r.numero_sos ?? "—"}</td>
+                    <td className="p-2">{r.status ?? "—"}</td>
+                    <td className="p-2">{r.veiculo ?? "—"}</td>
+                    <td className="p-2">{r.motorista_nome ?? "—"}</td>
+                    <td className="p-2">
+                      {(r[dateColumn] ? new Date(r[dateColumn]).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-500 mt-2">Mostrando apenas 20 primeiros no preview.</p>
+          </div>
+        )}
       </div>
     </div>
   );
