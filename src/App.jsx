@@ -18,10 +18,12 @@ import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
-import SOSDashboard from "./pages/SOSDashboard"; // ✅ NOVA PAGE (Dashboard Intervenções)
+import SOSDashboard from "./pages/SOSDashboard"; // ✅ Dashboard Intervenções (Tempo Real)
 
-import Usuarios from "./pages/Usuarios"; // 👈 tela de configuração
-import RequireAuth from "./routes/RequireAuth"; // mantém só a proteção geral
+import KMRodado from "./pages/KMRodado"; // ✅ NOVA PAGE (KM Rodado do dia)
+
+import Usuarios from "./pages/Usuarios"; // ⚙️ tela de configuração
+import RequireAuth from "./routes/RequireAuth"; // proteção geral
 
 export default function App() {
   return (
@@ -58,7 +60,10 @@ export default function App() {
           <Route path="/sos-fechamento" element={<SOSFechamento />} />
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
-          <Route path="/sos-dashboard" element={<SOSDashboard />} /> {/* ✅ NOVA ROTA */}
+          <Route path="/sos-dashboard" element={<SOSDashboard />} />
+
+          {/* KM Rodado */}
+          <Route path="/km-rodado" element={<KMRodado />} /> {/* ✅ NOVA ROTA */}
 
           {/* ⚙️ Configurações — acesso direto */}
           <Route path="/usuarios" element={<Usuarios />} />
