@@ -4,7 +4,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
   FaPenSquare, FaListAlt, FaWrench, FaClipboardCheck, FaUndo, FaCogs,
-  FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt
+  FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt,
+  FaDownload // ✅ ADICIONADO (ícone do Dashboard Excel)
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -16,7 +17,8 @@ const ACCESS = {
     "/",
     "/solicitar", "/central", // Tratativas
     "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias", "/cobrancas", // Avarias
-    "/sos-solicitacao", "/sos-fechamento", "/sos-tratamento", "/sos-central", // SOS
+    "/sos-solicitacao", "/sos-fechamento", "/sos-tratamento", "/sos-central",
+    "/sos-dashboard", // ✅ ADICIONADO
   ],
   Tratativa: [
     "/",
@@ -27,7 +29,8 @@ const ACCESS = {
     "/",
     "/solicitar",            // Tratativas
     "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias",// Avarias
-    "/sos-fechamento", "/sos-tratamento", "/sos-central", // SOS
+    "/sos-fechamento", "/sos-tratamento", "/sos-central",
+    "/sos-dashboard", // ✅ ADICIONADO
   ],
   CCO: [
     "/",
@@ -55,7 +58,6 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   const isAdmin = user?.nivel === "Administrador";
-  const isGestor = user?.nivel === "Gestor";
 
   // links definidos com path para validar acesso
   const links = useMemo(() => ({
@@ -78,6 +80,7 @@ export default function Sidebar() {
       { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
       { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
       { path: "/sos-central", label: "Central", icon: <FaEye /> },
+      { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> }, // ✅ ADICIONADO
     ],
 
     configuracoes: [
