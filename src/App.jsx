@@ -18,6 +18,7 @@ import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
+import SOSDashboard from "./pages/SOSDashboard"; // ✅ NOVA PAGE (Dashboard Intervenções)
 
 import Usuarios from "./pages/Usuarios"; // 👈 tela de configuração
 import RequireAuth from "./routes/RequireAuth"; // mantém só a proteção geral
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/sos-fechamento" element={<SOSFechamento />} />
           <Route path="/sos-tratamento" element={<SOSTratamento />} />
           <Route path="/sos-central" element={<SOSCentral />} />
+          <Route path="/sos-dashboard" element={<SOSDashboard />} /> {/* ✅ NOVA ROTA */}
 
           {/* ⚙️ Configurações — acesso direto */}
           <Route path="/usuarios" element={<Usuarios />} />
