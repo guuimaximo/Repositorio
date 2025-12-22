@@ -1,9 +1,21 @@
-// src/pages/SOSTratamento.jsx
+// src/pages/SOSFechamento.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { FaTools, FaCheckCircle, FaTimes } from "react-icons/fa";
+import { FaCheckCircle, FaTimes, FaWrench } from "react-icons/fa";
 
-export default function SOSTratamento() {
+/* =======================
+   AJUSTE DATA (NOVO)
+   - evita “1 dia a menos”
+   - força exibição em São Paulo
+======================= */
+function formatDateBRFromTimestamp(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+export default function SOSFechamento() {
   const [acionamentos, setAcionamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -13,7 +25,7 @@ export default function SOSTratamento() {
     const { data, error } = await supabase
       .from("sos_acionamentos")
       .select("*")
-      .eq("status", "Em Andamento")
+      .eq("status", "Aberto")
       .order("created_at", { ascending: false });
 
     if (!error) setAcionamentos(data || []);
@@ -26,8 +38,8 @@ export default function SOSTratamento() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800 flex items-center gap-3">
-        <FaTools /> Tratamento de Interveção — Manutenção
+      <h1 className="text-3xl font-bold mb-6 text-gray-800">
+        Fechamento do Acionamento - Operação
       </h1>
 
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -47,24 +59,21 @@ export default function SOSTratamento() {
             {loading ? (
               <tr>
                 <td colSpan="7" className="text-center py-6 text-gray-600">
-                  Carregando acionamento em andamento...
+                  Carregando SOS...
                 </td>
               </tr>
             ) : acionamentos.length === 0 ? (
               <tr>
                 <td colSpan="7" className="text-center py-6 text-gray-600">
-                  Nenhuma acionamento em andamento.
+                  Nenhum SOS em aberto 🎉
                 </td>
               </tr>
             ) : (
               acionamentos.map((a) => (
-                <tr
-                  key={a.id}
-                  className="border-t hover:bg-gray-50 transition-colors"
-                >
+                <tr key={a.id} className="border-t hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">{a.numero_sos}</td>
                   <td className="py-3 px-4">
-                    {new Date(a.created_at).toLocaleDateString("pt-BR")}
+                    {formatDateBRFromTimestamp(a.created_at)}
                   </td>
                   <td className="py-3 px-4">{a.veiculo}</td>
                   <td className="py-3 px-4">{a.motorista_nome}</td>
@@ -73,9 +82,9 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelected(a)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-2 transition"
+                      className="bg-yellow-400 hover:bg-yellow-500 text-black px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2 font-medium transition"
                     >
-                      <FaTools /> Tratar Acionamento
+                      <FaWrench className="text-black" /> Fechar Etiqueta
                     </button>
                   </td>
                 </tr>
@@ -86,7 +95,7 @@ export default function SOSTratamento() {
       </div>
 
       {selected && (
-        <TratamentoModal
+        <FechamentoModal
           sos={selected}
           onClose={() => setSelected(null)}
           onAtualizar={carregarSOS}
@@ -96,76 +105,54 @@ export default function SOSTratamento() {
   );
 }
 
-// 🟦 Modal de Tratamento da Manutenção
-function TratamentoModal({ sos, onClose, onAtualizar }) {
+// 🟨 Modal de Fechamento (sem alteração de campos)
+function FechamentoModal({ sos, onClose, onAtualizar }) {
   const [form, setForm] = useState({
-    setor_manutencao: "",
-    grupo_manutencao: "",
-    problema_encontrado: "",
-    solucao: "",
-    solucionador: "",
+    avaliador: "",
+    procedencia_socorrista: "Procedente",
+    ocorrencia: "",
+    carro_substituto: "",
+    sr_numero: "",
   });
   const [saving, setSaving] = useState(false);
-  const [catalogo, setCatalogo] = useState([]);
-  const [grupos, setGrupos] = useState([]);
-  const [defeitos, setDefeitos] = useState([]);
+  const [prefixos, setPrefixos] = useState([]);
+
+  const ocorrencias = [
+    "SEGUIU VIAGEM",
+    "RECOLHEU",
+    "TROCA",
+    "AVARIA",
+    "IMPROCEDENTE",
+  ];
 
   useEffect(() => {
-    async function carregarCatalogo() {
+    async function carregarPrefixos() {
       const { data } = await supabase
-        .from("sos_manutencao_catalogo")
-        .select("*")
-        .order("setor_macro", { ascending: true });
-      setCatalogo(data || []);
+        .from("prefixos")
+        .select("codigo")
+        .order("codigo");
+      setPrefixos(data || []);
     }
-    carregarCatalogo();
+    carregarPrefixos();
   }, []);
 
-  function handleSetorChange(setor) {
-    setForm({ ...form, setor_manutencao: setor, grupo_manutencao: "", problema_encontrado: "" });
-    const gruposUnicos = Array.from(
-      new Set(
-        catalogo.filter((c) => c.setor_macro === setor).map((c) => c.grupo)
-      )
-    );
-    setGrupos(gruposUnicos);
-  }
-
-  function handleGrupoChange(grupo) {
-    setForm({ ...form, grupo_manutencao: grupo, problema_encontrado: "" });
-    const defeitosUnicos = Array.from(
-      new Set(
-        catalogo
-          .filter((c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo)
-          .map((c) => c.defeito)
-      )
-    );
-    setDefeitos(defeitosUnicos);
-  }
-
-  async function salvarTratamento() {
-    if (
-      !form.setor_manutencao ||
-      !form.grupo_manutencao ||
-      !form.problema_encontrado ||
-      !form.solucionador
-    ) {
+  async function salvarFechamento() {
+    if (!form.avaliador || !form.ocorrencia) {
       alert("Preencha todos os campos obrigatórios!");
       return;
     }
 
     setSaving(true);
-
     const { error } = await supabase
       .from("sos_acionamentos")
       .update({
-        setor_manutencao: form.setor_manutencao,
-        grupo_manutencao: form.grupo_manutencao,
-        problema_encontrado: form.problema_encontrado,
-        solucao: form.solucao,
-        solucionador: form.solucionador,
+        avaliador: form.avaliador,
+        procedencia_socorrista: form.procedencia_socorrista,
+        ocorrencia: form.ocorrencia,
+        carro_substituto: form.carro_substituto,
+        sr_numero: form.sr_numero,
         data_fechamento: new Date().toISOString(),
-        status: "Fechado",
+        status: "Em Andamento",
       })
       .eq("id", sos.id);
 
@@ -176,18 +163,18 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
       return;
     }
 
-    alert("Tratamento salvo com sucesso ✅");
+    alert("Fechamento registrado com sucesso ✅");
     onAtualizar();
     onClose();
   }
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full animate-fadeIn">
-        {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b bg-gray-100 rounded-t-lg">
+      <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full animate-fadeIn overflow-y-auto max-h-[90vh]">
+        {/* Cabeçalho */}
+        <div className="flex justify-between items-center p-4 border-b bg-blue-50 rounded-t-lg">
           <h2 className="text-xl font-semibold text-gray-800">
-            Tratamento do SOS #{sos.numero_sos}
+            Fechamento do SOS #{sos.numero_sos}
           </h2>
           <button
             onClick={onClose}
@@ -197,111 +184,96 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
           </button>
         </div>
 
-        {/* Formulário */}
+        {/* Corpo */}
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            {/* Setor */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">
-                Setor de Manutenção
-              </label>
-              <select
+              <label className="block text-sm text-gray-500 mb-1">Avaliador</label>
+              <input
+                type="text"
                 className="w-full border rounded p-2"
-                value={form.setor_manutencao}
-                onChange={(e) => handleSetorChange(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {Array.from(new Set(catalogo.map((c) => c.setor_macro))).map(
-                  (s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  )
-                )}
-              </select>
+                value={form.avaliador}
+                onChange={(e) => setForm({ ...form, avaliador: e.target.value })}
+                placeholder="Ex: Fernando"
+              />
             </div>
 
-            {/* Grupo */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Grupo</label>
+              <label className="block text-sm text-gray-500 mb-1">Procedência</label>
               <select
                 className="w-full border rounded p-2"
-                value={form.grupo_manutencao}
-                onChange={(e) => handleGrupoChange(e.target.value)}
-                disabled={!form.setor_manutencao}
+                value={form.procedencia_socorrista}
+                onChange={(e) =>
+                  setForm({ ...form, procedencia_socorrista: e.target.value })
+                }
               >
-                <option value="">Selecione...</option>
-                {grupos.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
+                <option>Procedente</option>
+                <option>Improcedente</option>
               </select>
             </div>
           </div>
 
-          {/* Defeito */}
           <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Problema encontrado
-            </label>
+            <label className="block text-sm text-gray-500 mb-1">Ocorrência</label>
             <select
               className="w-full border rounded p-2"
-              value={form.problema_encontrado}
-              onChange={(e) =>
-                setForm({ ...form, problema_encontrado: e.target.value })
-              }
-              disabled={!form.grupo_manutencao}
+              value={form.ocorrencia}
+              onChange={(e) => setForm({ ...form, ocorrencia: e.target.value })}
             >
               <option value="">Selecione...</option>
-              {defeitos.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              {ocorrencias.map((o, idx) => (
+                <option key={idx} value={o}>
+                  {o}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Solução */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Solução aplicada
-            </label>
-            <textarea
-              className="w-full border rounded p-2"
-              rows="2"
-              placeholder="Descreva a ação ou serviço realizado..."
-              value={form.solucao}
-              onChange={(e) => setForm({ ...form, solucao: e.target.value })}
-            />
-          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">
+                Carro que entrou no lugar
+              </label>
+              <select
+                className="w-full border rounded p-2"
+                value={form.carro_substituto}
+                onChange={(e) =>
+                  setForm({ ...form, carro_substituto: e.target.value })
+                }
+              >
+                <option value="">Selecione...</option>
+                {prefixos.map((p) => (
+                  <option key={p.codigo} value={p.codigo}>
+                    {p.codigo}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Responsável */}
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Responsável pela manutenção
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded p-2"
-              value={form.solucionador}
-              onChange={(e) =>
-                setForm({ ...form, solucionador: e.target.value })
-              }
-              placeholder="Ex: Fernando, Clécio..."
-            />
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">
+                SR (Operação)
+              </label>
+              <input
+                type="text"
+                className="w-full border rounded p-2"
+                value={form.sr_numero}
+                onChange={(e) => setForm({ ...form, sr_numero: e.target.value })}
+                placeholder="Ex: SR12345"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Rodapé */}
         <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-lg">
           <button
-            onClick={salvarTratamento}
+            onClick={salvarFechamento}
             disabled={saving}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition"
           >
             <FaCheckCircle />
-            {saving ? "Salvando..." : "Confirmar Tratamento"}
+            {saving ? "Salvando..." : "Confirmar Fechamento"}
           </button>
         </div>
       </div>
