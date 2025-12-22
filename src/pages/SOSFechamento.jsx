@@ -61,7 +61,7 @@ export default function SOSFechamento() {
                 <tr key={a.id} className="border-t hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">{a.numero_sos}</td>
                   <td className="py-3 px-4">
-                    {new Date(a.created_at).toLocaleDateString("pt-BR")}
+                    {new Date(a.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   </td>
                   <td className="py-3 px-4">{a.veiculo}</td>
                   <td className="py-3 px-4">{a.motorista_nome}</td>
