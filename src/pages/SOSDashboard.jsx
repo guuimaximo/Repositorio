@@ -179,6 +179,9 @@ export default function SOSDashboard() {
 
   const hoje = useMemo(() => todayYMD_SP(), []);
 
+  // ✅ Acumulado do dia (topo do gráfico)
+  const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
+
   useEffect(() => {
     const { start, end } = monthRange(mesRef);
     setDataInicio(start);
@@ -221,10 +224,11 @@ export default function SOSDashboard() {
       setOcorrenciasValidasPeriodo(ocorrValidas);
       setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
+      // ✅ DO DIA: trocou LOCAL por RECLAMAÇÃO DO MOTORISTA
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
         .select(
-          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, local_ocorrencia, ocorrencia, status"
+          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, reclamacao_motorista, ocorrencia, status"
         )
         .eq("data_sos", hoje)
         .order("hora_sos", { ascending: true });
@@ -272,11 +276,12 @@ export default function SOSDashboard() {
       setLastUpdate(new Date());
 
       // ============================
-      // ✅ MKBF DO ANO (CORRETO)
+      // ✅ MKBF DO ANO: pegar POR MÊS (mês a mês)
       // ============================
       const year = ymdToYear(dataInicio) || ymdToYear(hoje);
       const { start: anoIni, end: anoFim } = yearRangeFromYear(year);
 
+      // KM do ano (diário) -> soma por mês
       const { data: kmAnoData, error: kmAnoErr } = await supabase
         .from("km_rodado_diario")
         .select("data, km_total")
@@ -285,6 +290,7 @@ export default function SOSDashboard() {
 
       if (kmAnoErr) throw kmAnoErr;
 
+      // Ocorrências do ano -> soma por mês (válidas para MKBF)
       const { data: ocorrAnoData, error: ocorrAnoErr } = await supabase
         .from("sos_acionamentos")
         .select("data_sos, ocorrencia")
@@ -302,14 +308,14 @@ export default function SOSDashboard() {
       }
 
       (kmAnoData || []).forEach((r) => {
-        const d = String(r.data || "");
+        const d = String(r.data || ""); // esperado: YYYY-MM-DD
         const mm = d.slice(5, 7);
         if (!mm) return;
         kmPorMes.set(mm, (kmPorMes.get(mm) || 0) + (Number(r.km_total) || 0));
       });
 
       (ocorrAnoData || []).forEach((r) => {
-        const d = String(r.data_sos || "");
+        const d = String(r.data_sos || ""); // esperado: YYYY-MM-DD
         const mm = d.slice(5, 7);
         if (!mm) return;
         if (!isOcorrenciaValidaParaMKBF(r.ocorrencia)) return;
@@ -325,7 +331,7 @@ export default function SOSDashboard() {
         const kmM = kmPorMes.get(mm) || 0;
         const ocM = ocorrPorMes.get(mm) || 0;
 
-        // mensal OK:
+        // ✅ MKBF DO MÊS (é isso que o gráfico precisa)
         const mkbfM = ocM > 0 ? kmM / ocM : 0;
 
         kmTotalAno += kmM;
@@ -339,7 +345,7 @@ export default function SOSDashboard() {
         });
       }
 
-      // ✅ MKBF ANUAL CORRETO: KM TOTAL / OCORRÊNCIAS TOTAIS
+      // ✅ MKBF ANUAL (card): KM TOTAL / OCORRÊNCIAS TOTAIS
       setKmAnoTotal(kmTotalAno);
       setOcorrAnoTotal(ocorrTotalAno);
       setMkbfAno(ocorrTotalAno > 0 ? kmTotalAno / ocorrTotalAno : 0);
@@ -688,9 +694,16 @@ export default function SOSDashboard() {
       {/* Intervenções por dia (embaixo) com quantidade em cada barra */}
       <div className="bg-white shadow rounded-lg p-3 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-gray-800">
-            Intervenções por dia (período)
-          </h2>
+          <div>
+            <h2 className="font-semibold text-gray-800">
+              Intervenções por dia (período)
+            </h2>
+            {/* ✅ ACUMULADO DO DIA NO TOPO */}
+            <p className="text-xs text-gray-600 mt-1">
+              Acumulado do dia ({hoje}): <strong>{acumuladoDia}</strong>
+            </p>
+          </div>
+
           <span className="text-xs text-gray-500">
             Período: {dataInicio} até {dataFim}
           </span>
@@ -706,7 +719,6 @@ export default function SOSDashboard() {
               <Legend />
               {TIPOS_GRAFICO.map((t) => (
                 <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
-                  {/* ✅ NÚMEROS BRANCOS NO GRÁFICO */}
                   <LabelList
                     dataKey={t}
                     position="center"
@@ -743,7 +755,10 @@ export default function SOSDashboard() {
                 <th className="py-3 px-4 text-left">Prefixo</th>
                 <th className="py-3 px-4 text-left">Motorista</th>
                 <th className="py-3 px-4 text-left">Linha</th>
-                <th className="py-3 px-4 text-left">Local</th>
+
+                {/* ✅ TROCOU LOCAL POR RECLAMAÇÃO */}
+                <th className="py-3 px-4 text-left">Reclamação</th>
+
                 <th className="py-3 px-4 text-left">Ocorrência</th>
                 <th className="py-3 px-4 text-left">Status</th>
               </tr>
@@ -771,7 +786,12 @@ export default function SOSDashboard() {
                     <td className="py-3 px-4">{r.veiculo ?? "—"}</td>
                     <td className="py-3 px-4">{r.motorista_nome ?? "—"}</td>
                     <td className="py-3 px-4">{r.linha ?? "—"}</td>
-                    <td className="py-3 px-4">{r.local_ocorrencia ?? "—"}</td>
+
+                    {/* ✅ RECLAMAÇÃO DO MOTORISTA */}
+                    <td className="py-3 px-4">
+                      {r.reclamacao_motorista ?? "—"}
+                    </td>
+
                     <td className="py-3 px-4">
                       {labelOcorrenciaTabela(r.ocorrencia)}
                     </td>
