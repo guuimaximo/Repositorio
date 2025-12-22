@@ -41,17 +41,29 @@ function pickBestDate(row) {
 
 function parseToDate(value) {
   if (!value) return null;
+
+  // Se já for Date
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
   const s = String(value).trim();
 
-  // DD/MM/YYYY
+  // DD/MM/YYYY (local)
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) {
     const [, dd, mm, yyyy] = br;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd)); // local
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  // YYYY-MM-DD / ISO
+  // YYYY-MM-DD (local)  ✅ evita “-1 dia”
+  const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    const [, yyyy, mm, dd] = isoDate;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd)); // local
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Timestamp ISO (com horário / timezone) -> deixa o JS interpretar
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -64,11 +76,17 @@ function formatDateBR(value) {
 function monthRange(yyyyMm) {
   if (!yyyyMm) return { start: "", end: "" };
   const [y, m] = yyyyMm.split("-").map(Number);
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0); // último dia do mês
-  const toISODate = (dt) => dt.toISOString().slice(0, 10);
-  return { start: toISODate(start), end: toISODate(end) };
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const start = `${y}-${pad2(m)}-01`;
+
+  // último dia do mês
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${y}-${pad2(m)}-${pad2(lastDay)}`;
+
+  return { start, end };
 }
+
 /* ======================= */
 
 
