@@ -1,9 +1,7 @@
 // src/pages/SOSCentral.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
-import {
-  FaSearch, FaEye, FaTimes, FaLock, FaEdit, FaSave
-} from "react-icons/fa";
+import { FaSearch, FaEye, FaTimes, FaLock, FaEdit, FaSave, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
 
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
@@ -100,7 +98,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     }
 
     alert("Alterações salvas com sucesso ✅");
-    onAtualizar();
+    onAtualizar(true); // força reload do início
     setEditMode(false);
     onClose();
   }
@@ -133,11 +131,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-40 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
-        {/* Cabeçalho */}
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-bold text-gray-800">
-            Detalhes do SOS #{sos.numero_sos}
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800">Detalhes do SOS #{sos.numero_sos}</h2>
           <div className="flex items-center gap-2">
             {!editMode ? (
               <button
@@ -160,9 +155,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           </div>
         </div>
 
-        {/* Conteúdo */}
         <div className="p-6 space-y-6 overflow-y-auto text-sm">
-          {/* 🟦 Informações Gerais */}
           <h3 className="font-semibold text-blue-700">Informações Gerais</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Criado em", "created_at")}
@@ -173,7 +166,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Veículo", "veiculo")}
           </div>
 
-          {/* 🟨 Dados do Motorista e Ocorrência */}
           <h3 className="font-semibold text-yellow-700 mt-4">Dados do Motorista e Ocorrência</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Motorista ID", "motorista_id")}
@@ -184,7 +176,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Tabela Operacional", "tabela_operacional")}
           </div>
 
-          {/* 🟩 Atendimento e Manutenção */}
           <h3 className="font-semibold text-green-700 mt-4">Atendimento e Manutenção</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Avaliador Manutenção", "avaliador_manutencao")}
@@ -196,7 +187,6 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Problema Encontrado", "problema_encontrado", true)}
           </div>
 
-          {/* 🟥 Fechamento */}
           <h3 className="font-semibold text-red-700 mt-4">Fechamento</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Solucionador", "solucionador")}
@@ -204,12 +194,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           </div>
         </div>
 
-        {/* Modal de login */}
         {loginModalOpen && (
-          <LoginModal
-            onConfirm={onLoginConfirm}
-            onCancel={() => setLoginModalOpen(false)}
-          />
+          <LoginModal onConfirm={onLoginConfirm} onCancel={() => setLoginModalOpen(false)} />
         )}
       </div>
     </div>
@@ -218,54 +204,131 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
 
 /* --- Página Principal: CENTRAL SOS --- */
 export default function SOSCentral() {
+  const PAGE_SIZE = 200;
+
   const [sosList, setSosList] = useState([]);
   const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState(null);
+
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
-  async function carregarSOS() {
-    setLoading(true);
-    let query = supabase.from("sos_acionamentos").select("*").eq("status", "Fechado");
+  // ordenação server-side
+  const [sortBy, setSortBy] = useState("data_fechamento");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  // página atual (offset)
+  const [page, setPage] = useState(0);
+
+  function buildQuery() {
+    let query = supabase
+      .from("sos_acionamentos")
+      .select("*")
+      .eq("status", "Fechado");
 
     if (dataInicio) query = query.gte("data_fechamento", dataInicio);
     if (dataFim) query = query.lte("data_fechamento", dataFim);
 
-    const { data, error } = await query.order("data_fechamento", { ascending: false });
-    if (error) return console.error(error.message);
+    // order precisa vir antes do range
+    query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
 
-    setSosList(data || []);
+    return query;
+  }
+
+  async function carregarSOS(reset = false) {
+    if (reset) {
+      setLoading(true);
+      setPage(0);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
+
+    const currentPage = reset ? 0 : page;
+    const from = currentPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await buildQuery().range(from, to);
+
+    if (error) {
+      console.error(error.message);
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+
+    const newRows = data || [];
+    const merged = reset ? newRows : [...sosList, ...newRows];
+    setSosList(merged);
+
+    // hasMore: se voltou menos que page size, acabou
+    setHasMore(newRows.length === PAGE_SIZE);
+
+    // Atualiza contagens com base no que está carregado (parcial se não carregou tudo)
     const contagens = {};
-    data?.forEach((s) => {
+    merged.forEach((s) => {
       const o = (s.ocorrencia || "").toUpperCase().trim();
       contagens[o] = (contagens[o] || 0) + 1;
     });
     setCounts(contagens);
+
+    setPage(currentPage + 1);
     setLoading(false);
+    setLoadingMore(false);
   }
 
   useEffect(() => {
-    carregarSOS();
+    // primeira carga
+    carregarSOS(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtrados = sosList.filter((s) => {
-    const termo = busca.toLowerCase();
-    return (
-      s.numero_sos?.toString().includes(termo) ||
-      s.veiculo?.toLowerCase().includes(termo) ||
-      s.motorista_nome?.toLowerCase().includes(termo)
+  // sempre que filtro/ordenação mudar, recarrega do início
+  useEffect(() => {
+    carregarSOS(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataInicio, dataFim, sortBy, sortAsc]);
+
+  const filtrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    if (!termo) return sosList;
+    return sosList.filter((s) => {
+      return (
+        s.numero_sos?.toString().includes(termo) ||
+        s.veiculo?.toLowerCase().includes(termo) ||
+        s.motorista_nome?.toLowerCase().includes(termo)
+      );
+    });
+  }, [busca, sosList]);
+
+  function toggleSort(field) {
+    if (sortBy === field) {
+      setSortAsc((v) => !v);
+    } else {
+      setSortBy(field);
+      setSortAsc(true); // padrão: asc quando troca o campo
+    }
+  }
+
+  function SortIcon({ field }) {
+    if (sortBy !== field) return <FaSort className="inline ml-2 opacity-70" />;
+    return sortAsc ? (
+      <FaSortUp className="inline ml-2" />
+    ) : (
+      <FaSortDown className="inline ml-2" />
     );
-  });
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">
-        Central de Intervenções (Fechadas)
-      </h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">Central de Intervenções (Fechadas)</h1>
 
-      {/* 🔢 Cards de Resumo */}
+      {/* 🔢 Cards de Resumo (parcial, conforme páginas carregadas) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {["SOS", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"].map((key) => (
           <CardResumo key={key} titulo={key} valor={counts[key] || 0} cor={cores[key]} />
@@ -282,9 +345,22 @@ export default function SOSCentral() {
           onChange={(e) => setBusca(e.target.value)}
           className="border rounded-md px-3 py-2 flex-1"
         />
-        <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="border rounded-md px-3 py-2" />
-        <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="border rounded-md px-3 py-2" />
-        <button onClick={carregarSOS} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+        <input
+          type="date"
+          value={dataInicio}
+          onChange={(e) => setDataInicio(e.target.value)}
+          className="border rounded-md px-3 py-2"
+        />
+        <input
+          type="date"
+          value={dataFim}
+          onChange={(e) => setDataFim(e.target.value)}
+          className="border rounded-md px-3 py-2"
+        />
+        <button
+          onClick={() => carregarSOS(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+        >
           Aplicar
         </button>
       </div>
@@ -294,27 +370,55 @@ export default function SOSCentral() {
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
             <tr>
-              <th className="py-3 px-4 text-left">Número</th>
-              <th className="py-3 px-4 text-left">Data</th>
-              <th className="py-3 px-4 text-left">Prefixo</th>
-              <th className="py-3 px-4 text-left">Motorista</th>
-              <th className="py-3 px-4 text-left">Ocorrência</th>
+              <ThSortable label="Número" onClick={() => toggleSort("numero_sos")}>
+                <SortIcon field="numero_sos" />
+              </ThSortable>
+
+              <ThSortable label="Data" onClick={() => toggleSort("data_fechamento")}>
+                <SortIcon field="data_fechamento" />
+              </ThSortable>
+
+              <ThSortable label="Prefixo" onClick={() => toggleSort("veiculo")}>
+                <SortIcon field="veiculo" />
+              </ThSortable>
+
+              <ThSortable label="Motorista" onClick={() => toggleSort("motorista_nome")}>
+                <SortIcon field="motorista_nome" />
+              </ThSortable>
+
+              <ThSortable label="Ocorrência" onClick={() => toggleSort("ocorrencia")}>
+                <SortIcon field="ocorrencia" />
+              </ThSortable>
+
               <th className="py-3 px-4 text-center">Ações</th>
             </tr>
           </thead>
+
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" className="text-center py-6 text-gray-600">Carregando...</td></tr>
+              <tr>
+                <td colSpan="6" className="text-center py-6 text-gray-600">
+                  Carregando...
+                </td>
+              </tr>
             ) : filtrados.length === 0 ? (
-              <tr><td colSpan="6" className="text-center py-6 text-gray-600">Nenhum SOS encontrado.</td></tr>
+              <tr>
+                <td colSpan="6" className="text-center py-6 text-gray-600">
+                  Nenhum SOS encontrado.
+                </td>
+              </tr>
             ) : (
               filtrados.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50 transition">
                   <td className="py-3 px-4">{s.numero_sos}</td>
-                  <td className="py-3 px-4">{new Date(s.data_fechamento).toLocaleDateString("pt-BR")}</td>
+                  <td className="py-3 px-4">
+                    {s.data_fechamento ? new Date(s.data_fechamento).toLocaleDateString("pt-BR") : "—"}
+                  </td>
                   <td className="py-3 px-4">{s.veiculo}</td>
                   <td className="py-3 px-4">{s.motorista_nome}</td>
-                  <td className="py-3 px-4"><OcorrenciaTag ocorrencia={s.ocorrencia} /></td>
+                  <td className="py-3 px-4">
+                    <OcorrenciaTag ocorrencia={s.ocorrencia} />
+                  </td>
                   <td className="py-3 px-4 text-center">
                     <button
                       className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm flex items-center gap-2 mx-auto"
@@ -328,10 +432,40 @@ export default function SOSCentral() {
             )}
           </tbody>
         </table>
+
+        {/* Carregar mais */}
+        {!loading && hasMore && (
+          <div className="p-4 border-t flex justify-center">
+            <button
+              onClick={() => carregarSOS(false)}
+              disabled={loadingMore}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-60"
+            >
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {selected && <DetalheSOSModal sos={selected} onClose={() => setSelected(null)} onAtualizar={carregarSOS} />}
+      {selected && (
+        <DetalheSOSModal sos={selected} onClose={() => setSelected(null)} onAtualizar={carregarSOS} />
+      )}
     </div>
+  );
+}
+
+/* --- Helpers UI --- */
+function ThSortable({ label, onClick, children }) {
+  return (
+    <th
+      className="py-3 px-4 text-left cursor-pointer select-none hover:bg-blue-700 transition"
+      onClick={onClick}
+      title="Clique para ordenar"
+    >
+      <span className="inline-flex items-center">
+        {label} {children}
+      </span>
+    </th>
   );
 }
 
