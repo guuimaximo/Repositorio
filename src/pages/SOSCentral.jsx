@@ -1,7 +1,76 @@
 // src/pages/SOSCentral.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
-import { FaSearch, FaEye, FaTimes, FaLock, FaEdit, FaSave, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
+import {
+  FaSearch,
+  FaEye,
+  FaTimes,
+  FaLock,
+  FaEdit,
+  FaSave,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+} from "react-icons/fa";
+
+/* =======================
+   AJUSTES (NOVO)
+======================= */
+const OCORRENCIAS_CARDS = [
+  "SOS",
+  "RECOLHEU",
+  "TROCA",
+  "AVARIA",
+  "IMPROCEDENTE",
+  "SEGUIU VIAGEM",
+];
+
+// Ajuste aqui o campo principal de data para filtro/ordenação:
+const DATE_FIELD = "data_dash"; // troque para "data_fechamento" quando estiver preenchido
+
+function pickBestDate(row) {
+  return (
+    row?.[DATE_FIELD] ||
+    row?.data_fechamento ||
+    row?.data_encerramento ||
+    row?.data_sos ||
+    row?.created_at ||
+    null
+  );
+}
+
+function parseToDate(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+
+  // DD/MM/YYYY
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const [, dd, mm, yyyy] = br;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // YYYY-MM-DD / ISO
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatDateBR(value) {
+  const d = parseToDate(value);
+  return d ? d.toLocaleDateString("pt-BR") : "—";
+}
+
+function monthRange(yyyyMm) {
+  if (!yyyyMm) return { start: "", end: "" };
+  const [y, m] = yyyyMm.split("-").map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 0); // último dia do mês
+  const toISODate = (dt) => dt.toISOString().slice(0, 10);
+  return { start: toISODate(start), end: toISODate(end) };
+}
+/* ======================= */
+
 
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
@@ -48,7 +117,10 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
           onChange={(e) => setSenha(e.target.value)}
         />
         <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+          >
             Cancelar
           </button>
           <button
@@ -98,7 +170,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     }
 
     alert("Alterações salvas com sucesso ✅");
-    onAtualizar(true); // força reload do início
+    onAtualizar(true);
     setEditMode(false);
     onClose();
   }
@@ -112,18 +184,24 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             className="border p-2 rounded w-full"
             rows="2"
             value={formData[field] || ""}
-            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, [field]: e.target.value })
+            }
           />
         ) : (
           <input
             type="text"
             className="border p-2 rounded w-full"
             value={formData[field] || ""}
-            onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, [field]: e.target.value })
+            }
           />
         )
       ) : (
-        <p className="bg-gray-50 p-2 border rounded">{formData[field] || "—"}</p>
+        <p className="bg-gray-50 p-2 border rounded">
+          {formData[field] || "—"}
+        </p>
       )}
     </div>
   );
@@ -132,7 +210,9 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-40 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-bold text-gray-800">Detalhes do SOS #{sos.numero_sos}</h2>
+          <h2 className="text-xl font-bold text-gray-800">
+            Detalhes do SOS #{sos.numero_sos}
+          </h2>
           <div className="flex items-center gap-2">
             {!editMode ? (
               <button
@@ -149,7 +229,10 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                 <FaSave /> Salvar
               </button>
             )}
-            <button onClick={onClose} className="text-gray-600 hover:text-gray-900">
+            <button
+              onClick={onClose}
+              className="text-gray-600 hover:text-gray-900"
+            >
               <FaTimes size={20} />
             </button>
           </div>
@@ -166,7 +249,9 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Veículo", "veiculo")}
           </div>
 
-          <h3 className="font-semibold text-yellow-700 mt-4">Dados do Motorista e Ocorrência</h3>
+          <h3 className="font-semibold text-yellow-700 mt-4">
+            Dados do Motorista e Ocorrência
+          </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Motorista ID", "motorista_id")}
             {renderField("Motorista Nome", "motorista_nome")}
@@ -176,7 +261,9 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             {renderField("Tabela Operacional", "tabela_operacional")}
           </div>
 
-          <h3 className="font-semibold text-green-700 mt-4">Atendimento e Manutenção</h3>
+          <h3 className="font-semibold text-green-700 mt-4">
+            Atendimento e Manutenção
+          </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {renderField("Avaliador Manutenção", "avaliador_manutencao")}
             {renderField("Procedência do Socorro", "procedencia_socorro")}
@@ -195,7 +282,10 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         </div>
 
         {loginModalOpen && (
-          <LoginModal onConfirm={onLoginConfirm} onCancel={() => setLoginModalOpen(false)} />
+          <LoginModal
+            onConfirm={onLoginConfirm}
+            onCancel={() => setLoginModalOpen(false)}
+          />
         )}
       </div>
     </div>
@@ -218,8 +308,10 @@ export default function SOSCentral() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
+  const [mesRef, setMesRef] = useState(""); // NOVO: filtro por mês (YYYY-MM)
+
   // ordenação server-side
-  const [sortBy, setSortBy] = useState("data_fechamento");
+  const [sortBy, setSortBy] = useState(DATE_FIELD); // ALTERADO: ordenar pela data real
   const [sortAsc, setSortAsc] = useState(false);
 
   // página atual (offset)
@@ -231,13 +323,52 @@ export default function SOSCentral() {
       .select("*")
       .eq("status", "Fechado");
 
-    if (dataInicio) query = query.gte("data_fechamento", dataInicio);
-    if (dataFim) query = query.lte("data_fechamento", dataFim);
+    // NOVO: filtro por mês
+    if (mesRef) {
+      const { start, end } = monthRange(mesRef);
+      if (start) query = query.gte(DATE_FIELD, start);
+      if (end) query = query.lte(DATE_FIELD, end);
+    }
+
+    // Mantém os filtros por intervalo
+    if (dataInicio) query = query.gte(DATE_FIELD, dataInicio);
+    if (dataFim) query = query.lte(DATE_FIELD, dataFim);
 
     // order precisa vir antes do range
     query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
 
     return query;
+  }
+
+  async function carregarCounts() {
+    const promises = OCORRENCIAS_CARDS.map(async (key) => {
+      let q = supabase
+        .from("sos_acionamentos")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "Fechado")
+        .ilike("ocorrencia", key);
+
+      // mesmos filtros
+      if (mesRef) {
+        const { start, end } = monthRange(mesRef);
+        if (start) q = q.gte(DATE_FIELD, start);
+        if (end) q = q.lte(DATE_FIELD, end);
+      }
+      if (dataInicio) q = q.gte(DATE_FIELD, dataInicio);
+      if (dataFim) q = q.lte(DATE_FIELD, dataFim);
+
+      const { count, error } = await q;
+      if (error) {
+        console.error("Erro count", key, error.message);
+        return [key, 0];
+      }
+      return [key, count || 0];
+    });
+
+    const entries = await Promise.all(promises);
+    const obj = {};
+    entries.forEach(([k, v]) => (obj[k] = v));
+    setCounts(obj);
   }
 
   async function carregarSOS(reset = false) {
@@ -266,16 +397,7 @@ export default function SOSCentral() {
     const merged = reset ? newRows : [...sosList, ...newRows];
     setSosList(merged);
 
-    // hasMore: se voltou menos que page size, acabou
     setHasMore(newRows.length === PAGE_SIZE);
-
-    // Atualiza contagens com base no que está carregado (parcial se não carregou tudo)
-    const contagens = {};
-    merged.forEach((s) => {
-      const o = (s.ocorrencia || "").toUpperCase().trim();
-      contagens[o] = (contagens[o] || 0) + 1;
-    });
-    setCounts(contagens);
 
     setPage(currentPage + 1);
     setLoading(false);
@@ -283,16 +405,16 @@ export default function SOSCentral() {
   }
 
   useEffect(() => {
-    // primeira carga
     carregarSOS(true);
+    carregarCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // sempre que filtro/ordenação mudar, recarrega do início
   useEffect(() => {
     carregarSOS(true);
+    carregarCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio, dataFim, sortBy, sortAsc]);
+  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc]);
 
   const filtrados = useMemo(() => {
     const termo = busca.toLowerCase().trim();
@@ -311,7 +433,7 @@ export default function SOSCentral() {
       setSortAsc((v) => !v);
     } else {
       setSortBy(field);
-      setSortAsc(true); // padrão: asc quando troca o campo
+      setSortAsc(true);
     }
   }
 
@@ -326,11 +448,13 @@ export default function SOSCentral() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Central de Intervenções (Fechadas)</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">
+        Central de Intervenções (Fechadas)
+      </h1>
 
-      {/* 🔢 Cards de Resumo (parcial, conforme páginas carregadas) */}
+      {/* 🔢 Cards de Resumo (AGORA: total real do banco conforme filtros) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        {["SOS", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"].map((key) => (
+        {OCORRENCIAS_CARDS.map((key) => (
           <CardResumo key={key} titulo={key} valor={counts[key] || 0} cor={cores[key]} />
         ))}
       </div>
@@ -345,6 +469,17 @@ export default function SOSCentral() {
           onChange={(e) => setBusca(e.target.value)}
           className="border rounded-md px-3 py-2 flex-1"
         />
+
+        {/* NOVO: filtro por mês (YYYY-MM) */}
+        <input
+          type="month"
+          value={mesRef}
+          onChange={(e) => setMesRef(e.target.value)}
+          className="border rounded-md px-3 py-2"
+          title="Filtrar por mês"
+        />
+
+        {/* Mantém também o filtro por intervalo */}
         <input
           type="date"
           value={dataInicio}
@@ -357,8 +492,12 @@ export default function SOSCentral() {
           onChange={(e) => setDataFim(e.target.value)}
           className="border rounded-md px-3 py-2"
         />
+
         <button
-          onClick={() => carregarSOS(true)}
+          onClick={() => {
+            carregarSOS(true);
+            carregarCounts();
+          }}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >
           Aplicar
@@ -374,8 +513,9 @@ export default function SOSCentral() {
                 <SortIcon field="numero_sos" />
               </ThSortable>
 
-              <ThSortable label="Data" onClick={() => toggleSort("data_fechamento")}>
-                <SortIcon field="data_fechamento" />
+              {/* ALTERADO: ordenar/exibir pela data real usada (DATE_FIELD) */}
+              <ThSortable label="Data" onClick={() => toggleSort(DATE_FIELD)}>
+                <SortIcon field={DATE_FIELD} />
               </ThSortable>
 
               <ThSortable label="Prefixo" onClick={() => toggleSort("veiculo")}>
@@ -411,9 +551,10 @@ export default function SOSCentral() {
               filtrados.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50 transition">
                   <td className="py-3 px-4">{s.numero_sos}</td>
-                  <td className="py-3 px-4">
-                    {s.data_fechamento ? new Date(s.data_fechamento).toLocaleDateString("pt-BR") : "—"}
-                  </td>
+
+                  {/* ALTERADO: data com fallback */}
+                  <td className="py-3 px-4">{formatDateBR(pickBestDate(s))}</td>
+
                   <td className="py-3 px-4">{s.veiculo}</td>
                   <td className="py-3 px-4">{s.motorista_nome}</td>
                   <td className="py-3 px-4">
@@ -448,7 +589,14 @@ export default function SOSCentral() {
       </div>
 
       {selected && (
-        <DetalheSOSModal sos={selected} onClose={() => setSelected(null)} onAtualizar={carregarSOS} />
+        <DetalheSOSModal
+          sos={selected}
+          onClose={() => setSelected(null)}
+          onAtualizar={() => {
+            carregarSOS(true);
+            carregarCounts();
+          }}
+        />
       )}
     </div>
   );
@@ -491,5 +639,9 @@ function CardResumo({ titulo, valor, cor }) {
 function OcorrenciaTag({ ocorrencia }) {
   const o = (ocorrencia || "").toUpperCase();
   const estilo = cores[o] || "bg-gray-300 text-gray-700";
-  return <span className={`${estilo} px-2 py-1 rounded text-xs font-semibold`}>{o || "—"}</span>;
+  return (
+    <span className={`${estilo} px-2 py-1 rounded text-xs font-semibold`}>
+      {o || "—"}
+    </span>
+  );
 }
