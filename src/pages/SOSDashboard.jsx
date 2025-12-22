@@ -121,7 +121,6 @@ async function fetchAllPeriodo({ dataInicio, dataFim }) {
       .order("hora_sos", { ascending: true });
 
     const { data, error } = await q.range(from, from + PAGE - 1);
-
     if (error) throw error;
 
     const rows = data || [];
@@ -151,23 +150,16 @@ export default function SOSDashboard() {
 
   const [realtimeOn, setRealtimeOn] = useState(true);
 
-  // ✅ ETAPA 3: KM + MKBF
+  // ✅ KM + MKBF
   const [kmPeriodo, setKmPeriodo] = useState(0);
   const [ocorrenciasValidasPeriodo, setOcorrenciasValidasPeriodo] = useState(0);
   const [mkbfPeriodo, setMkbfPeriodo] = useState(0);
 
-  // ✅ MKBF do ano (gráfico de linhas)
+  // ✅ MKBF do ano
   const [mkbfAnoSerie, setMkbfAnoSerie] = useState([]);
   const [kmAnoTotal, setKmAnoTotal] = useState(0);
   const [ocorrAnoTotal, setOcorrAnoTotal] = useState(0);
   const [mkbfAno, setMkbfAno] = useState(0);
-
-  // ✅ Resumo do dia por tipo (cards à direita)
-  const [diaPorTipo, setDiaPorTipo] = useState(() => {
-    const base = {};
-    TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
-    return base;
-  });
 
   // ✅ Modo Exibição (TV)
   const [modoExibicao, setModoExibicao] = useState(false);
@@ -190,7 +182,6 @@ export default function SOSDashboard() {
     setErro("");
 
     try {
-      // PERÍODO: só o necessário para gráfico + cards
       const { data: periodoData, error: periodoErr } = await supabase
         .from("sos_acionamentos")
         .select("id, data_sos, ocorrencia")
@@ -199,7 +190,6 @@ export default function SOSDashboard() {
 
       if (periodoErr) throw periodoErr;
 
-      // ✅ ETAPA 3: KM do período (tabela km_rodado_diario)
       const { data: kmData, error: kmErr } = await supabase
         .from("km_rodado_diario")
         .select("km_total, data")
@@ -210,18 +200,14 @@ export default function SOSDashboard() {
 
       const kmSum = (kmData || []).reduce((acc, r) => acc + (Number(r.km_total) || 0), 0);
 
-      // ✅ ETAPA 3: ocorrências válidas para MKBF (exceto SEGUIU VIAGEM e vazio)
       const ocorrValidas = (periodoData || []).reduce((acc, r) => {
         return acc + (isOcorrenciaValidaParaMKBF(r.ocorrencia) ? 1 : 0);
       }, 0);
 
-      const mkbf = ocorrValidas > 0 ? kmSum / ocorrValidas : 0;
-
       setKmPeriodo(kmSum);
       setOcorrenciasValidasPeriodo(ocorrValidas);
-      setMkbfPeriodo(mkbf);
+      setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
-      // DIA: tabela completa
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
         .select(
@@ -232,21 +218,7 @@ export default function SOSDashboard() {
 
       if (diaErr) throw diaErr;
 
-      // ✅ resumo do dia (TIPOS_GRAFICO)
-      const diaResumo = {};
-      TIPOS_GRAFICO.forEach((t) => (diaResumo[t] = 0));
-      (diaData || []).forEach((r) => {
-        const tipo = normalizeTipo(r.ocorrencia);
-        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
-        diaResumo[tipo] = (diaResumo[tipo] || 0) + 1;
-      });
-      setDiaPorTipo(diaResumo);
-
-      // ------------------------
-      // Gráfico: apenas TIPOS_GRAFICO, sem vazio
-      // ------------------------
       const byDay = new Map();
-
       (periodoData || []).forEach((r) => {
         const day = r.data_sos;
         if (!day) return;
@@ -267,9 +239,6 @@ export default function SOSDashboard() {
         .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
         .sort((a, b) => a.day.localeCompare(b.day));
 
-      // ------------------------
-      // Cards: alinhado ao gráfico
-      // ------------------------
       const porTipo = {};
       TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
@@ -286,9 +255,7 @@ export default function SOSDashboard() {
       setDoDia(diaData || []);
       setLastUpdate(new Date());
 
-      // =========================
-      // MKBF do ANO (Linhas)
-      // =========================
+      // MKBF do ANO
       const year = ymdToYear(dataInicio) || ymdToYear(hoje);
       const { start: anoIni, end: anoFim } = yearRangeFromYear(year);
 
@@ -308,10 +275,8 @@ export default function SOSDashboard() {
 
       if (ocorrAnoErr) throw ocorrAnoErr;
 
-      // agrega por mês
-      const kmPorMes = new Map(); // "01".."12" -> km
-      const ocorrPorMes = new Map(); // "01".."12" -> ocorr validas
-
+      const kmPorMes = new Map();
+      const ocorrPorMes = new Map();
       for (let m = 1; m <= 12; m++) {
         const mm = String(m).padStart(2, "0");
         kmPorMes.set(mm, 0);
@@ -363,19 +328,13 @@ export default function SOSDashboard() {
       setSeries([]);
       setCards({ totalPeriodo: 0, porTipo: {} });
       setDoDia([]);
-
       setKmPeriodo(0);
       setOcorrenciasValidasPeriodo(0);
       setMkbfPeriodo(0);
-
       setMkbfAnoSerie([]);
       setKmAnoTotal(0);
       setOcorrAnoTotal(0);
       setMkbfAno(0);
-
-      const base = {};
-      TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
-      setDiaPorTipo(base);
     } finally {
       setLoading(false);
     }
@@ -475,17 +434,12 @@ export default function SOSDashboard() {
     return TIPOS_GRAFICO.map((t) => ({ tipo: t, valor: porTipo[t] || 0 }));
   }, [cards]);
 
-  // classes para modo TV
-  const shellClass = modoExibicao
-    ? "w-screen h-screen overflow-hidden p-2"
-    : "max-w-7xl mx-auto p-6";
-
+  const shellClass = modoExibicao ? "w-screen h-screen overflow-hidden p-2" : "max-w-7xl mx-auto p-6";
   const chartHeightMain = modoExibicao ? 260 : 320;
   const chartHeightAno = modoExibicao ? 220 : 260;
 
   return (
     <div className={shellClass}>
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <h1 className={modoExibicao ? "text-xl font-bold text-gray-800" : "text-2xl font-bold text-gray-800"}>
           Dashboard - Intervenções
@@ -535,20 +489,15 @@ export default function SOSDashboard() {
                 Tempo real
               </label>
             </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                id="tv"
-                type="checkbox"
-                checked={modoExibicao}
-                onChange={(e) => setModoExibicao(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="tv" className="text-sm text-gray-700">
-                Modo Exibição
-              </label>
-            </div>
           </div>
+
+          <button
+            onClick={() => setModoExibicao((v) => !v)}
+            className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-900 flex items-center gap-2"
+            type="button"
+          >
+            {modoExibicao ? "Sair do Modo Exibição" : "Modo Exibição"}
+          </button>
 
           <button
             onClick={fetchDashboard}
@@ -570,17 +519,12 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {erro && (
-        <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded">
-          {erro}
-        </div>
-      )}
+      {erro && <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded">{erro}</div>}
 
-      {/* LAYOUT: esquerda KPI + MKBF ano | direita resumo do dia (cards empilhados) */}
+      {/* LAYOUT: esquerda KPI | direita cards do período */}
       <div className={modoExibicao ? "grid grid-cols-2 gap-2 mb-2" : "grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3"}>
         {/* ESQUERDA */}
         <div className="space-y-3">
-          {/* KPI topo (KM + MKBF período + MKBF ano) */}
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white shadow rounded-lg p-3">
               <p className="text-xs text-gray-500">KM rodado (período)</p>
@@ -611,7 +555,6 @@ export default function SOSDashboard() {
             </div>
           </div>
 
-          {/* MKBF do ano (linhas) */}
           <div className="bg-white shadow rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-800">MKBF do ano (por mês)</h2>
@@ -632,56 +575,31 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* DIREITA: Intervenções do dia (cards verticais com cores) */}
-        <div className="bg-white shadow rounded-lg p-3 flex flex-col">
+        {/* DIREITA: Intervenções (período) empilhadas com cores */}
+        <div className="bg-white shadow rounded-lg p-3">
           <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="font-semibold text-gray-800">Resumo do dia</h2>
-              <p className="text-xs text-gray-500">Hoje: {hoje}</p>
-            </div>
-            <div className="text-xs text-gray-500">
+            <h2 className="font-semibold text-gray-800">Intervenções (período)</h2>
+            <span className="text-xs text-gray-500">
               {lastUpdate ? lastUpdate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}
-            </div>
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-2">
-            {TIPOS_GRAFICO.map((t) => (
+          <div className="space-y-2">
+            <div className="bg-gray-50 border rounded-lg p-3 flex items-center justify-between">
+              <span className="text-sm text-gray-600">Total (período)</span>
+              <span className="text-2xl font-bold text-gray-800">{cards.totalPeriodo || 0}</span>
+            </div>
+
+            {tipoCardsPeriodo.map((c) => (
               <div
-                key={t}
+                key={c.tipo}
                 className="rounded-lg p-3 text-white flex items-center justify-between"
-                style={{ backgroundColor: COLORS[t] }}
+                style={{ backgroundColor: COLORS[c.tipo] }}
               >
-                <span className="font-semibold">{t}</span>
-                <span className="text-2xl font-bold">{diaPorTipo?.[t] || 0}</span>
+                <span className="font-semibold">{c.tipo}</span>
+                <span className="text-2xl font-bold">{c.valor}</span>
               </div>
             ))}
-          </div>
-
-          <div className="mt-2 bg-gray-50 border rounded-lg p-2 text-sm text-gray-700 flex items-center justify-between">
-            <span className="font-semibold">Total (hoje)</span>
-            <span className="font-bold">{doDia.length}</span>
-          </div>
-
-          {/* Cards do período (empilhados) */}
-          <div className="mt-3">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2">Intervenções (período)</h3>
-            <div className="space-y-2">
-              <div className="bg-white border rounded-lg p-3 flex items-center justify-between">
-                <span className="text-sm text-gray-600">Total (período)</span>
-                <span className="text-xl font-bold text-gray-800">{cards.totalPeriodo || 0}</span>
-              </div>
-
-              {tipoCardsPeriodo.map((c) => (
-                <div
-                  key={c.tipo}
-                  className="rounded-lg p-3 text-white flex items-center justify-between"
-                  style={{ backgroundColor: COLORS[c.tipo] }}
-                >
-                  <span className="font-semibold">{c.tipo}</span>
-                  <span className="text-xl font-bold">{c.valor}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -713,9 +631,7 @@ export default function SOSDashboard() {
         </div>
 
         {!loading && series.length === 0 && (
-          <div className="mt-2 text-sm text-gray-600">
-            Nenhum registro válido para o gráfico neste período.
-          </div>
+          <div className="mt-2 text-sm text-gray-600">Nenhum registro válido para o gráfico neste período.</div>
         )}
       </div>
 
