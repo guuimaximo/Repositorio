@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// Tipos que você quer no gráfico (ordem do stack)
-const TIPOS = ["TROCA", "SOS", "RA", "RECOLHEU", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
+// ✅ Tipos que vão pro gráfico (SEM "SEGUIU VIAGEM" e SEM "OUTROS")
+const TIPOS_GRAFICO = ["TROCA", "SOS", "RA", "RECOLHEU", "AVARIA", "IMPROCEDENTE"];
 
-// Cores simples (pode ajustar depois)
+// Tipos que podem aparecer na tabela (inclui SEGUIU VIAGEM se vier do banco)
+const TIPOS_TABELA = ["TROCA", "SOS", "RA", "RECOLHEU", "AVARIA", "IMPROCEDENTE", "SEGUIU VIAGEM"];
+
 const COLORS = {
   TROCA: "#16a34a",
   SOS: "#ef4444",
@@ -15,12 +26,9 @@ const COLORS = {
   RECOLHEU: "#2563eb",
   AVARIA: "#06b6d4",
   IMPROCEDENTE: "#6b7280",
-  "SEGUIU VIAGEM": "#22c55e",
-  OUTROS: "#9ca3af",
 };
 
 function todayYMD_SP() {
-  // Retorna YYYY-MM-DD em America/Sao_Paulo, sem depender de timezone do servidor
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
@@ -35,7 +43,6 @@ function todayYMD_SP() {
 }
 
 function monthRange(ym) {
-  // ym = "YYYY-MM"
   if (!ym) return { start: "", end: "" };
   const [y, m] = ym.split("-").map(Number);
   if (!y || !m) return { start: "", end: "" };
@@ -55,30 +62,33 @@ function monthRange(ym) {
 
 function normalizeTipo(oc) {
   const o = String(oc || "").toUpperCase().trim();
-  if (!o) return "OUTROS";
-  if (TIPOS.includes(o)) return o;
+  if (!o) return ""; // ✅ vazio = sem ocorrência
 
-  // Mapeamentos comuns (caso venha variação)
+  if (TIPOS_TABELA.includes(o)) return o;
+
+  // mapeamentos comuns
   if (o.includes("RECOLH")) return "RECOLHEU";
   if (o.includes("IMPRO")) return "IMPROCEDENTE";
   if (o.includes("TROC")) return "TROCA";
   if (o === "S.O.S") return "SOS";
 
-  return "OUTROS";
+  // não quero OUTROS no gráfico; na tabela pode mostrar o texto normalizado
+  return o;
+}
+
+function labelOcorrenciaTabela(oc) {
+  const n = normalizeTipo(oc);
+  return n ? n : "FECHAR ETIQUETA"; // ✅ regra pedida
 }
 
 export default function SOSDashboard() {
-  const [mesRef, setMesRef] = useState(() => {
-    const ymd = todayYMD_SP();
-    return ymd.slice(0, 7); // YYYY-MM
-  });
-
+  const [mesRef, setMesRef] = useState(() => todayYMD_SP().slice(0, 7)); // YYYY-MM
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
-  const [series, setSeries] = useState([]); // gráfico
+  const [series, setSeries] = useState([]);
   const [cards, setCards] = useState({ totalMes: 0, porTipo: {} });
-  const [doDia, setDoDia] = useState([]); // tabela do dia
+  const [doDia, setDoDia] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
 
   const [realtimeOn, setRealtimeOn] = useState(true);
@@ -94,7 +104,7 @@ export default function SOSDashboard() {
     setErro("");
 
     try {
-      // 1) Buscar dados do mês (somente colunas necessárias)
+      // MÊS: só o que precisa para o gráfico + cards
       const { data: mesData, error: mesErr } = await supabase
         .from("sos_acionamentos")
         .select("id, data_sos, ocorrencia")
@@ -103,49 +113,53 @@ export default function SOSDashboard() {
 
       if (mesErr) throw mesErr;
 
-      // 2) Buscar intervenções do dia (tabela)
+      // DIA: tabela completa (mostra tudo)
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
-        .select(
-          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, local_ocorrencia, ocorrencia, sr_numero, problema_encontrado, status"
-        )
+        .select("id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, local_ocorrencia, ocorrencia, status")
         .eq("data_sos", hoje)
         .order("hora_sos", { ascending: true });
 
       if (diaErr) throw diaErr;
 
       // ------------------------
-      // Monta gráfico empilhado
+      // Gráfico: apenas TIPOS_GRAFICO, sem "SEGUIU VIAGEM" e sem vazios
+      // + remove dias zerados
       // ------------------------
-      const byDay = new Map(); // day -> { day, TROCA:0, SOS:0, ... }
+      const byDay = new Map();
 
       (mesData || []).forEach((r) => {
-        const day = r.data_sos; // YYYY-MM-DD (DATE)
+        const day = r.data_sos; // DATE: YYYY-MM-DD
         if (!day) return;
+
+        const tipo = normalizeTipo(r.ocorrencia);
+
+        // ✅ ignora vazio e ignora tipos fora do gráfico
+        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
 
         if (!byDay.has(day)) {
           const base = { day };
-          TIPOS.forEach((t) => (base[t] = 0));
-          base.OUTROS = 0;
+          TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
           byDay.set(day, base);
         }
 
-        const tipo = normalizeTipo(r.ocorrencia);
         byDay.get(day)[tipo] = (byDay.get(day)[tipo] || 0) + 1;
       });
 
-      // Ordena dias
-      const chart = Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day));
+      // Ordena e remove dia sem nada (por segurança)
+      const chart = Array.from(byDay.values())
+        .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
+        .sort((a, b) => a.day.localeCompare(b.day));
 
       // ------------------------
-      // Cards
+      // Cards: também sem SEGUIU VIAGEM e sem vazios (mantém alinhado ao gráfico)
       // ------------------------
       const porTipo = {};
-      TIPOS.forEach((t) => (porTipo[t] = 0));
-      porTipo.OUTROS = 0;
+      TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
       (mesData || []).forEach((r) => {
         const tipo = normalizeTipo(r.ocorrencia);
+        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
         porTipo[tipo] = (porTipo[tipo] || 0) + 1;
       });
 
@@ -166,7 +180,6 @@ export default function SOSDashboard() {
   }
 
   function scheduleReload() {
-    // debounce para evitar vários reloads em sequência
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchDashboard();
@@ -174,12 +187,10 @@ export default function SOSDashboard() {
   }
 
   function setupRealtime() {
-    // limpa canal anterior
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-
     if (!realtimeOn) return;
 
     channelRef.current = supabase
@@ -187,9 +198,7 @@ export default function SOSDashboard() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sos_acionamentos" },
-        () => {
-          scheduleReload();
-        }
+        () => scheduleReload()
       )
       .subscribe();
   }
@@ -200,7 +209,6 @@ export default function SOSDashboard() {
   }, []);
 
   useEffect(() => {
-    // ao trocar mês
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesRef]);
@@ -216,18 +224,21 @@ export default function SOSDashboard() {
   function exportExcel() {
     const wb = XLSX.utils.book_new();
 
-    // Aba 1: do dia
-    const wsDia = XLSX.utils.json_to_sheet(doDia || []);
+    // Aba 1: intervenções do dia (tudo)
+    const wsDia = XLSX.utils.json_to_sheet((doDia || []).map((r) => ({
+      ...r,
+      ocorrencia_exibida: labelOcorrenciaTabela(r.ocorrencia),
+    })));
     XLSX.utils.book_append_sheet(wb, wsDia, "Intervencoes_do_dia");
 
-    // Aba 2: série do gráfico
+    // Aba 2: gráfico
     const wsSerie = XLSX.utils.json_to_sheet(series || []);
     XLSX.utils.book_append_sheet(wb, wsSerie, "Grafico_por_dia");
 
-    // Aba 3: resumo cards
+    // Aba 3: resumo
     const resumo = [
       { chave: "Mes", valor: mesRef },
-      { chave: "Total_intervencoes_mes", valor: cards.totalMes || 0 },
+      { chave: "Total_mes", valor: cards.totalMes || 0 },
       ...Object.entries(cards.porTipo || {}).map(([k, v]) => ({ chave: k, valor: v })),
     ];
     const wsResumo = XLSX.utils.json_to_sheet(resumo);
@@ -239,8 +250,7 @@ export default function SOSDashboard() {
 
   const tipoCards = useMemo(() => {
     const porTipo = cards.porTipo || {};
-    const list = [...TIPOS, "OUTROS"].map((t) => ({ tipo: t, valor: porTipo[t] || 0 }));
-    return list;
+    return TIPOS_GRAFICO.map((t) => ({ tipo: t, valor: porTipo[t] || 0 }));
   }, [cards]);
 
   return (
@@ -309,14 +319,14 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {/* Cards */}
+      {/* Cards (somente tipos do gráfico) */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         <div className="bg-white shadow rounded-lg p-4">
           <p className="text-xs text-gray-500">Intervenções (mês)</p>
           <p className="text-2xl font-bold text-gray-800">{cards.totalMes || 0}</p>
         </div>
 
-        {tipoCards.slice(0, 5).map((c) => (
+        {tipoCards.map((c) => (
           <div key={c.tipo} className="bg-white shadow rounded-lg p-4">
             <p className="text-xs text-gray-500">{c.tipo}</p>
             <p className="text-2xl font-bold text-gray-800">{c.valor}</p>
@@ -339,13 +349,18 @@ export default function SOSDashboard() {
               <YAxis allowDecimals={false} />
               <Tooltip />
               <Legend />
-              {TIPOS.map((t) => (
+              {TIPOS_GRAFICO.map((t) => (
                 <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} />
               ))}
-              <Bar dataKey="OUTROS" stackId="a" fill={COLORS.OUTROS} />
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {!loading && series.length === 0 && (
+          <div className="mt-3 text-sm text-gray-600">
+            Nenhum registro válido para o gráfico neste mês (somente TROCA/SOS/RA/RECOLHEU/AVARIA/IMPROCEDENTE entram no gráfico).
+          </div>
+        )}
       </div>
 
       {/* Tabela do dia */}
@@ -390,7 +405,7 @@ export default function SOSDashboard() {
                     <td className="py-3 px-4">{r.motorista_nome ?? "—"}</td>
                     <td className="py-3 px-4">{r.linha ?? "—"}</td>
                     <td className="py-3 px-4">{r.local_ocorrencia ?? "—"}</td>
-                    <td className="py-3 px-4">{normalizeTipo(r.ocorrencia)}</td>
+                    <td className="py-3 px-4">{labelOcorrenciaTabela(r.ocorrencia)}</td>
                     <td className="py-3 px-4">{r.status ?? "—"}</td>
                   </tr>
                 ))
