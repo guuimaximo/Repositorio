@@ -84,6 +84,14 @@ function labelOcorrenciaTabela(oc) {
   return n ? n : "FECHAR ETIQUETA";
 }
 
+// ✅ MKBF: ocorrência válida = tudo exceto vazio e SEGUIU VIAGEM
+function isOcorrenciaValidaParaMKBF(oc) {
+  const tipo = normalizeTipo(oc);
+  if (!tipo) return false;
+  if (tipo === "SEGUIU VIAGEM") return false;
+  return true;
+}
+
 // ✅ Buscar TODOS os registros do período (para Excel)
 // faz paginação com range() para não estourar limite
 async function fetchAllPeriodo({ dataInicio, dataFim }) {
@@ -132,6 +140,11 @@ export default function SOSDashboard() {
 
   const [realtimeOn, setRealtimeOn] = useState(true);
 
+  // ✅ ETAPA 3: KM + MKBF
+  const [kmPeriodo, setKmPeriodo] = useState(0);
+  const [ocorrenciasValidasPeriodo, setOcorrenciasValidasPeriodo] = useState(0);
+  const [mkbfPeriodo, setMkbfPeriodo] = useState(0);
+
   const debounceRef = useRef(null);
   const channelRef = useRef(null);
 
@@ -160,10 +173,34 @@ export default function SOSDashboard() {
 
       if (periodoErr) throw periodoErr;
 
+      // ✅ ETAPA 3: KM do período (tabela km_rodado_diario)
+      const { data: kmData, error: kmErr } = await supabase
+        .from("km_rodado_diario")
+        .select("km_total, data")
+        .gte("data", dataInicio)
+        .lte("data", dataFim);
+
+      if (kmErr) throw kmErr;
+
+      const kmSum = (kmData || []).reduce((acc, r) => acc + (Number(r.km_total) || 0), 0);
+
+      // ✅ ETAPA 3: ocorrências válidas para MKBF (exceto SEGUIU VIAGEM e vazio)
+      const ocorrValidas = (periodoData || []).reduce((acc, r) => {
+        return acc + (isOcorrenciaValidaParaMKBF(r.ocorrencia) ? 1 : 0);
+      }, 0);
+
+      const mkbf = ocorrValidas > 0 ? kmSum / ocorrValidas : 0;
+
+      setKmPeriodo(kmSum);
+      setOcorrenciasValidasPeriodo(ocorrValidas);
+      setMkbfPeriodo(mkbf);
+
       // DIA: tabela completa (mostra tudo)
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
-        .select("id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, local_ocorrencia, ocorrencia, status")
+        .select(
+          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, local_ocorrencia, ocorrencia, status"
+        )
         .eq("data_sos", hoje)
         .order("hora_sos", { ascending: true });
 
@@ -219,6 +256,9 @@ export default function SOSDashboard() {
       setSeries([]);
       setCards({ totalPeriodo: 0, porTipo: {} });
       setDoDia([]);
+      setKmPeriodo(0);
+      setOcorrenciasValidasPeriodo(0);
+      setMkbfPeriodo(0);
     } finally {
       setLoading(false);
     }
@@ -298,6 +338,9 @@ export default function SOSDashboard() {
         { chave: "Periodo_fim", valor: dataFim },
         { chave: "Total_periodo", valor: cards.totalPeriodo || 0 },
         ...Object.entries(cards.porTipo || {}).map(([k, v]) => ({ chave: k, valor: v })),
+        { chave: "KM_rodado_periodo", valor: Number(kmPeriodo || 0) },
+        { chave: "Ocorrencias_validas_MKBF", valor: Number(ocorrenciasValidasPeriodo || 0) },
+        { chave: "MKBF", valor: Number(mkbfPeriodo || 0) },
       ];
       const wsResumo = XLSX.utils.json_to_sheet(resumo);
       XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
@@ -395,8 +438,12 @@ export default function SOSDashboard() {
       )}
 
       <div className="text-sm text-gray-600 mb-4">
-        <div><strong>Período:</strong> {dataInicio} até {dataFim}</div>
-        <div><strong>Hoje:</strong> {hoje}</div>
+        <div>
+          <strong>Período:</strong> {dataInicio} até {dataFim}
+        </div>
+        <div>
+          <strong>Hoje:</strong> {hoje}
+        </div>
         <div>
           <strong>Última atualização:</strong>{" "}
           {lastUpdate ? lastUpdate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}
@@ -408,6 +455,24 @@ export default function SOSDashboard() {
         <div className="bg-white shadow rounded-lg p-4">
           <p className="text-xs text-gray-500">Intervenções (período)</p>
           <p className="text-2xl font-bold text-gray-800">{cards.totalPeriodo || 0}</p>
+        </div>
+
+        {/* ✅ ETAPA 3: KM + MKBF */}
+        <div className="bg-white shadow rounded-lg p-4">
+          <p className="text-xs text-gray-500">KM rodado (período)</p>
+          <p className="text-2xl font-bold text-gray-800">
+            {Number(kmPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+          </p>
+        </div>
+
+        <div className="bg-white shadow rounded-lg p-4">
+          <p className="text-xs text-gray-500">MKBF (KM / ocorrência)</p>
+          <p className="text-2xl font-bold text-gray-800">
+            {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Ocorrências válidas: <strong>{ocorrenciasValidasPeriodo || 0}</strong>
+          </p>
         </div>
 
         {tipoCards.map((c) => (
@@ -442,8 +507,8 @@ export default function SOSDashboard() {
 
         {!loading && series.length === 0 && (
           <div className="mt-3 text-sm text-gray-600">
-            Nenhum registro válido para o gráfico neste período
-            (somente TROCA/SOS/RECOLHEU/AVARIA/IMPROCEDENTE entram no gráfico).
+            Nenhum registro válido para o gráfico neste período (somente
+            TROCA/SOS/RECOLHEU/AVARIA/IMPROCEDENTE entram no gráfico).
           </div>
         )}
       </div>
@@ -485,7 +550,10 @@ export default function SOSDashboard() {
                 doDia.map((r) => (
                   <tr key={r.id} className="border-t hover:bg-gray-50">
                     <td className="py-3 px-4">{r.numero_sos ?? "—"}</td>
-                    <td className="py-3 px-4">{r.hora_sos ?? "—"}</td>
+                    {/* ✅ ajuste: mostrar somente 00:00 (HH:MM) */}
+                    <td className="py-3 px-4">
+                      {r.hora_sos ? String(r.hora_sos).slice(0, 5) : "—"}
+                    </td>
                     <td className="py-3 px-4">{r.veiculo ?? "—"}</td>
                     <td className="py-3 px-4">{r.motorista_nome ?? "—"}</td>
                     <td className="py-3 px-4">{r.linha ?? "—"}</td>
