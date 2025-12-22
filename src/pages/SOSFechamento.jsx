@@ -3,6 +3,18 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { FaCheckCircle, FaTimes, FaWrench } from "react-icons/fa";
 
+/* =======================
+   AJUSTE DATA (NOVO)
+   - evita “1 dia a menos”
+   - força exibição em São Paulo
+======================= */
+function formatDateBRFromTimestamp(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
 export default function SOSFechamento() {
   const [acionamentos, setAcionamentos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +73,7 @@ export default function SOSFechamento() {
                 <tr key={a.id} className="border-t hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">{a.numero_sos}</td>
                   <td className="py-3 px-4">
-                    {new Date(a.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                    {formatDateBRFromTimestamp(a.created_at)}
                   </td>
                   <td className="py-3 px-4">{a.veiculo}</td>
                   <td className="py-3 px-4">{a.motorista_nome}</td>
@@ -72,7 +84,7 @@ export default function SOSFechamento() {
                       onClick={() => setSelected(a)}
                       className="bg-yellow-400 hover:bg-yellow-500 text-black px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2 font-medium transition"
                     >
-                      <FaWrench className="text-black" /> Fechar Etiqueta 
+                      <FaWrench className="text-black" /> Fechar Etiqueta
                     </button>
                   </td>
                 </tr>
@@ -246,9 +258,7 @@ function FechamentoModal({ sos, onClose, onAtualizar }) {
                 type="text"
                 className="w-full border rounded p-2"
                 value={form.sr_numero}
-                onChange={(e) =>
-                  setForm({ ...form, sr_numero: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, sr_numero: e.target.value })}
                 placeholder="Ex: SR12345"
               />
             </div>
