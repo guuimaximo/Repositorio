@@ -2,10 +2,25 @@
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  FaHome, FaClipboardList, FaTools, FaMoneyBill, FaChevronDown, FaChevronRight,
-  FaPenSquare, FaListAlt, FaWrench, FaClipboardCheck, FaUndo, FaCogs,
-  FaCheckDouble, FaScrewdriver, FaEye, FaUserCog, FaSignOutAlt,
-  FaDownload
+  FaHome,
+  FaClipboardList,
+  FaTools,
+  FaMoneyBill,
+  FaChevronDown,
+  FaChevronRight,
+  FaPenSquare,
+  FaListAlt,
+  FaWrench,
+  FaClipboardCheck,
+  FaUndo,
+  FaCogs,
+  FaCheckDouble,
+  FaScrewdriver,
+  FaEye,
+  FaUserCog,
+  FaSignOutAlt,
+  FaDownload,
+  FaRoad, // ✅ novo ícone
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -15,28 +30,39 @@ const ACCESS = {
   Administrador: "ALL",
   Gestor: [
     "/",
-    "/solicitar", "/central",
-    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias", "/cobrancas",
-    "/sos-solicitacao", "/sos-fechamento", "/sos-tratamento", "/sos-central",
-    "/sos-dashboard", // ✅
-  ],
-  Tratativa: [
-    "/",
-    "/solicitar", "/central",
+    "/solicitar",
+    "/central",
+    "/lancar-avaria",
+    "/avarias-em-revisao",
+    "/aprovar-avarias",
     "/cobrancas",
+    "/sos-solicitacao",
+    "/sos-fechamento",
+    "/sos-tratamento",
+    "/sos-central",
+    "/sos-dashboard",
+    "/km-rodado", // ✅
   ],
+  Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
     "/",
     "/solicitar",
-    "/lancar-avaria", "/avarias-em-revisao", "/aprovar-avarias",
-    "/sos-fechamento", "/sos-tratamento", "/sos-central",
-    "/sos-dashboard", // ✅
+    "/lancar-avaria",
+    "/avarias-em-revisao",
+    "/aprovar-avarias",
+    "/sos-fechamento",
+    "/sos-tratamento",
+    "/sos-central",
+    "/sos-dashboard",
+    "/km-rodado", // ✅
   ],
   CCO: [
     "/",
     "/solicitar",
-    "/sos-solicitacao", "/sos-fechamento",
-    "/sos-dashboard", // ✅ ADICIONADO (Intervenções > Dashboard)
+    "/sos-solicitacao",
+    "/sos-fechamento",
+    "/sos-dashboard",
+    "/km-rodado", // ✅
   ],
 };
 
@@ -81,7 +107,8 @@ export default function Sidebar() {
         { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },
         { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
         { path: "/sos-central", label: "Central", icon: <FaEye /> },
-        { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> }, // ✅
+        { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> },
+        { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> }, // ✅ NOVO LINK
       ],
 
       configuracoes: [{ path: "/usuarios", label: "Usuários", icon: <FaUserCog /> }],
@@ -117,9 +144,7 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">
-              Olá, {user.nome?.split(" ")[0]} 👋
-            </p>
+            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
           </div>
         )}
