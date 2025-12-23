@@ -3,6 +3,34 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
 
+// ✅ pega data/hora no fuso de São Paulo (para salvar no banco sem +3h)
+function nowSP() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (t) => parts.find((p) => p.type === t)?.value;
+
+  const yyyy = get("year");
+  const mm = get("month");
+  const dd = get("day");
+  const hh = get("hour");
+  const mi = get("minute");
+  const ss = get("second");
+
+  return {
+    data_sos: `${yyyy}-${mm}-${dd}`, // YYYY-MM-DD
+    hora_sos: `${hh}:${mi}:${ss}`,   // HH:MM:SS
+  };
+}
+
 export default function SolicitacaoSOS() {
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [form, setForm] = useState({
@@ -22,13 +50,24 @@ export default function SolicitacaoSOS() {
 
   const agora = new Date();
   const dataAtual = agora.toLocaleDateString("pt-BR");
-  const horaAtual = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const horaAtual = agora.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   useEffect(() => {
     async function carregarListas() {
-      const { data: linhasData } = await supabase.from("linhas").select("codigo, descricao").order("codigo");
-      const { data: tabelasData } = await supabase.from("tabelas_operacionais").select("codigo, descricao");
-      const { data: prefixosData } = await supabase.from("prefixos").select("codigo").order("codigo");
+      const { data: linhasData } = await supabase
+        .from("linhas")
+        .select("codigo, descricao")
+        .order("codigo");
+      const { data: tabelasData } = await supabase
+        .from("tabelas_operacionais")
+        .select("codigo, descricao");
+      const { data: prefixosData } = await supabase
+        .from("prefixos")
+        .select("codigo")
+        .order("codigo");
       setLinhas(linhasData || []);
       setTabelas(tabelasData || []);
       setPrefixos(prefixosData || []);
@@ -58,6 +97,9 @@ export default function SolicitacaoSOS() {
 
     setLoading(true);
     try {
+      // ✅ data/hora SP no momento do clique (evita salvar +3h no Supabase)
+      const { data_sos, hora_sos } = nowSP();
+
       const payload = {
         numero_sos: numeroSOS,
         plantonista: form.plantonista,
@@ -69,6 +111,10 @@ export default function SolicitacaoSOS() {
         linha: form.linha,
         tabela_operacional: form.tabela_operacional,
         status: "Aberto",
+
+        // ✅ campos corretos para o dashboard
+        data_sos,
+        hora_sos,
       };
 
       const { error } = await supabase.from("sos_acionamentos").insert(payload);
@@ -99,7 +145,9 @@ export default function SolicitacaoSOS() {
 
   return (
     <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">Acionamentos de Intervenção - Operação</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">
+        Acionamentos de Intervenção - Operação
+      </h1>
 
       {/* Cabeçalho */}
       <div className="flex justify-between mb-4">
@@ -109,7 +157,9 @@ export default function SolicitacaoSOS() {
         </div>
         <div className="text-right">
           <p className="text-sm text-gray-500">Data e Hora</p>
-          <p className="text-xl font-semibold text-gray-700">{dataAtual} • {horaAtual}</p>
+          <p className="text-xl font-semibold text-gray-700">
+            {dataAtual} • {horaAtual}
+          </p>
         </div>
       </div>
 
@@ -135,7 +185,9 @@ export default function SolicitacaoSOS() {
           >
             <option value="">Selecione...</option>
             {prefixos.map((p) => (
-              <option key={p.codigo} value={p.codigo}>{p.codigo}</option>
+              <option key={p.codigo} value={p.codigo}>
+                {p.codigo}
+              </option>
             ))}
           </select>
         </div>
