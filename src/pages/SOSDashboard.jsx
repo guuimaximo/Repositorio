@@ -403,9 +403,10 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
+  // ✅ scroll fixo no modo normal para evitar “pulo” do ResponsiveContainer
   const shell = modoExibicao
     ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
-    : "min-h-screen bg-[#0b0f14] text-white p-3";
+    : "min-h-screen bg-[#0b0f14] text-white p-3 overflow-y-scroll";
 
   const panel = "border border-white/20 rounded-2xl bg-black/20 backdrop-blur-sm";
   const smallText = "text-xs text-white/70";
@@ -425,7 +426,6 @@ export default function SOSDashboard() {
         {/* TOP BAR */}
         <div className="flex items-center justify-between" style={{ minHeight: 0 }}>
           <div className="flex items-center gap-2">
-            {/* ✅ Período do mês atual (select) - se quiser esconder no modo exibição, coloque !modoExibicao */}
             <select
               value={mesRef}
               onChange={(e) => setMesRef(e.target.value)}
@@ -595,8 +595,15 @@ export default function SOSDashboard() {
                 </div>
               </div>
 
-              <div className="min-h-0" style={{ height: "calc(100% - 34px)" }}>
-                <ResponsiveContainer>
+              {/* ✅ TRAVA altura no modo normal para parar de “cair” */}
+              <div
+                className="min-h-0"
+                style={{
+                  height: modoExibicao ? "calc(100% - 34px)" : 380,
+                  marginTop: 6,
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={series}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -614,8 +621,20 @@ export default function SOSDashboard() {
                       axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
                       tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
                     />
-                    <Tooltip />
-                    <Legend />
+
+                    <Tooltip
+                      wrapperStyle={{ outline: "none" }}
+                      contentStyle={{
+                        background: "rgba(10,12,16,0.95)",
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        color: "white",
+                      }}
+                      labelStyle={{ color: "rgba(255,255,255,0.85)" }}
+                    />
+
+                    {/* ✅ fixa altura da legenda para não empurrar o chart */}
+                    <Legend verticalAlign="bottom" height={28} />
+
                     {TIPOS_GRAFICO.map((t) => (
                       <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
                         <LabelList
@@ -710,7 +729,9 @@ export default function SOSDashboard() {
 
           {modoExibicao && (
             <div className="mt-2 text-[11px] text-white/50">
-              Observação: o navegador não permite acionar F11 automaticamente. Este modo usa Fullscreen; se precisar ocultar a barra do navegador, use F11 manualmente.
+              Observação: o navegador não permite acionar F11 automaticamente. Este
+              modo usa Fullscreen; se precisar ocultar a barra do navegador, use F11
+              manualmente.
             </div>
           )}
         </div>
