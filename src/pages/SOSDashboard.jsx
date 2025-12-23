@@ -127,9 +127,8 @@ async function fetchAllPeriodo({ dataInicio, dataFim }) {
 // ===== Fullscreen helpers (mais compatível) =====
 async function enterFullscreen(el) {
   try {
-    if (document.fullscreenElement) return;
-
     const target = el || document.documentElement;
+    if (document.fullscreenElement) return;
 
     if (target.requestFullscreen) return await target.requestFullscreen();
     if (target.webkitRequestFullscreen) return target.webkitRequestFullscreen();
@@ -325,30 +324,37 @@ export default function SOSDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeOn]);
 
-  // ✅ fullscreen após render (evita “cair”)
+  // ✅ MODO EXIBIÇÃO: controla fullscreen sem “cair” para o layout normal
+  const modoRef = useRef(false);
   useEffect(() => {
-    const el = fsRef.current;
-    if (modoExibicao) {
-      const t = setTimeout(() => enterFullscreen(el), 50);
-      return () => clearTimeout(t);
-    }
-    exitFullscreen();
+    modoRef.current = modoExibicao;
   }, [modoExibicao]);
 
-  // ✅ sincroniza estado com ESC
+  // ✅ Se usuário apertar ESC e sair do fullscreen, derruba o modo exibição (só quando realmente saiu)
   useEffect(() => {
     const onFsChange = () => {
-      if (!document.fullscreenElement && modoExibicao) {
+      const isFs = !!document.fullscreenElement;
+      if (!isFs && modoRef.current) {
         setModoExibicao(false);
       }
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, [modoExibicao]);
+  }, []);
 
-  function toggleModoExibicao() {
-    setModoExibicao((v) => !v);
-  }
+  const toggleModoExibicao = useCallback(async () => {
+    const el = fsRef.current;
+    if (!modoRef.current) {
+      // entrar
+      setModoExibicao(true);
+      // garante layout renderizado antes de pedir fullscreen
+      setTimeout(() => enterFullscreen(el), 50);
+    } else {
+      // sair
+      await exitFullscreen();
+      setModoExibicao(false);
+    }
+  }, []);
 
   async function exportExcelPeriodo() {
     if (!dataInicio || !dataFim) return;
@@ -412,8 +418,7 @@ export default function SOSDashboard() {
   const smallText = "text-xs text-white/70";
   const titleText = "text-sm font-semibold text-white/85";
 
-  // ✅ layout do modo exibição: 1 tela, SEM sidebar (igual seu pedido)
-  // Top bar + (gráfico) + (tabela do dia)
+  // ✅ MODO EXIBIÇÃO (igual ao seu print desejado): 1 tela, SEM sidebar, gráfico em cima, tabela em baixo
   const ExibicaoLayout = (
     <div
       className="h-screen w-screen p-2 grid grid-rows-[auto_1fr_1fr] gap-2"
@@ -476,6 +481,7 @@ export default function SOSDashboard() {
               <span className="font-semibold text-white">{acumuladoDia}</span>
             </div>
           </div>
+
           <div className={smallText}>
             {lastUpdate
               ? lastUpdate.toLocaleString("pt-BR", {
@@ -485,7 +491,11 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        <div style={{ width: "100%", height: "calc(100% - 34px)", marginTop: 6 }}>
+        {/* ✅ altura controlada e estável no fullscreen (evita “cair”) */}
+        <div
+          className="min-h-0"
+          style={{ width: "100%", height: "calc(100% - 34px)", marginTop: 6 }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={series}>
               <CartesianGrid
@@ -541,7 +551,10 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        <div className="min-h-0 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
+        <div
+          className="min-h-0 overflow-auto"
+          style={{ height: "calc(100% - 42px)" }}
+        >
           <table className="min-w-full text-sm">
             <thead
               className="sticky top-0"
@@ -580,8 +593,12 @@ export default function SOSDashboard() {
                     <td className="py-2 px-3">
                       {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
                     </td>
-                    <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
-                    <td className="py-2 px-3">{labelOcorrenciaTabela(r.ocorrencia)}</td>
+                    <td className="py-2 px-3">
+                      {r.reclamacao_motorista ?? "—"}
+                    </td>
+                    <td className="py-2 px-3">
+                      {labelOcorrenciaTabela(r.ocorrencia)}
+                    </td>
                   </tr>
                 ))
               )}
@@ -863,7 +880,9 @@ export default function SOSDashboard() {
                       <td className="py-2 px-3">
                         {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
                       </td>
-                      <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
+                      <td className="py-2 px-3">
+                        {r.reclamacao_motorista ?? "—"}
+                      </td>
                       <td className="py-2 px-3">
                         {labelOcorrenciaTabela(r.ocorrencia)}
                       </td>
