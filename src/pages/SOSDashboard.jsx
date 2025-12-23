@@ -403,339 +403,484 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
-  // ✅ scroll fixo no modo normal para evitar “pulo” do ResponsiveContainer
   const shell = modoExibicao
     ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
     : "min-h-screen bg-[#0b0f14] text-white p-3 overflow-y-scroll";
 
-  const panel = "border border-white/20 rounded-2xl bg-black/20 backdrop-blur-sm";
+  const panel =
+    "border border-white/20 rounded-2xl bg-black/20 backdrop-blur-sm";
   const smallText = "text-xs text-white/70";
   const titleText = "text-sm font-semibold text-white/85";
 
-  return (
-    <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>
-      {/* ✅ Grid geral: TOP / MID / BOTTOM */}
-      <div
-        className={
-          modoExibicao
-            ? "h-screen w-screen p-2 grid grid-rows-[auto_1fr_1fr] gap-2"
-            : "max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_1fr_1fr] gap-3"
-        }
-        style={{ minHeight: 0 }}
-      >
-        {/* TOP BAR */}
-        <div className="flex items-center justify-between" style={{ minHeight: 0 }}>
-          <div className="flex items-center gap-2">
-            <select
-              value={mesRef}
-              onChange={(e) => setMesRef(e.target.value)}
-              className="bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none"
-              title="Período (mês)"
-            >
-              {Array.from({ length: 12 }).map((_, i) => {
-                const d = new Date();
-                d.setMonth(d.getMonth() - i);
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, "0");
-                const ym = `${y}-${m}`;
-                return (
-                  <option key={ym} value={ym}>
-                    {ym}
-                  </option>
-                );
-              })}
-            </select>
+  // ✅ layout do modo exibição: 1 tela, SEM sidebar (igual seu pedido)
+  // Top bar + (gráfico) + (tabela do dia)
+  const ExibicaoLayout = (
+    <div
+      className="h-screen w-screen p-2 grid grid-rows-[auto_1fr_1fr] gap-2"
+      style={{ minHeight: 0 }}
+    >
+      {/* TOP */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <select
+            value={mesRef}
+            onChange={(e) => setMesRef(e.target.value)}
+            className="bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none"
+          >
+            {Array.from({ length: 12 }).map((_, i) => {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const ym = `${y}-${m}`;
+              return (
+                <option key={ym} value={ym}>
+                  {ym}
+                </option>
+              );
+            })}
+          </select>
 
-            <div className={smallText}>
-              {dataInicio} - {dataFim}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={fetchDashboard}
-              className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
-              disabled={loading}
-              title="Recarregar"
-            >
-              <FaSyncAlt />
-              {loading ? "..." : "Recarregar"}
-            </button>
-
-            {!modoExibicao && (
-              <button
-                onClick={exportExcelPeriodo}
-                className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
-                disabled={loading}
-                title="Baixar Excel"
-              >
-                <FaDownload />
-                Excel
-              </button>
-            )}
-
-            <button
-              onClick={toggleModoExibicao}
-              className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
-              type="button"
-              title="Modo Exibição (tela cheia)"
-            >
-              {modoExibicao ? "Sair do modo" : "Modo Exibição"}
-            </button>
+          <div className={smallText}>
+            {dataInicio} - {dataFim}
           </div>
         </div>
 
-        {erro && (
-          <div className="px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-200 text-sm">
-            {erro}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchDashboard}
+            className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+            disabled={loading}
+          >
+            <FaSyncAlt />
+            {loading ? "..." : "Recarregar"}
+          </button>
 
-        {/* MID: no modo exibição NÃO tem sidebar */}
-        <div
-          className={`grid gap-3 min-h-0 ${
-            modoExibicao ? "grid-cols-1" : "grid-cols-12"
-          }`}
-          style={{ minHeight: 0 }}
-        >
-          {/* SIDEBAR (some no modo exibição) */}
-          {!modoExibicao && (
-            <div className="col-span-4 min-h-0">
-              <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className={titleText}>OCORRÊNCIA</div>
-                  <div className={`${titleText} text-right`}>TOTAL</div>
-                </div>
-
-                <div className="min-h-0 overflow-auto pr-1">
-                  <div className="space-y-2">
-                    {TIPOS_GRAFICO.map((t) => (
-                      <div
-                        key={t}
-                        className="flex items-center justify-between px-3 py-2 rounded-lg"
-                        style={{
-                          background: "rgba(255,255,255,0.06)",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                        }}
-                      >
-                        <span className="text-sm">{t}</span>
-                        <span className="text-sm font-bold">
-                          {cards.porTipo?.[t] || 0}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className={`${panel} p-3`}>
-                      <div className={smallText}>TOTAL</div>
-                      <div className="text-2xl font-extrabold">{totalKPI}</div>
-                    </div>
-
-                    <div className={`${panel} p-3`}>
-                      <div className={smallText}>KM TOTAL</div>
-                      <div className="text-2xl font-extrabold">
-                        {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
-                          maximumFractionDigits: 0,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-2">
-                    <div className={`${panel} p-3`}>
-                      <div className={smallText}>MKBF</div>
-                      <div className="text-3xl font-extrabold">
-                        {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                      <div className={`${smallText} mt-1`}>
-                        Ocorrências:{" "}
-                        <span className="font-semibold text-white">
-                          {ocorrenciasValidasPeriodo || 0}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {!modoExibicao && (
-                    <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
-                      <input
-                        type="checkbox"
-                        checked={realtimeOn}
-                        onChange={(e) => setRealtimeOn(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      Tempo real
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CHART (ocupa tudo no modo exibição) */}
-          <div className={`${modoExibicao ? "col-span-1" : "col-span-8"} min-h-0`}>
-            <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className={titleText}>Intervenções por dia</div>
-                  <div className={smallText}>
-                    Acumulado do dia ({hoje}):{" "}
-                    <span className="font-semibold text-white">{acumuladoDia}</span>
-                  </div>
-                </div>
-                <div className={smallText}>
-                  {lastUpdate
-                    ? lastUpdate.toLocaleString("pt-BR", {
-                        timeZone: "America/Sao_Paulo",
-                      })
-                    : "—"}
-                </div>
-              </div>
-
-              {/* ✅ TRAVA altura no modo normal para parar de “cair” */}
-              <div
-                className="min-h-0"
-                style={{
-                  height: modoExibicao ? "calc(100% - 34px)" : 380,
-                  marginTop: 6,
-                }}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={series}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="rgba(255,255,255,0.12)"
-                    />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
-                      axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                      tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
-                      axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                      tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    />
-
-                    <Tooltip
-                      wrapperStyle={{ outline: "none" }}
-                      contentStyle={{
-                        background: "rgba(10,12,16,0.95)",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        color: "white",
-                      }}
-                      labelStyle={{ color: "rgba(255,255,255,0.85)" }}
-                    />
-
-                    {/* ✅ fixa altura da legenda para não empurrar o chart */}
-                    <Legend verticalAlign="bottom" height={28} />
-
-                    {TIPOS_GRAFICO.map((t) => (
-                      <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
-                        <LabelList
-                          dataKey={t}
-                          position="center"
-                          formatter={(v) => (v > 0 ? v : "")}
-                          fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
-                          fontSize={12}
-                          fontWeight="bold"
-                        />
-                      </Bar>
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {!loading && series.length === 0 && (
-                <div className="mt-2 text-sm text-white/70">
-                  Nenhum registro válido para o gráfico neste período.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* BOTTOM: tabela do dia */}
-        <div className="min-h-0">
-          <div className={`${panel} h-full min-h-0 overflow-hidden`}>
-            <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
-              <div className={titleText}>Intervenções do dia</div>
-              <div className={smallText}>
-                Total hoje:{" "}
-                <span className="font-semibold text-white">{doDia.length}</span>
-              </div>
-            </div>
-
-            <div
-              className="min-h-0 overflow-auto"
-              style={{ height: "calc(100% - 42px)" }}
-            >
-              <table className="min-w-full text-sm">
-                <thead
-                  className="sticky top-0"
-                  style={{ background: "rgba(255,255,255,0.06)" }}
-                >
-                  <tr className="text-white/80">
-                    <th className="py-2 px-3 text-left">ETIQUETA</th>
-                    <th className="py-2 px-3 text-left">DATA</th>
-                    <th className="py-2 px-3 text-left">HORA</th>
-                    <th className="py-2 px-3 text-left">RECLAMAÇÃO</th>
-                    <th className="py-2 px-3 text-left">TIPO OCORRÊNCIA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="5" className="text-center py-6 text-white/70">
-                        Carregando...
-                      </td>
-                    </tr>
-                  ) : doDia.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="text-center py-6 text-white/70">
-                        Nenhuma intervenção encontrada para hoje.
-                      </td>
-                    </tr>
-                  ) : (
-                    doDia.map((r) => (
-                      <tr
-                        key={r.id}
-                        className="border-t"
-                        style={{ borderColor: "rgba(255,255,255,0.10)" }}
-                      >
-                        <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
-                        <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
-                        <td className="py-2 px-3">
-                          {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
-                        </td>
-                        <td className="py-2 px-3">
-                          {r.reclamacao_motorista ?? "—"}
-                        </td>
-                        <td className="py-2 px-3">
-                          {labelOcorrenciaTabela(r.ocorrencia)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {modoExibicao && (
-            <div className="mt-2 text-[11px] text-white/50">
-              Observação: o navegador não permite acionar F11 automaticamente. Este
-              modo usa Fullscreen; se precisar ocultar a barra do navegador, use F11
-              manualmente.
-            </div>
-          )}
+          <button
+            onClick={toggleModoExibicao}
+            className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+            type="button"
+          >
+            Sair do modo
+          </button>
         </div>
       </div>
+
+      {/* CHART */}
+      <div className={`${panel} min-h-0 overflow-hidden p-3`}>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className={titleText}>Intervenções por dia</div>
+            <div className={smallText}>
+              Acumulado do dia ({hoje}):{" "}
+              <span className="font-semibold text-white">{acumuladoDia}</span>
+            </div>
+          </div>
+          <div className={smallText}>
+            {lastUpdate
+              ? lastUpdate.toLocaleString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })
+              : "—"}
+          </div>
+        </div>
+
+        <div style={{ width: "100%", height: "calc(100% - 34px)", marginTop: 6 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={series}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="rgba(255,255,255,0.12)"
+              />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
+                axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
+                axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+              />
+              <Tooltip
+                wrapperStyle={{ outline: "none" }}
+                contentStyle={{
+                  background: "rgba(10,12,16,0.95)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  color: "white",
+                }}
+                labelStyle={{ color: "rgba(255,255,255,0.85)" }}
+              />
+              <Legend verticalAlign="bottom" height={28} />
+              {TIPOS_GRAFICO.map((t) => (
+                <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
+                  <LabelList
+                    dataKey={t}
+                    position="center"
+                    formatter={(v) => (v > 0 ? v : "")}
+                    fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
+                    fontSize={12}
+                    fontWeight="bold"
+                  />
+                </Bar>
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* TABELA */}
+      <div className={`${panel} min-h-0 overflow-hidden`}>
+        <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
+          <div className={titleText}>Intervenções do dia</div>
+          <div className={smallText}>
+            Total hoje:{" "}
+            <span className="font-semibold text-white">{doDia.length}</span>
+          </div>
+        </div>
+
+        <div className="min-h-0 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
+          <table className="min-w-full text-sm">
+            <thead
+              className="sticky top-0"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
+              <tr className="text-white/80">
+                <th className="py-2 px-3 text-left">ETIQUETA</th>
+                <th className="py-2 px-3 text-left">DATA</th>
+                <th className="py-2 px-3 text-left">HORA</th>
+                <th className="py-2 px-3 text-left">RECLAMAÇÃO</th>
+                <th className="py-2 px-3 text-left">TIPO OCORRÊNCIA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="text-center py-6 text-white/70">
+                    Carregando...
+                  </td>
+                </tr>
+              ) : doDia.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="text-center py-6 text-white/70">
+                    Nenhuma intervenção encontrada para hoje.
+                  </td>
+                </tr>
+              ) : (
+                doDia.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="border-t"
+                    style={{ borderColor: "rgba(255,255,255,0.10)" }}
+                  >
+                    <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
+                    <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
+                    <td className="py-2 px-3">
+                      {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
+                    </td>
+                    <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
+                    <td className="py-2 px-3">{labelOcorrenciaTabela(r.ocorrencia)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ✅ layout normal: com sidebar + gráfico + tabela (igual seu print)
+  const NormalLayout = (
+    <div
+      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_1fr_1fr] gap-3"
+      style={{ minHeight: 0 }}
+    >
+      {/* TOP BAR */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <select
+            value={mesRef}
+            onChange={(e) => setMesRef(e.target.value)}
+            className="bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none"
+          >
+            {Array.from({ length: 12 }).map((_, i) => {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const ym = `${y}-${m}`;
+              return (
+                <option key={ym} value={ym}>
+                  {ym}
+                </option>
+              );
+            })}
+          </select>
+
+          <div className={smallText}>
+            {dataInicio} - {dataFim}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchDashboard}
+            className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+            disabled={loading}
+          >
+            <FaSyncAlt />
+            {loading ? "..." : "Recarregar"}
+          </button>
+
+          <button
+            onClick={exportExcelPeriodo}
+            className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+            disabled={loading}
+          >
+            <FaDownload />
+            Excel
+          </button>
+
+          <button
+            onClick={toggleModoExibicao}
+            className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+            type="button"
+          >
+            Modo Exibição
+          </button>
+        </div>
+      </div>
+
+      {erro && (
+        <div className="px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-200 text-sm">
+          {erro}
+        </div>
+      )}
+
+      {/* MID: sidebar + chart */}
+      <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
+        {/* SIDEBAR */}
+        <div className="col-span-4 min-h-0">
+          <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className={titleText}>OCORRÊNCIA</div>
+              <div className={`${titleText} text-right`}>TOTAL</div>
+            </div>
+
+            <div className="min-h-0 overflow-auto pr-1">
+              <div className="space-y-2">
+                {TIPOS_GRAFICO.map((t) => (
+                  <div
+                    key={t}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg"
+                    style={{
+                      background: "rgba(255,255,255,0.06)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                    }}
+                  >
+                    <span className="text-sm">{t}</span>
+                    <span className="text-sm font-bold">
+                      {cards.porTipo?.[t] || 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>TOTAL</div>
+                  <div className="text-2xl font-extrabold">{totalKPI}</div>
+                </div>
+
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>KM TOTAL</div>
+                  <div className="text-2xl font-extrabold">
+                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 0,
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>MKBF</div>
+                  <div className="text-3xl font-extrabold">
+                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  <div className={`${smallText} mt-1`}>
+                    Ocorrências:{" "}
+                    <span className="font-semibold text-white">
+                      {ocorrenciasValidasPeriodo || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
+                <input
+                  type="checkbox"
+                  checked={realtimeOn}
+                  onChange={(e) => setRealtimeOn(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Tempo real
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* CHART */}
+        <div className="col-span-8 min-h-0">
+          <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className={titleText}>Intervenções por dia</div>
+                <div className={smallText}>
+                  Acumulado do dia ({hoje}):{" "}
+                  <span className="font-semibold text-white">{acumuladoDia}</span>
+                </div>
+              </div>
+              <div className={smallText}>
+                {lastUpdate
+                  ? lastUpdate.toLocaleString("pt-BR", {
+                      timeZone: "America/Sao_Paulo",
+                    })
+                  : "—"}
+              </div>
+            </div>
+
+            {/* ✅ altura fixa no modo normal = não “cai” */}
+            <div style={{ width: "100%", height: 380, marginTop: 6 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={series}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.12)"
+                  />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                    tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                    tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                  />
+                  <Tooltip
+                    wrapperStyle={{ outline: "none" }}
+                    contentStyle={{
+                      background: "rgba(10,12,16,0.95)",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      color: "white",
+                    }}
+                    labelStyle={{ color: "rgba(255,255,255,0.85)" }}
+                  />
+                  <Legend verticalAlign="bottom" height={28} />
+                  {TIPOS_GRAFICO.map((t) => (
+                    <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
+                      <LabelList
+                        dataKey={t}
+                        position="center"
+                        formatter={(v) => (v > 0 ? v : "")}
+                        fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
+                        fontSize={12}
+                        fontWeight="bold"
+                      />
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {!loading && series.length === 0 && (
+              <div className="mt-2 text-sm text-white/70">
+                Nenhum registro válido para o gráfico neste período.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* BOTTOM: tabela */}
+      <div className="min-h-0">
+        <div className={`${panel} h-full min-h-0 overflow-hidden`}>
+          <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
+            <div className={titleText}>Intervenções do dia</div>
+            <div className={smallText}>
+              Total hoje:{" "}
+              <span className="font-semibold text-white">{doDia.length}</span>
+            </div>
+          </div>
+
+          <div
+            className="min-h-0 overflow-auto"
+            style={{ height: "calc(100% - 42px)" }}
+          >
+            <table className="min-w-full text-sm">
+              <thead
+                className="sticky top-0"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              >
+                <tr className="text-white/80">
+                  <th className="py-2 px-3 text-left">ETIQUETA</th>
+                  <th className="py-2 px-3 text-left">DATA</th>
+                  <th className="py-2 px-3 text-left">HORA</th>
+                  <th className="py-2 px-3 text-left">RECLAMAÇÃO</th>
+                  <th className="py-2 px-3 text-left">TIPO OCORRÊNCIA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-6 text-white/70">
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : doDia.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-6 text-white/70">
+                      Nenhuma intervenção encontrada para hoje.
+                    </td>
+                  </tr>
+                ) : (
+                  doDia.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-t"
+                      style={{ borderColor: "rgba(255,255,255,0.10)" }}
+                    >
+                      <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
+                      <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
+                      <td className="py-2 px-3">
+                        {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
+                      </td>
+                      <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
+                      <td className="py-2 px-3">
+                        {labelOcorrenciaTabela(r.ocorrencia)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>
+      {modoExibicao ? ExibicaoLayout : NormalLayout}
     </div>
   );
 }
