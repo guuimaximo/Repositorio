@@ -124,12 +124,15 @@ async function fetchAllPeriodo({ dataInicio, dataFim }) {
   return all;
 }
 
-// ===== Fullscreen helpers =====
-async function enterFullscreen() {
+// ===== Fullscreen helpers (mais compatível) =====
+async function enterFullscreen(el) {
   try {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen();
-    }
+    if (document.fullscreenElement) return;
+
+    const target = el || document.documentElement;
+
+    if (target.requestFullscreen) return await target.requestFullscreen();
+    if (target.webkitRequestFullscreen) return target.webkitRequestFullscreen();
   } catch (e) {
     console.warn("Fullscreen bloqueado:", e);
   }
@@ -137,15 +140,18 @@ async function enterFullscreen() {
 
 async function exitFullscreen() {
   try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-    }
+    if (!document.fullscreenElement) return;
+
+    if (document.exitFullscreen) return await document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
   } catch (e) {
     console.warn("Exit fullscreen bloqueado:", e);
   }
 }
 
 export default function SOSDashboard() {
+  const fsRef = useRef(null);
+
   const [mesRef, setMesRef] = useState(() => todayYMD_SP().slice(0, 7)); // YYYY-MM
   const { start: defaultIni, end: defaultFim } = useMemo(
     () => monthRange(mesRef),
@@ -319,7 +325,17 @@ export default function SOSDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeOn]);
 
-  // ✅ sincroniza estado com ESC (usuário sai do fullscreen)
+  // ✅ fullscreen após render (evita “cair”)
+  useEffect(() => {
+    const el = fsRef.current;
+    if (modoExibicao) {
+      const t = setTimeout(() => enterFullscreen(el), 50);
+      return () => clearTimeout(t);
+    }
+    exitFullscreen();
+  }, [modoExibicao]);
+
+  // ✅ sincroniza estado com ESC
   useEffect(() => {
     const onFsChange = () => {
       if (!document.fullscreenElement && modoExibicao) {
@@ -330,12 +346,8 @@ export default function SOSDashboard() {
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, [modoExibicao]);
 
-  async function toggleModoExibicao() {
-    const next = !modoExibicao;
-    setModoExibicao(next);
-
-    if (next) await enterFullscreen();
-    else await exitFullscreen();
+  function toggleModoExibicao() {
+    setModoExibicao((v) => !v);
   }
 
   async function exportExcelPeriodo() {
@@ -391,7 +403,6 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
-  // ======= ESTILO “PRINT” (dark, 1 tela) =======
   const shell = modoExibicao
     ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
     : "min-h-screen bg-[#0b0f14] text-white p-3";
@@ -401,8 +412,8 @@ export default function SOSDashboard() {
   const titleText = "text-sm font-semibold text-white/85";
 
   return (
-    <div className={shell} style={{ minHeight: 0 }}>
-      {/* ✅ Grid geral: TOP / MID / BOTTOM (sem sobreposição) */}
+    <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>
+      {/* ✅ Grid geral: TOP / MID / BOTTOM */}
       <div
         className={
           modoExibicao
@@ -414,6 +425,7 @@ export default function SOSDashboard() {
         {/* TOP BAR */}
         <div className="flex items-center justify-between" style={{ minHeight: 0 }}>
           <div className="flex items-center gap-2">
+            {/* ✅ Período do mês atual (select) - se quiser esconder no modo exibição, coloque !modoExibicao */}
             <select
               value={mesRef}
               onChange={(e) => setMesRef(e.target.value)}
@@ -479,87 +491,92 @@ export default function SOSDashboard() {
           </div>
         )}
 
-        {/* MID: sidebar + chart (ambos sem sobrepor) */}
-        <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
-          {/* SIDEBAR */}
-          <div className="col-span-4 min-h-0">
-            <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className={titleText}>OCORRÊNCIA</div>
-                <div className={`${titleText} text-right`}>TOTAL</div>
-              </div>
-
-              {/* ✅ miolo com scroll para nunca invadir */}
-              <div className="min-h-0 overflow-auto pr-1">
-                <div className="space-y-2">
-                  {TIPOS_GRAFICO.map((t) => (
-                    <div
-                      key={t}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg"
-                      style={{
-                        background: "rgba(255,255,255,0.06)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                      }}
-                    >
-                      <span className="text-sm">{t}</span>
-                      <span className="text-sm font-bold">
-                        {cards.porTipo?.[t] || 0}
-                      </span>
-                    </div>
-                  ))}
+        {/* MID: no modo exibição NÃO tem sidebar */}
+        <div
+          className={`grid gap-3 min-h-0 ${
+            modoExibicao ? "grid-cols-1" : "grid-cols-12"
+          }`}
+          style={{ minHeight: 0 }}
+        >
+          {/* SIDEBAR (some no modo exibição) */}
+          {!modoExibicao && (
+            <div className="col-span-4 min-h-0">
+              <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className={titleText}>OCORRÊNCIA</div>
+                  <div className={`${titleText} text-right`}>TOTAL</div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className={`${panel} p-3`}>
-                    <div className={smallText}>TOTAL</div>
-                    <div className="text-2xl font-extrabold">{totalKPI}</div>
+                <div className="min-h-0 overflow-auto pr-1">
+                  <div className="space-y-2">
+                    {TIPOS_GRAFICO.map((t) => (
+                      <div
+                        key={t}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg"
+                        style={{
+                          background: "rgba(255,255,255,0.06)",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                        }}
+                      >
+                        <span className="text-sm">{t}</span>
+                        <span className="text-sm font-bold">
+                          {cards.porTipo?.[t] || 0}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className={`${panel} p-3`}>
-                    <div className={smallText}>KM TOTAL</div>
-                    <div className="text-2xl font-extrabold">
-                      {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
-                        maximumFractionDigits: 0,
-                      })}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className={`${panel} p-3`}>
+                      <div className={smallText}>TOTAL</div>
+                      <div className="text-2xl font-extrabold">{totalKPI}</div>
+                    </div>
+
+                    <div className={`${panel} p-3`}>
+                      <div className={smallText}>KM TOTAL</div>
+                      <div className="text-2xl font-extrabold">
+                        {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                          maximumFractionDigits: 0,
+                        })}
+                      </div>
                     </div>
                   </div>
+
+                  <div className="mt-2">
+                    <div className={`${panel} p-3`}>
+                      <div className={smallText}>MKBF</div>
+                      <div className="text-3xl font-extrabold">
+                        {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                      <div className={`${smallText} mt-1`}>
+                        Ocorrências:{" "}
+                        <span className="font-semibold text-white">
+                          {ocorrenciasValidasPeriodo || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!modoExibicao && (
+                    <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
+                      <input
+                        type="checkbox"
+                        checked={realtimeOn}
+                        onChange={(e) => setRealtimeOn(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      Tempo real
+                    </label>
+                  )}
                 </div>
-
-                <div className="mt-2">
-                  <div className={`${panel} p-3`}>
-                    <div className={smallText}>MKBF</div>
-                    <div className="text-3xl font-extrabold">
-                      {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
-                    <div className={`${smallText} mt-1`}>
-                      Ocorrências:{" "}
-                      <span className="font-semibold text-white">
-                        {ocorrenciasValidasPeriodo || 0}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* (Opcional) toggle tempo real */}
-                {!modoExibicao && (
-                  <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
-                    <input
-                      type="checkbox"
-                      checked={realtimeOn}
-                      onChange={(e) => setRealtimeOn(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Tempo real
-                  </label>
-                )}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* CHART */}
-          <div className="col-span-8 min-h-0">
+          {/* CHART (ocupa tudo no modo exibição) */}
+          <div className={`${modoExibicao ? "col-span-1" : "col-span-8"} min-h-0`}>
             <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
               <div className="flex items-start justify-between">
                 <div>
@@ -578,7 +595,6 @@ export default function SOSDashboard() {
                 </div>
               </div>
 
-              {/* ✅ área do gráfico ocupa o resto sem estourar */}
               <div className="min-h-0" style={{ height: "calc(100% - 34px)" }}>
                 <ResponsiveContainer>
                   <BarChart data={series}>
@@ -625,7 +641,7 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* BOTTOM: tabela do dia (sem sobrepor) */}
+        {/* BOTTOM: tabela do dia */}
         <div className="min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden`}>
             <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
@@ -636,7 +652,10 @@ export default function SOSDashboard() {
               </div>
             </div>
 
-            <div className="min-h-0 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
+            <div
+              className="min-h-0 overflow-auto"
+              style={{ height: "calc(100% - 42px)" }}
+            >
               <table className="min-w-full text-sm">
                 <thead
                   className="sticky top-0"
@@ -675,7 +694,9 @@ export default function SOSDashboard() {
                         <td className="py-2 px-3">
                           {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
                         </td>
-                        <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
+                        <td className="py-2 px-3">
+                          {r.reclamacao_motorista ?? "—"}
+                        </td>
                         <td className="py-2 px-3">
                           {labelOcorrenciaTabela(r.ocorrencia)}
                         </td>
