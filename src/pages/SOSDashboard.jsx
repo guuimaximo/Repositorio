@@ -14,14 +14,15 @@ import {
 import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// ✅ CORES AJUSTADAS (Baseado no print)
+// ✅ CORES VIVAS (alerta) – bem contrastado no fundo escuro
 const COLORS = {
-  RECOLHEU: "#1d4ed8",    // Azul Escuro forte
-  SOS: "#8b5cf6",         // Roxo vibrante
-  AVARIA: "#38bdf8",      // Azul Ciano/Claro
-  TROCA: "#3b82f6",       // Azul Royal
-  IMPROCEDENTE: "#e5e7eb", // Cinza bem claro/Branco
+  RECOLHEU: "#EF4444",      // vermelho vivo
+  SOS: "#F59E0B",           // amarelo/âmbar vivo
+  AVARIA: "#22C55E",        // verde vivo
+  TROCA: "#3B82F6",         // azul vivo
+  IMPROCEDENTE: "#E5E7EB",  // cinza claro
 };
+
 
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
 
