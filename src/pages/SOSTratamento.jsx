@@ -40,19 +40,21 @@ export default function SOSTratamento() {
               <th className="py-3 px-4 text-left text-sm font-semibold">Motorista</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Linha</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Local</th>
+              {/* ✅ NOVA COLUNA */}
+              <th className="py-3 px-4 text-left text-sm font-semibold">Ocorrência</th>
               <th className="py-3 px-4 text-center text-sm font-semibold">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center py-6 text-gray-600">
+                <td colSpan="8" className="text-center py-6 text-gray-600">
                   Carregando acionamento em andamento...
                 </td>
               </tr>
             ) : acionamentos.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center py-6 text-gray-600">
+                <td colSpan="8" className="text-center py-6 text-gray-600">
                   Nenhuma acionamento em andamento.
                 </td>
               </tr>
@@ -70,6 +72,8 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4">{a.motorista_nome}</td>
                   <td className="py-3 px-4">{a.linha}</td>
                   <td className="py-3 px-4">{a.local_ocorrencia}</td>
+                  {/* ✅ NOVA COLUNA */}
+                  <td className="py-3 px-4">{a.ocorrencia}</td>
                   <td className="py-3 px-4 text-center">
                     <button
                       onClick={() => setSelected(a)}
@@ -122,11 +126,14 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }, []);
 
   function handleSetorChange(setor) {
-    setForm({ ...form, setor_manutencao: setor, grupo_manutencao: "", problema_encontrado: "" });
+    setForm({
+      ...form,
+      setor_manutencao: setor,
+      grupo_manutencao: "",
+      problema_encontrado: "",
+    });
     const gruposUnicos = Array.from(
-      new Set(
-        catalogo.filter((c) => c.setor_macro === setor).map((c) => c.grupo)
-      )
+      new Set(catalogo.filter((c) => c.setor_macro === setor).map((c) => c.grupo))
     );
     setGrupos(gruposUnicos);
   }
@@ -136,7 +143,9 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     const defeitosUnicos = Array.from(
       new Set(
         catalogo
-          .filter((c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo)
+          .filter(
+            (c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo
+          )
           .map((c) => c.defeito)
       )
     );
@@ -285,9 +294,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
               type="text"
               className="w-full border rounded p-2"
               value={form.solucionador}
-              onChange={(e) =>
-                setForm({ ...form, solucionador: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, solucionador: e.target.value })}
               placeholder="Ex: Fernando, Clécio..."
             />
           </div>
