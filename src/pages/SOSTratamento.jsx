@@ -39,7 +39,10 @@ export default function SOSTratamento() {
               <th className="py-3 px-4 text-left text-sm font-semibold">Prefixo</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Motorista</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Linha</th>
-              <th className="py-3 px-4 text-left text-sm font-semibold">Local</th>
+
+              {/* ✅ ALTERADO: Local -> Reclamação */}
+              <th className="py-3 px-4 text-left text-sm font-semibold">Reclamação</th>
+
               <th className="py-3 px-4 text-left text-sm font-semibold">Ocorrência</th>
               <th className="py-3 px-4 text-center text-sm font-semibold">Ações</th>
             </tr>
@@ -70,7 +73,10 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4">{a.veiculo}</td>
                   <td className="py-3 px-4">{a.motorista_nome}</td>
                   <td className="py-3 px-4">{a.linha}</td>
-                  <td className="py-3 px-4">{a.local_ocorrencia}</td>
+
+                  {/* ✅ ALTERADO: agora mostra a coluna reclamacao_motorista */}
+                  <td className="py-3 px-4">{a.reclamacao_motorista}</td>
+
                   <td className="py-3 px-4">{a.ocorrencia}</td>
                   <td className="py-3 px-4 text-center">
                     <button
@@ -300,7 +306,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
         solucao: form.solucao,
         solucionador: form.solucionador,
 
-        // ✅ grava os novos campos
         mecanico_executor: `${form.mecanico_executor.chapa} - ${form.mecanico_executor.nome}`,
         numero_os_corretiva: form.numero_os_corretiva || null,
 
@@ -340,7 +345,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
         {/* Formulário */}
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            {/* Setor */}
             <div>
               <label className="block text-sm text-gray-500 mb-1">
                 Setor de Manutenção <span className="text-red-600">*</span>
@@ -359,7 +363,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
               </select>
             </div>
 
-            {/* Grupo */}
             <div>
               <label className="block text-sm text-gray-500 mb-1">
                 Grupo <span className="text-red-600">*</span>
@@ -380,7 +383,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             </div>
           </div>
 
-          {/* Defeito */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
               Problema encontrado <span className="text-red-600">*</span>
@@ -402,13 +404,11 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             </select>
           </div>
 
-          {/* Mecânico Executor */}
           <CampoMecanico
             value={form.mecanico_executor}
             onChange={(m) => setForm((prev) => ({ ...prev, mecanico_executor: m }))}
           />
 
-          {/* Número da OS Corretiva */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
               Número da OS Corretiva
@@ -424,7 +424,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             />
           </div>
 
-          {/* Solução */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">Solução aplicada</label>
             <textarea
@@ -436,7 +435,6 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             />
           </div>
 
-          {/* Responsável */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
               Responsável pela manutenção <span className="text-red-600">*</span>
