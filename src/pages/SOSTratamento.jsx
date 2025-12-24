@@ -40,7 +40,6 @@ export default function SOSTratamento() {
               <th className="py-3 px-4 text-left text-sm font-semibold">Motorista</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Linha</th>
               <th className="py-3 px-4 text-left text-sm font-semibold">Local</th>
-              {/* ✅ NOVA COLUNA */}
               <th className="py-3 px-4 text-left text-sm font-semibold">Ocorrência</th>
               <th className="py-3 px-4 text-center text-sm font-semibold">Ações</th>
             </tr>
@@ -72,7 +71,6 @@ export default function SOSTratamento() {
                   <td className="py-3 px-4">{a.motorista_nome}</td>
                   <td className="py-3 px-4">{a.linha}</td>
                   <td className="py-3 px-4">{a.local_ocorrencia}</td>
-                  {/* ✅ NOVA COLUNA */}
                   <td className="py-3 px-4">{a.ocorrencia}</td>
                   <td className="py-3 px-4 text-center">
                     <button
@@ -100,6 +98,123 @@ export default function SOSTratamento() {
   );
 }
 
+// ===============================
+// Campo de Mecânico (seleção)
+// ===============================
+// Ajuste aqui se sua tabela/colunas forem diferentes.
+// Padrão assumido:
+//   tabela: "funcionarios"
+//   colunas: "cracha", "nome"
+function CampoMecanico({ value, onChange }) {
+  const [busca, setBusca] = useState(value?.nome || value?.cracha || "");
+  const [opcoes, setOpcoes] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // manter input sincronizado quando o value muda externamente
+    setBusca(value?.nome || value?.cracha || "");
+  }, [value?.nome, value?.cracha]);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function buscar() {
+      const termo = (busca || "").trim();
+      if (termo.length < 2) {
+        setOpcoes([]);
+        return;
+      }
+
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("funcionarios") // <<< AJUSTE SE NECESSÁRIO
+        .select("cracha, nome") // <<< AJUSTE SE NECESSÁRIO
+        .or(`nome.ilike.%${termo}%,cracha.ilike.%${termo}%`)
+        .limit(8);
+
+      if (!alive) return;
+
+      setLoading(false);
+      if (error) {
+        console.error("Erro ao buscar mecânicos:", error);
+        setOpcoes([]);
+        return;
+      }
+
+      setOpcoes(data || []);
+    }
+
+    buscar();
+    return () => {
+      alive = false;
+    };
+  }, [busca]);
+
+  function selecionar(m) {
+    onChange({ cracha: m.cracha, nome: m.nome });
+    setOpcoes([]);
+    setBusca(m.nome || m.cracha);
+  }
+
+  function limpar() {
+    onChange({ cracha: "", nome: "" });
+    setBusca("");
+    setOpcoes([]);
+  }
+
+  return (
+    <div className="relative">
+      <label className="block text-sm text-gray-500 mb-1">
+        Mecânico Executor <span className="text-red-600">*</span>
+      </label>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          className="w-full border rounded p-2"
+          placeholder="Digite nome ou crachá..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={limpar}
+          className="border rounded px-3 text-sm hover:bg-gray-50"
+        >
+          Limpar
+        </button>
+      </div>
+
+      {loading && (
+        <div className="text-xs text-gray-500 mt-1">Buscando...</div>
+      )}
+
+      {opcoes.length > 0 && (
+        <div className="absolute z-50 mt-2 w-full bg-white border rounded shadow-lg overflow-hidden">
+          {opcoes.map((m) => (
+            <button
+              key={m.cracha}
+              type="button"
+              onClick={() => selecionar(m)}
+              className="w-full text-left px-3 py-2 hover:bg-gray-50"
+            >
+              <div className="text-sm font-medium text-gray-800">{m.nome}</div>
+              <div className="text-xs text-gray-500">Crachá: {m.cracha}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {value?.cracha || value?.nome ? (
+        <div className="mt-2 text-xs text-gray-600">
+          Selecionado: <strong>{value.nome}</strong> (Crachá {value.cracha})
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // 🟦 Modal de Tratamento da Manutenção
 function TratamentoModal({ sos, onClose, onAtualizar }) {
   const [form, setForm] = useState({
@@ -108,7 +223,12 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     problema_encontrado: "",
     solucao: "",
     solucionador: "",
+
+    // ✅ NOVOS CAMPOS
+    mecanico_executor: { cracha: "", nome: "" },
+    numero_os_corretiva: "",
   });
+
   const [saving, setSaving] = useState(false);
   const [catalogo, setCatalogo] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -126,12 +246,13 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }, []);
 
   function handleSetorChange(setor) {
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       setor_manutencao: setor,
       grupo_manutencao: "",
       problema_encontrado: "",
-    });
+    }));
+
     const gruposUnicos = Array.from(
       new Set(catalogo.filter((c) => c.setor_macro === setor).map((c) => c.grupo))
     );
@@ -139,13 +260,12 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }
 
   function handleGrupoChange(grupo) {
-    setForm({ ...form, grupo_manutencao: grupo, problema_encontrado: "" });
+    setForm((prev) => ({ ...prev, grupo_manutencao: grupo, problema_encontrado: "" }));
+
     const defeitosUnicos = Array.from(
       new Set(
         catalogo
-          .filter(
-            (c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo
-          )
+          .filter((c) => c.setor_macro === form.setor_manutencao && c.grupo === grupo)
           .map((c) => c.defeito)
       )
     );
@@ -153,11 +273,16 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
   }
 
   async function salvarTratamento() {
+    const mecanicoOk =
+      (form.mecanico_executor?.cracha || "").trim() &&
+      (form.mecanico_executor?.nome || "").trim();
+
     if (
       !form.setor_manutencao ||
       !form.grupo_manutencao ||
       !form.problema_encontrado ||
-      !form.solucionador
+      !form.solucionador ||
+      !mecanicoOk
     ) {
       alert("Preencha todos os campos obrigatórios!");
       return;
@@ -173,6 +298,11 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
         problema_encontrado: form.problema_encontrado,
         solucao: form.solucao,
         solucionador: form.solucionador,
+
+        // ✅ grava os novos campos
+        mecanico_executor: `${form.mecanico_executor.cracha} - ${form.mecanico_executor.nome}`,
+        numero_os_corretiva: form.numero_os_corretiva || null,
+
         data_fechamento: new Date().toISOString(),
         status: "Fechado",
       })
@@ -212,7 +342,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             {/* Setor */}
             <div>
               <label className="block text-sm text-gray-500 mb-1">
-                Setor de Manutenção
+                Setor de Manutenção <span className="text-red-600">*</span>
               </label>
               <select
                 className="w-full border rounded p-2"
@@ -220,19 +350,19 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
                 onChange={(e) => handleSetorChange(e.target.value)}
               >
                 <option value="">Selecione...</option>
-                {Array.from(new Set(catalogo.map((c) => c.setor_macro))).map(
-                  (s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  )
-                )}
+                {Array.from(new Set(catalogo.map((c) => c.setor_macro))).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </div>
 
             {/* Grupo */}
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Grupo</label>
+              <label className="block text-sm text-gray-500 mb-1">
+                Grupo <span className="text-red-600">*</span>
+              </label>
               <select
                 className="w-full border rounded p-2"
                 value={form.grupo_manutencao}
@@ -252,13 +382,13 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
           {/* Defeito */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
-              Problema encontrado
+              Problema encontrado <span className="text-red-600">*</span>
             </label>
             <select
               className="w-full border rounded p-2"
               value={form.problema_encontrado}
               onChange={(e) =>
-                setForm({ ...form, problema_encontrado: e.target.value })
+                setForm((prev) => ({ ...prev, problema_encontrado: e.target.value }))
               }
               disabled={!form.grupo_manutencao}
             >
@@ -271,6 +401,28 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             </select>
           </div>
 
+          {/* ✅ NOVO: Mecânico Executor */}
+          <CampoMecanico
+            value={form.mecanico_executor}
+            onChange={(m) => setForm((prev) => ({ ...prev, mecanico_executor: m }))}
+          />
+
+          {/* ✅ NOVO: Número da OS Corretiva */}
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">
+              Número da OS Corretiva
+            </label>
+            <input
+              type="text"
+              className="w-full border rounded p-2"
+              placeholder="Ex: 123456"
+              value={form.numero_os_corretiva}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, numero_os_corretiva: e.target.value }))
+              }
+            />
+          </div>
+
           {/* Solução */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
@@ -281,20 +433,22 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
               rows="2"
               placeholder="Descreva a ação ou serviço realizado..."
               value={form.solucao}
-              onChange={(e) => setForm({ ...form, solucao: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, solucao: e.target.value }))}
             />
           </div>
 
           {/* Responsável */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
-              Responsável pela manutenção
+              Responsável pela manutenção <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
               className="w-full border rounded p-2"
               value={form.solucionador}
-              onChange={(e) => setForm({ ...form, solucionador: e.target.value })}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, solucionador: e.target.value }))
+              }
               placeholder="Ex: Fernando, Clécio..."
             />
           </div>
