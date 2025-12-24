@@ -99,21 +99,19 @@ export default function SOSTratamento() {
 }
 
 // ===============================
-// Campo de Mecânico (seleção)
+// Campo de Mecânico (seleção) - ATUALIZADO
 // ===============================
-// Ajuste aqui se sua tabela/colunas forem diferentes.
-// Padrão assumido:
-//   tabela: "funcionarios"
-//   colunas: "cracha", "nome"
+// Busca na tabela: "motoristas"
+// Filtra: cargo NÃO inicia com "MOTORISTA"
+// Colunas: chapa, nome, cargo
 function CampoMecanico({ value, onChange }) {
-  const [busca, setBusca] = useState(value?.nome || value?.cracha || "");
+  const [busca, setBusca] = useState(value?.nome || value?.chapa || "");
   const [opcoes, setOpcoes] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // manter input sincronizado quando o value muda externamente
-    setBusca(value?.nome || value?.cracha || "");
-  }, [value?.nome, value?.cracha]);
+    setBusca(value?.nome || value?.chapa || "");
+  }, [value?.nome, value?.chapa]);
 
   useEffect(() => {
     let alive = true;
@@ -128,16 +126,19 @@ function CampoMecanico({ value, onChange }) {
       setLoading(true);
 
       const { data, error } = await supabase
-        .from("funcionarios") // <<< AJUSTE SE NECESSÁRIO
-        .select("cracha, nome") // <<< AJUSTE SE NECESSÁRIO
-        .or(`nome.ilike.%${termo}%,cracha.ilike.%${termo}%`)
-        .limit(8);
+        .from("motoristas")
+        .select("chapa, nome, cargo")
+        .not("cargo", "ilike", "MOTORISTA%")
+        .or(`nome.ilike.%${termo}%,chapa.ilike.%${termo}%`)
+        .order("nome", { ascending: true })
+        .limit(10);
 
       if (!alive) return;
 
       setLoading(false);
+
       if (error) {
-        console.error("Erro ao buscar mecânicos:", error);
+        console.error("Erro ao buscar colaboradores:", error);
         setOpcoes([]);
         return;
       }
@@ -152,13 +153,13 @@ function CampoMecanico({ value, onChange }) {
   }, [busca]);
 
   function selecionar(m) {
-    onChange({ cracha: m.cracha, nome: m.nome });
+    onChange({ chapa: m.chapa, nome: m.nome });
     setOpcoes([]);
-    setBusca(m.nome || m.cracha);
+    setBusca(m.nome || m.chapa);
   }
 
   function limpar() {
-    onChange({ cracha: "", nome: "" });
+    onChange({ chapa: "", nome: "" });
     setBusca("");
     setOpcoes([]);
   }
@@ -173,7 +174,7 @@ function CampoMecanico({ value, onChange }) {
         <input
           type="text"
           className="w-full border rounded p-2"
-          placeholder="Digite nome ou crachá..."
+          placeholder="Digite nome ou chapa..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
         />
@@ -186,29 +187,29 @@ function CampoMecanico({ value, onChange }) {
         </button>
       </div>
 
-      {loading && (
-        <div className="text-xs text-gray-500 mt-1">Buscando...</div>
-      )}
+      {loading && <div className="text-xs text-gray-500 mt-1">Buscando...</div>}
 
       {opcoes.length > 0 && (
         <div className="absolute z-50 mt-2 w-full bg-white border rounded shadow-lg overflow-hidden">
           {opcoes.map((m) => (
             <button
-              key={m.cracha}
+              key={m.chapa}
               type="button"
               onClick={() => selecionar(m)}
               className="w-full text-left px-3 py-2 hover:bg-gray-50"
             >
               <div className="text-sm font-medium text-gray-800">{m.nome}</div>
-              <div className="text-xs text-gray-500">Crachá: {m.cracha}</div>
+              <div className="text-xs text-gray-500">
+                Chapa: {m.chapa} • {m.cargo}
+              </div>
             </button>
           ))}
         </div>
       )}
 
-      {value?.cracha || value?.nome ? (
+      {value?.chapa || value?.nome ? (
         <div className="mt-2 text-xs text-gray-600">
-          Selecionado: <strong>{value.nome}</strong> (Crachá {value.cracha})
+          Selecionado: <strong>{value.nome}</strong> (Chapa {value.chapa})
         </div>
       ) : null}
     </div>
@@ -225,7 +226,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
     solucionador: "",
 
     // ✅ NOVOS CAMPOS
-    mecanico_executor: { cracha: "", nome: "" },
+    mecanico_executor: { chapa: "", nome: "" },
     numero_os_corretiva: "",
   });
 
@@ -274,7 +275,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
 
   async function salvarTratamento() {
     const mecanicoOk =
-      (form.mecanico_executor?.cracha || "").trim() &&
+      (form.mecanico_executor?.chapa || "").trim() &&
       (form.mecanico_executor?.nome || "").trim();
 
     if (
@@ -300,7 +301,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
         solucionador: form.solucionador,
 
         // ✅ grava os novos campos
-        mecanico_executor: `${form.mecanico_executor.cracha} - ${form.mecanico_executor.nome}`,
+        mecanico_executor: `${form.mecanico_executor.chapa} - ${form.mecanico_executor.nome}`,
         numero_os_corretiva: form.numero_os_corretiva || null,
 
         data_fechamento: new Date().toISOString(),
@@ -401,13 +402,13 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
             </select>
           </div>
 
-          {/* ✅ NOVO: Mecânico Executor */}
+          {/* Mecânico Executor */}
           <CampoMecanico
             value={form.mecanico_executor}
             onChange={(m) => setForm((prev) => ({ ...prev, mecanico_executor: m }))}
           />
 
-          {/* ✅ NOVO: Número da OS Corretiva */}
+          {/* Número da OS Corretiva */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">
               Número da OS Corretiva
@@ -425,9 +426,7 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
 
           {/* Solução */}
           <div>
-            <label className="block text-sm text-gray-500 mb-1">
-              Solução aplicada
-            </label>
+            <label className="block text-sm text-gray-500 mb-1">Solução aplicada</label>
             <textarea
               className="w-full border rounded p-2"
               rows="2"
