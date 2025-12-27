@@ -146,7 +146,15 @@ function FechamentoModal({ sos, onClose, onAtualizar }) {
   const [saving, setSaving] = useState(false);
   const [prefixos, setPrefixos] = useState([]);
 
-  const ocorrencias = ["SEGUIU VIAGEM", "RECOLHEU", "TROCA", "AVARIA", "IMPROCEDENTE"];
+  // 🔹 Aqui foi feita a alteração: incluído "SOS"
+  const ocorrencias = [
+    "SEGUIU VIAGEM",
+    "RECOLHEU",
+    "TROCA",
+    "AVARIA",
+    "SOS",
+    "IMPROCEDENTE",
+  ];
 
   useEffect(() => {
     async function carregarPrefixos() {
