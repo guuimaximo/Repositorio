@@ -1,5 +1,5 @@
 // src/pages/SolicitacaoTratativa.jsx
-// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao)
+// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
@@ -11,24 +11,21 @@ export default function SolicitacaoTratativa() {
     tipo_ocorrencia: '',
     prioridade: 'Média',
     setor_origem: '',
-    linha: '',            // <- aqui guardamos o CÓDIGO da linha
+    linha: '',
     descricao: '',
     data_ocorrida: '',
     hora_ocorrida: '',
   });
 
-  // Evidências (imagens/vídeos)
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
-
   const [loading, setLoading] = useState(false);
 
   const [tiposOcorrencia, setTiposOcorrencia] = useState([]);
   const [setores, setSetores] = useState([]);
-  const [linhas, setLinhas] = useState([]); // [{id, codigo, descricao}]
+  const [linhas, setLinhas] = useState([]);
 
-  // Buscar listas dinâmicas
   useEffect(() => {
     async function carregarListas() {
       try {
@@ -58,14 +55,16 @@ export default function SolicitacaoTratativa() {
     form.setor_origem &&
     form.descricao;
 
-  // Dropzone
-  const acceptMime = ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime'];
+  // Adicionado 'application/pdf'
+  const acceptMime = ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'];
+
   const addFiles = (list) => {
     const filtered = Array.from(list).filter(f => acceptMime.includes(f.type));
     const key = (f) => `${f.name}-${f.size}`;
     const existing = new Set(files.map(key));
     setFiles(prev => [...prev, ...filtered.filter(f => !existing.has(key(f)))]);
   };
+
   const onPickFiles = (e) => addFiles(e.target.files || []);
   const onDrop = (e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files || []); };
   const removeFile = (idx) => setFiles(prev => prev.filter((_, i) => i !== idx));
@@ -78,7 +77,6 @@ export default function SolicitacaoTratativa() {
 
     setLoading(true);
     try {
-      // Upload de evidências (opcional)
       let evidenciasUrls = [];
       if (files.length > 0) {
         const folder = `tratativas/${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
@@ -99,11 +97,10 @@ export default function SolicitacaoTratativa() {
         tipo_ocorrencia: form.tipo_ocorrencia,
         prioridade: form.prioridade,
         setor_origem: form.setor_origem,
-        linha: form.linha || null,          // <- salvando o CÓDIGO da linha
+        linha: form.linha || null,
         descricao: form.descricao,
         status: 'Pendente',
         imagem_url: evidenciasUrls[0] || null,
-        // evidencias: evidenciasUrls, // descomente se criar coluna json/text[]
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
       };
@@ -138,7 +135,6 @@ export default function SolicitacaoTratativa() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg shadow-sm">
         <CampoMotorista value={motorista} onChange={setMotorista} />
 
-        {/* Tipo de Ocorrência */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Tipo de Ocorrência</label>
           <select
@@ -153,7 +149,6 @@ export default function SolicitacaoTratativa() {
           </select>
         </div>
 
-        {/* Setor de Origem */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Setor de Origem</label>
           <select
@@ -168,7 +163,6 @@ export default function SolicitacaoTratativa() {
           </select>
         </div>
 
-        {/* Linha (usa codigo + descricao) */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Linha</label>
           <select
@@ -185,7 +179,6 @@ export default function SolicitacaoTratativa() {
           </select>
         </div>
 
-        {/* Prioridade */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
           <select
@@ -199,7 +192,6 @@ export default function SolicitacaoTratativa() {
           </select>
         </div>
 
-        {/* Data do ocorrido */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Data do ocorrido</label>
           <input
@@ -210,7 +202,6 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
-        {/* Hora do ocorrido */}
         <div>
           <label className="block text-sm text-gray-600 mb-1">Hora do ocorrido</label>
           <input
@@ -221,7 +212,6 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
-        {/* Descrição */}
         <div className="md:col-span-2">
           <label className="block text-sm text-gray-600 mb-1">Descrição</label>
           <textarea
@@ -232,10 +222,9 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
-        {/* Evidências (Fotos e Vídeos) — Dropzone */}
         <div className="md:col-span-2">
           <label className="block text-sm text-gray-700 font-medium mb-2">
-            Evidências (Fotos e Vídeos)
+            Evidências (Fotos, Vídeos e PDF)
           </label>
 
           <div
@@ -254,13 +243,13 @@ export default function SolicitacaoTratativa() {
                 Clique para enviar <span className="font-normal">ou arraste e solte</span>
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Imagens (PNG, JPG) ou Vídeos (MP4, MOV)
+                PNG, JPG, MP4, MOV ou PDF
               </p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,video/mp4,video/quicktime"
+              accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
               multiple
               className="hidden"
               onChange={onPickFiles}
@@ -279,7 +268,6 @@ export default function SolicitacaoTratativa() {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
                     className="text-red-600 hover:underline"
-                    title="Remover"
                   >
                     remover
                   </button>
@@ -295,7 +283,6 @@ export default function SolicitacaoTratativa() {
           onClick={salvar}
           disabled={loading || !camposObrigatoriosPreenchidos}
           className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
-          title={!camposObrigatoriosPreenchidos ? 'Preencha os campos obrigatórios' : 'Salvar'}
         >
           {loading ? 'Salvando…' : 'Criar'}
         </button>
