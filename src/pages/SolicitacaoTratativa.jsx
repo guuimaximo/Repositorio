@@ -1,6 +1,4 @@
 // src/pages/SolicitacaoTratativa.jsx
-// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
-
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import CampoMotorista from '../components/CampoMotorista';
@@ -55,7 +53,7 @@ export default function SolicitacaoTratativa() {
     form.setor_origem &&
     form.descricao;
 
-  // Adicionado 'application/pdf'
+  // Lista de tipos permitidos incluindo application/pdf
   const acceptMime = ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'];
 
   const addFiles = (list) => {
