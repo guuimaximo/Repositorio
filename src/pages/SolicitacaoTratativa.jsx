@@ -94,30 +94,34 @@ export default function SolicitacaoTratativa() {
     setLoading(true);
     try {
       let evidenciasUrls = [];
+if (files.length > 0) {
+  // NÃO coloque "tratativas/" aqui (isso é o bucket)
+  const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
+    .toString()
+    .trim()
+    .replace(/\s+/g, '_')}`;
 
-      // Upload de TODOS os arquivos selecionados
-      if (files.length > 0) {
-        const folder = `tratativas/${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
-          .toString()
-          .replace(/\s+/g, '_')}`;
+  for (const f of files) {
+    // sanitiza nome do arquivo
+    const safeName = (f.name || 'arquivo')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // remove acentos
+      .replace(/\s+/g, '_')                              // espaços -> _
+      .replace(/[^a-zA-Z0-9._-]/g, '');                  // remove caracteres inválidos
 
-        for (const f of files) {
-          const safe = String(f.name || 'arquivo').replace(/\s+/g, '_');
+    // garante unicidade para não colidir
+    const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+    const path = `${folder}/${unique}`; // <-- key correta (sem "tratativas/")
 
-          // Nome único por arquivo para evitar colisão (mesmo nome / reenvio)
-          const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safe}`;
-          const path = `${folder}/${unique}`;
+    const up = await supabase.storage.from('tratativas').upload(path, f, {
+      upsert: false,
+      contentType: f.type || undefined,
+    });
+    if (up.error) throw up.error;
 
-          const up = await supabase.storage.from('tratativas').upload(path, f, {
-            upsert: false,
-            contentType: f.type || undefined,
-          });
-          if (up.error) throw up.error;
-
-          const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
-          if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
-        }
-      }
+    const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
+    if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
+  }
+}
 
       const payload = {
         motorista_chapa: motorista.chapa || null,
