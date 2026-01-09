@@ -1,7 +1,8 @@
 // src/pages/SolicitacaoTratativa.jsx
 // Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
+// + Múltiplas evidências (salva TODAS em evidencias_urls)
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabase';
 import CampoMotorista from '../components/CampoMotorista';
 
@@ -26,6 +27,18 @@ export default function SolicitacaoTratativa() {
   const [setores, setSetores] = useState([]);
   const [linhas, setLinhas] = useState([]);
 
+  const camposObrigatoriosPreenchidos =
+    (motorista.chapa || motorista.nome) &&
+    form.tipo_ocorrencia &&
+    form.setor_origem &&
+    form.descricao;
+
+  // Aceita PNG/JPG, MP4/MOV, PDF
+  const acceptMime = useMemo(
+    () => ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'],
+    []
+  );
+
   useEffect(() => {
     async function carregarListas() {
       try {
@@ -49,25 +62,28 @@ export default function SolicitacaoTratativa() {
     carregarListas();
   }, []);
 
-  const camposObrigatoriosPreenchidos =
-    (motorista.chapa || motorista.nome) &&
-    form.tipo_ocorrencia &&
-    form.setor_origem &&
-    form.descricao;
-
-  // Adicionado 'application/pdf'
-  const acceptMime = ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'];
+  // Chave para deduplicar corretamente
+  const keyFile = (f) => `${f.name}-${f.size}-${f.lastModified}`;
 
   const addFiles = (list) => {
-    const filtered = Array.from(list).filter(f => acceptMime.includes(f.type));
-    const key = (f) => `${f.name}-${f.size}`;
-    const existing = new Set(files.map(key));
-    setFiles(prev => [...prev, ...filtered.filter(f => !existing.has(key(f)))]);
+    const incoming = Array.from(list || []);
+    const filtered = incoming.filter((f) => acceptMime.includes(f.type));
+
+    const existing = new Set(files.map(keyFile));
+    const deduped = filtered.filter((f) => !existing.has(keyFile(f)));
+
+    if (deduped.length > 0) {
+      setFiles((prev) => [...prev, ...deduped]);
+    }
   };
 
   const onPickFiles = (e) => addFiles(e.target.files || []);
-  const onDrop = (e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files || []); };
-  const removeFile = (idx) => setFiles(prev => prev.filter((_, i) => i !== idx));
+  const onDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    addFiles(e.dataTransfer.files || []);
+  };
+  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   async function salvar() {
     if (!camposObrigatoriosPreenchidos) {
@@ -78,14 +94,26 @@ export default function SolicitacaoTratativa() {
     setLoading(true);
     try {
       let evidenciasUrls = [];
+
+      // Upload de TODOS os arquivos selecionados
       if (files.length > 0) {
         const folder = `tratativas/${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
-          .toString().replace(/\s+/g, '_')}`;
+          .toString()
+          .replace(/\s+/g, '_')}`;
+
         for (const f of files) {
-          const safe = f.name.replace(/\s+/g, '_');
-          const path = `${folder}/${safe}`;
-          const up = await supabase.storage.from('tratativas').upload(path, f);
+          const safe = String(f.name || 'arquivo').replace(/\s+/g, '_');
+
+          // Nome único por arquivo para evitar colisão (mesmo nome / reenvio)
+          const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safe}`;
+          const path = `${folder}/${unique}`;
+
+          const up = await supabase.storage.from('tratativas').upload(path, f, {
+            upsert: false,
+            contentType: f.type || undefined,
+          });
           if (up.error) throw up.error;
+
           const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
           if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
         }
@@ -100,7 +128,14 @@ export default function SolicitacaoTratativa() {
         linha: form.linha || null,
         descricao: form.descricao,
         status: 'Pendente',
+
+        // Mantém compatibilidade com seu campo antigo:
+        // primeira evidência vai em imagem_url
         imagem_url: evidenciasUrls[0] || null,
+
+        // NOVO: guarda TODAS as evidências (jsonb)
+        evidencias_urls: evidenciasUrls,
+
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
       };
@@ -122,7 +157,7 @@ export default function SolicitacaoTratativa() {
       setFiles([]);
     } catch (e) {
       console.error(e);
-      alert(`Erro: ${e.message || e.toString()}`);
+      alert(`Erro: ${e?.message || e?.toString?.() || String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -144,7 +179,9 @@ export default function SolicitacaoTratativa() {
           >
             <option value="">Selecione...</option>
             {tiposOcorrencia.map((t) => (
-              <option key={t.id} value={t.nome}>{t.nome}</option>
+              <option key={t.id} value={t.nome}>
+                {t.nome}
+              </option>
             ))}
           </select>
         </div>
@@ -158,7 +195,9 @@ export default function SolicitacaoTratativa() {
           >
             <option value="">Selecione...</option>
             {setores.map((s) => (
-              <option key={s.id} value={s.nome}>{s.nome}</option>
+              <option key={s.id} value={s.nome}>
+                {s.nome}
+              </option>
             ))}
           </select>
         </div>
@@ -228,12 +267,15 @@ export default function SolicitacaoTratativa() {
           </label>
 
           <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={onDrop}
             className={[
               'w-full rounded-lg border-2 border-dashed bg-gray-50 transition',
-              isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-100'
+              isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-100',
             ].join(' ')}
             style={{ minHeight: 120 }}
             onClick={() => fileInputRef.current?.click()}
@@ -242,10 +284,9 @@ export default function SolicitacaoTratativa() {
               <p className="text-sm font-semibold text-gray-600">
                 Clique para enviar <span className="font-normal">ou arraste e solte</span>
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                PNG, JPG, MP4, MOV ou PDF
-              </p>
+              <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
             </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -259,14 +300,20 @@ export default function SolicitacaoTratativa() {
           {files.length > 0 && (
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
               {files.map((f, idx) => (
-                <div key={`${f.name}-${idx}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                <div
+                  key={`${f.name}-${idx}`}
+                  className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+                >
                   <div className="truncate">
                     <span className="font-medium">{f.name}</span>
-                    <span className="ml-2 text-gray-500">({Math.round(f.size/1024)} KB)</span>
+                    <span className="ml-2 text-gray-500">({Math.round(f.size / 1024)} KB)</span>
                   </div>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(idx);
+                    }}
                     className="text-red-600 hover:underline"
                   >
                     remover
