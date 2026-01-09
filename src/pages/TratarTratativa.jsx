@@ -83,7 +83,7 @@ export default function TratarTratativa() {
   // Início, fim e retorno (dias corridos: fim = início + (dias - 1), retorno = fim + 1)
   const inicioSusp = useMemo(() => new Date(dataSuspensao), [dataSuspensao])
   const fimSusp = useMemo(
-    () => addDays(dataSuspensao, Math.max(Number(diasSusp) - 1, 0)),
+    () => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)),
     [dataSuspensao, diasSusp]
   )
   const retornoSusp = useMemo(
