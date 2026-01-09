@@ -26,7 +26,7 @@ const OCORRENCIAS_CARDS = [
 ];
 
 // Ajuste aqui o campo principal de data para filtro/ordenação:
-const DATE_FIELD = "data_dash"; // troque para "data_fechamento" quando estiver preenchido
+const DATE_FIELD = "data_fechamento"; // troque para "data_fechamento" quando estiver preenchido
 
 function pickBestDate(row) {
   return (
