@@ -22,9 +22,9 @@ export default function TratarTratativa() {
   const [resumo, setResumo] = useState('')
   const [acao, setAcao] = useState('Orientação')
 
-  // Evidência da conclusão (imagem/pdf) + Anexo da tratativa (imagem/pdf)
-  const [img, setImg] = useState(null)
-  const [anexo, setAnexo] = useState(null)
+  // Conclusão: evidência (imagem/pdf) + anexo (imagem/pdf)
+  const [img, setImg] = useState(null)     // evidência da conclusão
+  const [anexo, setAnexo] = useState(null) // anexo da tratativa (documento)
 
   const [loading, setLoading] = useState(false)
 
@@ -91,7 +91,19 @@ export default function TratarTratativa() {
     [dataSuspensao, diasSusp]
   )
 
-  // ===== Helpers de evidência (imagem/pdf) =====
+  // ===== Helpers de evidência (compacta: só nome do arquivo) =====
+  const fileNameFromUrl = (u) => {
+    try {
+      const raw = String(u || '')
+      const noHash = raw.split('#')[0]
+      const noQuery = noHash.split('?')[0]
+      const last = noQuery.split('/').filter(Boolean).pop() || 'arquivo'
+      return decodeURIComponent(last)
+    } catch {
+      return 'arquivo'
+    }
+  }
+
   const isPdf = (fileOrUrl) => {
     if (!fileOrUrl) return false
     if (typeof fileOrUrl === 'string') return fileOrUrl.toLowerCase().includes('.pdf')
@@ -101,36 +113,7 @@ export default function TratarTratativa() {
     )
   }
 
-  const renderArquivo = (url, label) => {
-    if (!url) return null
-    const pdf = isPdf(url)
-    return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-1">{label}</span>
-        {pdf ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 underline"
-          >
-            Abrir PDF
-          </a>
-        ) : (
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            <img
-              src={url}
-              className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
-              alt={label}
-            />
-          </a>
-        )}
-      </div>
-    )
-  }
-
-  // Renderiza uma lista de evidências (URLs)
-  const renderListaEvidencias = (urls, label) => {
+  const renderListaArquivosCompacta = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : []
     if (arr.length === 0) return null
 
@@ -138,34 +121,39 @@ export default function TratarTratativa() {
       <div className="mt-2">
         <span className="block text-sm text-gray-600 mb-2">{label}</span>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {arr.map((u, i) => {
-            const pdf = isPdf(u)
-            return (
-              <div key={`${u}-${i}`} className="rounded border bg-white p-2">
-                {pdf ? (
-                  <a
-                    href={u}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline text-sm"
-                    title="Abrir PDF"
-                  >
-                    Abrir PDF #{i + 1}
-                  </a>
-                ) : (
-                  <a href={u} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
-                    <img
-                      src={u}
-                      alt={`Evidência ${i + 1}`}
-                      className="h-40 w-full object-cover rounded hover:opacity-90 transition-opacity"
-                    />
-                  </a>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <ul className="space-y-1">
+          {arr.map((u, i) => (
+            <li key={`${u}-${i}`} className="text-sm">
+              <a
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline"
+                title="Abrir evidência"
+              >
+                {fileNameFromUrl(u)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  const renderArquivoCompacto = (url, label) => {
+    if (!url) return null
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue-600 underline"
+          title="Abrir arquivo"
+        >
+          {fileNameFromUrl(url)}
+        </a>
       </div>
     )
   }
@@ -608,19 +596,58 @@ export default function TratarTratativa() {
 
   if (!t) return <div className="p-6">Carregando…</div>
 
-  // Evidências da solicitação (pode vir do novo campo evidencias_urls, senão cai no legado imagem_url)
+  // Evidências da solicitação (múltiplas) – prefere evidencias_urls, senão cai em imagem_url (legado)
   const evidenciasSolicitacao =
     Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
       ? t.evidencias_urls
-      : (t.imagem_url ? [t.imagem_url] : [])
+      : t.imagem_url
+      ? [t.imagem_url]
+      : []
 
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
       <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
 
-      {/* Card: dados + edição */}
+      {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
       <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <h2 className="text-lg font-semibold">Detalhes da tratativa</h2>
+          {!isEditing ? (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
+            >
+              Editar dados
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={salvarEdicao}
+                disabled={loading}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                Salvar
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditing(false)
+                  setEditForm({
+                    tipo_ocorrencia: t.tipo_ocorrencia || '',
+                    prioridade: t.prioridade || 'Média',
+                    setor_origem: t.setor_origem || '',
+                    linha: t.linha || '',
+                    descricao: t.descricao || '',
+                  })
+                }}
+                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Item titulo="Motorista" valor={`${t.motorista_nome || '-'}`} />
           <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
@@ -690,6 +717,7 @@ export default function TratarTratativa() {
           />
           <Item titulo="Status" valor={t.status} />
           <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
+
           <Item
             className="md:col-span-2"
             titulo="Descrição"
@@ -707,80 +735,17 @@ export default function TratarTratativa() {
             }
           />
 
-          {/* Evidências da solicitação (reclamação) - múltiplas */}
+          {/* Evidências da solicitação (compacto) */}
           <div className="md:col-span-2">
-            {renderListaEvidencias(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
-          </div>
-
-          {/* Evidência da conclusão (imagem/pdf) */}
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">
-              Evidência da conclusão (opcional) — imagem ou PDF
-            </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setImg(e.target.files?.[0] || null)}
-            />
-
-            {renderArquivo(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
-          </div>
-
-          {/* Anexo da tratativa (documento) */}
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">
-              Anexo da tratativa (documento) (opcional) — imagem ou PDF
-            </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setAnexo(e.target.files?.[0] || null)}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
-            </p>
+            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
           </div>
         </dl>
-
-        <div className="mt-4 flex gap-2">
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
-            >
-              Editar dados
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={salvarEdicao}
-                disabled={loading}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                Salvar
-              </button>
-              <button
-                onClick={() => {
-                  setIsEditing(false)
-                  setEditForm({
-                    tipo_ocorrencia: t.tipo_ocorrencia || '',
-                    prioridade: t.prioridade || 'Média',
-                    setor_origem: t.setor_origem || '',
-                    linha: t.linha || '',
-                    descricao: t.descricao || '',
-                  })
-                }}
-                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
-              >
-                Cancelar
-              </button>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Card: Suspensão + Ações */}
+      {/* ====== CONCLUSÃO (EM BAIXO) ====== */}
       <div className="bg-white rounded-lg shadow-sm p-5">
+        <h2 className="text-lg font-semibold mb-3">Conclusão</h2>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
@@ -841,6 +806,35 @@ export default function TratarTratativa() {
             value={resumo}
             onChange={(e) => setResumo(e.target.value)}
           />
+        </div>
+
+        {/* Evidência da conclusão (AGORA EM BAIXO) */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Evidência da conclusão (opcional) — imagem ou PDF
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setImg(e.target.files?.[0] || null)}
+            />
+            {renderArquivoCompacto(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Anexo da tratativa (documento) (opcional) — imagem ou PDF
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setAnexo(e.target.files?.[0] || null)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
+            </p>
+          </div>
         </div>
 
         <div className="mt-4 flex gap-3 flex-wrap">
