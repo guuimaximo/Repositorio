@@ -21,7 +21,11 @@ export default function TratarTratativa() {
   const [t, setT] = useState(null)
   const [resumo, setResumo] = useState('')
   const [acao, setAcao] = useState('Orientação')
+
+  // Evidência da conclusão (imagem/pdf) + Anexo da tratativa (imagem/pdf)
   const [img, setImg] = useState(null)
+  const [anexo, setAnexo] = useState(null)
+
   const [loading, setLoading] = useState(false)
 
   // Complementos
@@ -40,21 +44,36 @@ export default function TratarTratativa() {
 
   // ---- Controles de Suspensão ----
   const [diasSusp, setDiasSusp] = useState(1) // 1,3,5,7
-  const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0,10)) // yyyy-mm-dd
+  const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0, 10)) // yyyy-mm-dd
 
   const dataPtCompletaUpper = (d = new Date()) => {
-    const meses = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO']
-    const dia = String(d.getDate()).padStart(2,'0')
+    const meses = [
+      'JANEIRO',
+      'FEVEREIRO',
+      'MARÇO',
+      'ABRIL',
+      'MAIO',
+      'JUNHO',
+      'JULHO',
+      'AGOSTO',
+      'SETEMBRO',
+      'OUTUBRO',
+      'NOVEMBRO',
+      'DEZEMBRO',
+    ]
+    const dia = String(d.getDate()).padStart(2, '0')
     const mes = meses[d.getMonth()]
     const ano = d.getFullYear()
     return `${dia} de ${mes} de ${ano}`
   }
+
   const br = (d) => {
     if (!d) return '—'
-    const dt = (d instanceof Date) ? d : new Date(d)
+    const dt = d instanceof Date ? d : new Date(d)
     if (Number.isNaN(dt.getTime())) return '—'
     return dt.toLocaleDateString('pt-BR')
   }
+
   const addDays = (dateStr, n) => {
     const d = new Date(dateStr)
     d.setDate(d.getDate() + n)
@@ -63,13 +82,101 @@ export default function TratarTratativa() {
 
   // Início, fim e retorno (dias corridos: fim = início + (dias - 1), retorno = fim + 1)
   const inicioSusp = useMemo(() => new Date(dataSuspensao), [dataSuspensao])
-  const fimSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp) - 1, 0)), [dataSuspensao, diasSusp])
-  const retornoSusp = useMemo(() => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)), [dataSuspensao, diasSusp])
+  const fimSusp = useMemo(
+    () => addDays(dataSuspensao, Math.max(Number(diasSusp) - 1, 0)),
+    [dataSuspensao, diasSusp]
+  )
+  const retornoSusp = useMemo(
+    () => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)),
+    [dataSuspensao, diasSusp]
+  )
+
+  // ===== Helpers de evidência (imagem/pdf) =====
+  const isPdf = (fileOrUrl) => {
+    if (!fileOrUrl) return false
+    if (typeof fileOrUrl === 'string') return fileOrUrl.toLowerCase().includes('.pdf')
+    return (
+      fileOrUrl.type === 'application/pdf' ||
+      String(fileOrUrl.name || '').toLowerCase().endsWith('.pdf')
+    )
+  }
+
+  const renderArquivo = (url, label) => {
+    if (!url) return null
+    const pdf = isPdf(url)
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-1">{label}</span>
+        {pdf ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline"
+          >
+            Abrir PDF
+          </a>
+        ) : (
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            <img
+              src={url}
+              className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
+              alt={label}
+            />
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  // Renderiza uma lista de evidências (URLs)
+  const renderListaEvidencias = (urls, label) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : []
+    if (arr.length === 0) return null
+
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {arr.map((u, i) => {
+            const pdf = isPdf(u)
+            return (
+              <div key={`${u}-${i}`} className="rounded border bg-white p-2">
+                {pdf ? (
+                  <a
+                    href={u}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline text-sm"
+                    title="Abrir PDF"
+                  >
+                    Abrir PDF #{i + 1}
+                  </a>
+                ) : (
+                  <a href={u} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
+                    <img
+                      src={u}
+                      alt={`Evidência ${i + 1}`}
+                      className="h-40 w-full object-cover rounded hover:opacity-90 transition-opacity"
+                    />
+                  </a>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
-      if (error) { console.error(error); return }
+      if (error) {
+        console.error(error)
+        return
+      }
       setT(data || null)
 
       setEditForm({
@@ -120,7 +227,7 @@ export default function TratarTratativa() {
         .eq('id', t.id)
       if (error) throw error
 
-      setT(prev => prev ? ({ ...prev, ...editForm }) : prev)
+      setT((prev) => (prev ? { ...prev, ...editForm } : prev))
 
       if (editForm.linha) {
         const { data: row } = await supabase
@@ -142,34 +249,58 @@ export default function TratarTratativa() {
 
   async function concluir() {
     if (!t) return
-    if (!resumo) { alert('Informe o resumo/observações'); return }
+    if (!resumo) {
+      alert('Informe o resumo/observações')
+      return
+    }
 
     setLoading(true)
     try {
-      let imagem_tratativa = null
+      // Evidência da conclusão (imagem/pdf)
+      let evidencia_conclusao_url = null
       if (img) {
-        const nome = `trat_${Date.now()}_${img.name}`.replace(/\s+/g, '_')
-        const up = await supabase.storage.from('tratativas').upload(nome, img)
+        const safe = `conclusao_${Date.now()}_${img.name}`.replace(/\s+/g, '_')
+        const up = await supabase.storage.from('tratativas').upload(safe, img, {
+          upsert: false,
+          contentType: img.type || undefined,
+        })
         if (up.error) throw up.error
-        imagem_tratativa = supabase.storage.from('tratativas').getPublicUrl(nome).data.publicUrl
+        evidencia_conclusao_url = supabase.storage.from('tratativas').getPublicUrl(safe).data.publicUrl
+      }
+
+      // Anexo da tratativa (documento) (imagem/pdf)
+      let anexo_tratativa_url = null
+      if (anexo) {
+        const safe = `anexo_${Date.now()}_${anexo.name}`.replace(/\s+/g, '_')
+        const up = await supabase.storage.from('tratativas').upload(safe, anexo, {
+          upsert: false,
+          contentType: anexo.type || undefined,
+        })
+        if (up.error) throw up.error
+        anexo_tratativa_url = supabase.storage.from('tratativas').getPublicUrl(safe).data.publicUrl
       }
 
       // detalhe/histórico
-      await supabase.from('tratativas_detalhes').insert({
+      // OBS: para salvar "anexo_tratativa", crie a coluna:
+      // ALTER TABLE public.tratativas_detalhes ADD COLUMN IF NOT EXISTS anexo_tratativa text;
+      const ins = await supabase.from('tratativas_detalhes').insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
         observacoes: resumo,
-        imagem_tratativa
+        imagem_tratativa: evidencia_conclusao_url,
+        anexo_tratativa: anexo_tratativa_url,
       })
+      if (ins.error) throw ins.error
 
       // atualiza status
-      await supabase
+      const upd = await supabase
         .from('tratativas')
         .update({
           status: 'Concluída',
-          imagem_tratativa: imagem_tratativa || t.imagem_tratativa || null,
+          imagem_tratativa: evidencia_conclusao_url || t.imagem_tratativa || null,
         })
         .eq('id', t.id)
+      if (upd.error) throw upd.error
 
       alert('Tratativa concluída com sucesso!')
       nav('/central')
@@ -206,18 +337,27 @@ export default function TratarTratativa() {
     `
   }
 
-function renderSuspensaoHtml({
-  nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc,
-  dias, inicio, fim, retorno
-}) {
-  const br = (d) => {
-    const dt = (d instanceof Date) ? d : new Date(d);
-    return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR');
-  };
-  const diasFmt = String(dias).padStart(2, '0');
-  const rotuloDia = Number(dias) === 1 ? 'dia' : 'dias';
+  function renderSuspensaoHtml({
+    nome,
+    registro,
+    cargo,
+    ocorrencia,
+    dataOcorr,
+    observ,
+    dataDoc,
+    dias,
+    inicio,
+    fim,
+    retorno,
+  }) {
+    const br = (d) => {
+      const dt = d instanceof Date ? d : new Date(d)
+      return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR')
+    }
+    const diasFmt = String(dias).padStart(2, '0')
+    const rotuloDia = Number(dias) === 1 ? 'dia' : 'dias'
 
-  return `
+    return `
   <html>
     <head>
       <meta charset="utf-8" />
@@ -256,13 +396,18 @@ function renderSuspensaoHtml({
           </div>
 
           <p class="mt bl">
-  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${br(inicio)}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${br(retorno)}</span></span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
+  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${br(
+      inicio
+    )}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${br(
+      retorno
+    )}</span></span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
 </p>
-
 
           <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
           <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-          <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(fim)} (retorno: ${br(retorno)})</div>
+          <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(
+      fim
+    )} (retorno: ${br(retorno)})</div>
           <div class="mt"><span class="label">Observação:</span> ${observ}</div>
 
           <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
@@ -282,11 +427,21 @@ function renderSuspensaoHtml({
       <script>window.onload = () => { window.print(); }</script>
     </body>
   </html>
-  `;
-}
+  `
+  }
 
-
-  function renderGenericHtml({ titulo, intro1, intro2, nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc }) {
+  function renderGenericHtml({
+    titulo,
+    intro1,
+    intro2,
+    nome,
+    registro,
+    cargo,
+    ocorrencia,
+    dataOcorr,
+    observ,
+    dataDoc,
+  }) {
     return `
       <html>
         <head>
@@ -301,7 +456,9 @@ function renderSuspensaoHtml({
               <div class="right mt">${dataDoc}</div>
 
               <div class="linha mt">
-                <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
+                <div>SR(A) <span class="label">${nome}</span> ${
+      registro ? `(REGISTRO: ${registro})` : ''
+    }</div>
                 <div><span class="label">Cargo:</span> ${cargo}</div>
               </div>
 
@@ -347,7 +504,10 @@ function renderSuspensaoHtml({
   // ======== Geradores ========
   function gerarOrientacao() {
     if (!t) return
-    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+    if (!resumo.trim()) {
+      alert('Preencha o Resumo / Observações para gerar a medida.')
+      return
+    }
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
@@ -359,17 +519,30 @@ function renderSuspensaoHtml({
 
     const html = renderGenericHtml({
       titulo: 'ORIENTAÇÃO DISCIPLINAR',
-      intro1: 'Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
-      intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.',
-      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
+      intro1:
+        'Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
+      intro2:
+        'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.',
+      nome,
+      registro,
+      cargo,
+      ocorrencia,
+      dataOcorr,
+      observ,
+      dataDoc,
     })
 
-    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
   }
 
   function gerarAdvertencia() {
     if (!t) return
-    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+    if (!resumo.trim()) {
+      alert('Preencha o Resumo / Observações para gerar a medida.')
+      return
+    }
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
@@ -381,17 +554,30 @@ function renderSuspensaoHtml({
 
     const html = renderGenericHtml({
       titulo: 'ADVERTÊNCIA DISCIPLINAR',
-      intro1: 'Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
-      intro2: 'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.',
-      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc
+      intro1:
+        'Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
+      intro2:
+        'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.',
+      nome,
+      registro,
+      cargo,
+      ocorrencia,
+      dataOcorr,
+      observ,
+      dataDoc,
     })
 
-    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
   }
 
   function gerarSuspensao() {
     if (!t) return
-    if (!resumo.trim()) { alert('Preencha o Resumo / Observações para gerar a medida.'); return }
+    if (!resumo.trim()) {
+      alert('Preencha o Resumo / Observações para gerar a medida.')
+      return
+    }
 
     const dataDoc = dataPtCompletaUpper(new Date())
     const nome = (t.motorista_nome || '—').toUpperCase()
@@ -402,26 +588,36 @@ function renderSuspensaoHtml({
     const observ = (resumo || t.descricao || '').trim() || '—'
 
     const html = renderSuspensaoHtml({
-      nome, registro, cargo, ocorrencia, dataOcorr, observ, dataDoc,
-      dias: diasSusp, inicio: inicioSusp, fim: fimSusp, retorno: retornoSusp
+      nome,
+      registro,
+      cargo,
+      ocorrencia,
+      dataOcorr,
+      observ,
+      dataDoc,
+      dias: diasSusp,
+      inicio: inicioSusp,
+      fim: fimSusp,
+      retorno: retornoSusp,
     })
 
-    const w = window.open('', '_blank'); w.document.write(html); w.document.close()
-  }
-
-  function gerarMedida() {
-    if (acao === 'Orientação') return gerarOrientacao()
-    if (acao === 'Advertência') return gerarAdvertencia()
-    if (acao === 'Suspensão') return gerarSuspensao()
-    alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.')
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
   }
 
   if (!t) return <div className="p-6">Carregando…</div>
 
+  // Evidências da solicitação (pode vir do novo campo evidencias_urls, senão cai no legado imagem_url)
+  const evidenciasSolicitacao =
+    Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
+      ? t.evidencias_urls
+      : (t.imagem_url ? [t.imagem_url] : [])
+
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
-      <p className="text-gray-600 mb-6">Revise os dados, anexe a imagem da tratativa e gere a medida.</p>
+      <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
 
       {/* Card: dados + edição */}
       <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
@@ -431,74 +627,125 @@ function renderSuspensaoHtml({
 
           <Item
             titulo="Ocorrência"
-            valor={isEditing ? (
-              <input className="w-full border rounded px-2 py-1"
-                     value={editForm.tipo_ocorrencia}
-                     onChange={e=>setEditForm(s=>({...s, tipo_ocorrencia: e.target.value}))}/>
-            ) : t.tipo_ocorrencia}
+            valor={
+              isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
+                  value={editForm.tipo_ocorrencia}
+                  onChange={(e) => setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))}
+                />
+              ) : (
+                t.tipo_ocorrencia
+              )
+            }
           />
           <Item
             titulo="Prioridade"
-            valor={isEditing ? (
-              <select className="w-full border rounded px-2 py-1"
-                      value={editForm.prioridade}
-                      onChange={e=>setEditForm(s=>({...s, prioridade: e.target.value}))}>
-                <option>Baixa</option><option>Média</option><option>Alta</option>
-              </select>
-            ) : t.prioridade}
+            valor={
+              isEditing ? (
+                <select
+                  className="w-full border rounded px-2 py-1"
+                  value={editForm.prioridade}
+                  onChange={(e) => setEditForm((s) => ({ ...s, prioridade: e.target.value }))}
+                >
+                  <option>Baixa</option>
+                  <option>Média</option>
+                  <option>Alta</option>
+                </select>
+              ) : (
+                t.prioridade
+              )
+            }
           />
           <Item
             titulo="Setor"
-            valor={isEditing ? (
-              <input className="w-full border rounded px-2 py-1"
-                     value={editForm.setor_origem}
-                     onChange={e=>setEditForm(s=>({...s, setor_origem: e.target.value}))}/>
-            ) : t.setor_origem}
+            valor={
+              isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
+                  value={editForm.setor_origem}
+                  onChange={(e) => setEditForm((s) => ({ ...s, setor_origem: e.target.value }))}
+                />
+              ) : (
+                t.setor_origem
+              )
+            }
           />
           <Item
             titulo="Linha"
-            valor={isEditing ? (
-              <input className="w-full border rounded px-2 py-1"
-                     placeholder="Código ex.: 01TR"
-                     value={editForm.linha}
-                     onChange={e=>setEditForm(s=>({...s, linha: e.target.value}))}/>
-            ) : (t.linha ? `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ''}` : '-')}
+            valor={
+              isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
+                  placeholder="Código ex.: 01TR"
+                  value={editForm.linha}
+                  onChange={(e) => setEditForm((s) => ({ ...s, linha: e.target.value }))}
+                />
+              ) : t.linha ? (
+                `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ''}`
+              ) : (
+                '-'
+              )
+            }
           />
           <Item titulo="Status" valor={t.status} />
           <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
           <Item
             className="md:col-span-2"
             titulo="Descrição"
-            valor={isEditing ? (
-              <textarea className="w-full border rounded px-2 py-1" rows={3}
-                        value={editForm.descricao}
-                        onChange={e=>setEditForm(s=>({...s, descricao: e.target.value}))}/>
-            ) : (t.descricao || '-')}
+            valor={
+              isEditing ? (
+                <textarea
+                  className="w-full border rounded px-2 py-1"
+                  rows={3}
+                  value={editForm.descricao}
+                  onChange={(e) => setEditForm((s) => ({ ...s, descricao: e.target.value }))}
+                />
+              ) : (
+                t.descricao || '-'
+              )
+            }
           />
 
-          {/* Imagem única da tratativa */}
+          {/* Evidências da solicitação (reclamação) - múltiplas */}
           <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Imagem da tratativa (opcional)</label>
-            <input type="file" accept="image/*" onChange={e => setImg(e.target.files?.[0] || null)} />
-            {t.imagem_tratativa || t.imagem_url ? (
-              <div className="mt-2">
-                <span className="block text-sm text-gray-600 mb-1">Imagem existente (clique para ampliar)</span>
-                <a href={(t.imagem_tratativa || t.imagem_url)} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={(t.imagem_tratativa || t.imagem_url)}
-                    className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                    alt="Imagem da tratativa"
-                  />
-                </a>
-              </div>
-            ) : null}
+            {renderListaEvidencias(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
+          </div>
+
+          {/* Evidência da conclusão (imagem/pdf) */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">
+              Evidência da conclusão (opcional) — imagem ou PDF
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setImg(e.target.files?.[0] || null)}
+            />
+
+            {renderArquivo(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
+          </div>
+
+          {/* Anexo da tratativa (documento) */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">
+              Anexo da tratativa (documento) (opcional) — imagem ou PDF
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setAnexo(e.target.files?.[0] || null)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
+            </p>
           </div>
         </dl>
 
         <div className="mt-4 flex gap-2">
           {!isEditing ? (
             <button
-              onClick={()=>setIsEditing(true)}
+              onClick={() => setIsEditing(true)}
               className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
             >
               Editar dados
@@ -513,13 +760,16 @@ function renderSuspensaoHtml({
                 Salvar
               </button>
               <button
-                onClick={()=>{ setIsEditing(false); setEditForm({
-                  tipo_ocorrencia: t.tipo_ocorrencia || '',
-                  prioridade: t.prioridade || 'Média',
-                  setor_origem: t.setor_origem || '',
-                  linha: t.linha || '',
-                  descricao: t.descricao || '',
-                })}}
+                onClick={() => {
+                  setIsEditing(false)
+                  setEditForm({
+                    tipo_ocorrencia: t.tipo_ocorrencia || '',
+                    prioridade: t.prioridade || 'Média',
+                    setor_origem: t.setor_origem || '',
+                    linha: t.linha || '',
+                    descricao: t.descricao || '',
+                  })
+                }}
                 className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
               >
                 Cancelar
@@ -534,8 +784,16 @@ function renderSuspensaoHtml({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
-            <select className="w-full rounded-md border px-3 py-2" value={acao} onChange={e => setAcao(e.target.value)}>
-              {acoes.map(a => <option key={a} value={a}>{a}</option>)}
+            <select
+              className="w-full rounded-md border px-3 py-2"
+              value={acao}
+              onChange={(e) => setAcao(e.target.value)}
+            >
+              {acoes.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -546,9 +804,13 @@ function renderSuspensaoHtml({
                 <select
                   className="w-full rounded-md border px-3 py-2"
                   value={diasSusp}
-                  onChange={e => setDiasSusp(Number(e.target.value))}
+                  onChange={(e) => setDiasSusp(Number(e.target.value))}
                 >
-                  {[1,3,5,7].map(d => <option key={d} value={d}>{d} dia(s)</option>)}
+                  {[1, 3, 5, 7].map((d) => (
+                    <option key={d} value={d}>
+                      {d} dia(s)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -558,7 +820,7 @@ function renderSuspensaoHtml({
                   type="date"
                   className="w-full rounded-md border px-3 py-2"
                   value={dataSuspensao}
-                  onChange={e => setDataSuspensao(e.target.value)}
+                  onChange={(e) => setDataSuspensao(e.target.value)}
                 />
               </div>
 
@@ -573,8 +835,12 @@ function renderSuspensaoHtml({
 
         <div className="mt-4">
           <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
-          <textarea rows={4} className="w-full rounded-md border px-3 py-2"
-            value={resumo} onChange={e => setResumo(e.target.value)} />
+          <textarea
+            rows={4}
+            className="w-full rounded-md border px-3 py-2"
+            value={resumo}
+            onChange={(e) => setResumo(e.target.value)}
+          />
         </div>
 
         <div className="mt-4 flex gap-3 flex-wrap">
