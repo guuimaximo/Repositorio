@@ -23,7 +23,7 @@ export default function TratarTratativa() {
   const [acao, setAcao] = useState('Orientação')
 
   // Conclusão: evidência (imagem/pdf) + anexo (imagem/pdf)
-  const [img, setImg] = useState(null)     // evidência da conclusão
+  const [img, setImg] = useState(null) // evidência da conclusão
   const [anexo, setAnexo] = useState(null) // anexo da tratativa (documento)
 
   const [loading, setLoading] = useState(false)
@@ -74,21 +74,30 @@ export default function TratarTratativa() {
     return dt.toLocaleDateString('pt-BR')
   }
 
-  const addDays = (dateStr, n) => {
-    const d = new Date(dateStr)
-    d.setDate(d.getDate() + n)
-    return d
+  // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
+  const parseDateLocal = (dateStr) => {
+    if (!dateStr) return new Date()
+    const [yyyy, mm, dd] = String(dateStr).split('-').map(Number)
+    return new Date(yyyy, (mm || 1) - 1, dd || 1)
   }
 
-  // Início, fim e retorno (dias corridos: fim = início + (dias - 1), retorno = fim + 1)
-  const inicioSusp = useMemo(() => new Date(dataSuspensao), [dataSuspensao])
+  const addDaysLocal = (dateOrStr, n) => {
+    const base = dateOrStr instanceof Date ? new Date(dateOrStr) : parseDateLocal(dateOrStr)
+    base.setDate(base.getDate() + Number(n || 0))
+    return base
+  }
+
+  // Regras: início = data da suspensão; fim = início + (dias - 1); retorno = início + dias
+  const inicioSusp = useMemo(() => parseDateLocal(dataSuspensao), [dataSuspensao])
+
   const fimSusp = useMemo(
-    () => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)),
-    [dataSuspensao, diasSusp]
+    () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp) - 1, 0)),
+    [inicioSusp, diasSusp]
   )
+
   const retornoSusp = useMemo(
-    () => addDays(dataSuspensao, Math.max(Number(diasSusp), 0)),
-    [dataSuspensao, diasSusp]
+    () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)),
+    [inicioSusp, diasSusp]
   )
 
   // ===== Helpers de evidência (compacta: só nome do arquivo) =====
@@ -111,6 +120,11 @@ export default function TratarTratativa() {
       fileOrUrl.type === 'application/pdf' ||
       String(fileOrUrl.name || '').toLowerCase().endsWith('.pdf')
     )
+  }
+
+  const isImageUrl = (u) => {
+    const s = String(u || '').toLowerCase()
+    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s)
   }
 
   const renderListaArquivosCompacta = (urls, label) => {
@@ -140,20 +154,37 @@ export default function TratarTratativa() {
     )
   }
 
-  const renderArquivoCompacto = (url, label) => {
+  // ====== Ajuste: anexo / arquivo único -> PDF mostra link | imagem mostra miniatura clicável ======
+  const renderArquivoOuThumb = (url, label) => {
     if (!url) return null
+
+    const pdf = isPdf(url)
+    const img = !pdf && isImageUrl(url)
+
     return (
       <div className="mt-2">
         <span className="block text-sm text-gray-600 mb-2">{label}</span>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-blue-600 underline"
-          title="Abrir arquivo"
-        >
-          {fileNameFromUrl(url)}
-        </a>
+
+        {pdf || !img ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 underline"
+            title="Abrir arquivo"
+          >
+            {fileNameFromUrl(url)}
+          </a>
+        ) : (
+          <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
+            <img
+              src={url}
+              alt={fileNameFromUrl(url)}
+              className="h-16 w-16 rounded border object-cover hover:opacity-90"
+              loading="lazy"
+            />
+          </a>
+        )}
       </div>
     )
   }
@@ -819,7 +850,7 @@ export default function TratarTratativa() {
               accept="image/*,application/pdf"
               onChange={(e) => setImg(e.target.files?.[0] || null)}
             />
-            {renderArquivoCompacto(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
+            {renderArquivoOuThumb(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
           </div>
 
           <div>
@@ -834,6 +865,11 @@ export default function TratarTratativa() {
             <p className="text-xs text-gray-500 mt-1">
               Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
             </p>
+
+            {/* Se você já estiver salvando/anexando o link em tratativas_detalhes, você pode também renderizar aqui.
+                Como no seu código atual não existe t.anexo_tratativa, mantive apenas o comportamento pedido
+                para quando existir URL. Se você tiver um campo na tabela tratativas, basta trocar abaixo. */}
+            {renderArquivoOuThumb(t.anexo_tratativa || null, 'Anexo já anexado (se houver)')}
           </div>
         </div>
 
