@@ -11,26 +11,108 @@ export default function ConsultarTratativa() {
   const [historico, setHistorico] = useState([])
   const [linhaDesc, setLinhaDesc] = useState('')
 
+  // ===== Helpers (mesma lógica do Tratar) =====
+  const fileNameFromUrl = (u) => {
+    try {
+      const raw = String(u || '')
+      const noHash = raw.split('#')[0]
+      const noQuery = noHash.split('?')[0]
+      const last = noQuery.split('/').filter(Boolean).pop() || 'arquivo'
+      return decodeURIComponent(last)
+    } catch {
+      return 'arquivo'
+    }
+  }
+
+  const isPdf = (fileOrUrl) => {
+    if (!fileOrUrl) return false
+    if (typeof fileOrUrl === 'string') return fileOrUrl.toLowerCase().includes('.pdf')
+    return false
+  }
+
+  const isImageUrl = (u) => {
+    const s = String(u || '').toLowerCase()
+    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s)
+  }
+
+  const renderArquivoOuThumb = (url, label) => {
+    if (!url) return null
+    const pdf = isPdf(url)
+    const img = !pdf && isImageUrl(url)
+
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+
+        {pdf || !img ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 underline"
+            title="Abrir arquivo"
+          >
+            {fileNameFromUrl(url)}
+          </a>
+        ) : (
+          <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
+            <img
+              src={url}
+              alt={fileNameFromUrl(url)}
+              className="h-20 w-20 rounded border object-cover hover:opacity-90"
+              loading="lazy"
+            />
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  const renderListaArquivosCompacta = (urls, label) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : []
+    if (arr.length === 0) return null
+
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+        <ul className="space-y-1">
+          {arr.map((u, i) => (
+            <li key={`${u}-${i}`} className="text-sm">
+              <a
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline"
+                title="Abrir evidência"
+              >
+                {fileNameFromUrl(u)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       // Tratativa
-      const { data, error } = await supabase
-        .from('tratativas')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
       if (error) console.error(error)
       setT(data || null)
 
-      // Histórico (mais recente primeiro) com Nomes REAIS
+      // Histórico (mais recente primeiro) COM OS NOMES DO TRATAR
+      // Ajustado para: tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa
       const h = await supabase
         .from('tratativas_detalhes')
-        .select('id, criado_em, tipo_acao, descricao_acao, imagem_evidencia_url, imagem_assinatura_url')
-        .eq('id_tratativa', id)
-        .order('criado_em', { ascending: false })
+        .select('id, created_at, criado_em, tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa')
+        .eq('tratativa_id', id)
+        .order('created_at', { ascending: false })
+
+      if (h.error) console.error(h.error)
       setHistorico(h.data || [])
 
-      // Descrição da linha (se salvar código da linha em t.linha)
+      // Descrição da linha
       if (data?.linha) {
         const { data: row } = await supabase
           .from('linhas')
@@ -44,25 +126,33 @@ export default function ConsultarTratativa() {
     })()
   }, [id])
 
-  // Usa campos denormalizados se existirem; senão, pega a primeira do histórico
   const ultima = useMemo(() => {
-    if (!t) return null
-    if (t.ultima_acao_aplicada) {
-      return {
-        tipo_acao: t.ultima_acao_aplicada,
-        descricao_acao: t.ultima_observacao,
-        criado_em: t.ultima_acao_at
-      }
-    }
-    return (historico && historico.length > 0 ? historico[0] : null)
-  }, [t, historico])
+    if (!historico || historico.length === 0) return null
+    return historico[0]
+  }, [historico])
 
   if (!t) return <div className="p-6">Carregando…</div>
 
   const dataOcorr = t.data_ocorrido || t.data_ocorrida || '-'
   const horaOcorr = t.hora_ocorrido || t.hora_ocorrida || ''
 
-  const suspensoes = (historico || []).filter(h => (h.tipo_acao || '').toLowerCase() === 'suspensão')
+  // Evidências da solicitação
+  const evidenciasSolicitacao =
+    Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
+      ? t.evidencias_urls
+      : t.imagem_url
+      ? [t.imagem_url]
+      : []
+
+  // Suspensões no histórico
+  const suspensoes = (historico || []).filter((h) =>
+    String(h.acao_aplicada || '').toLowerCase().includes('susp')
+  )
+
+  const dataHoraUltima =
+    ultima?.created_at || ultima?.criado_em
+      ? new Date(ultima.created_at || ultima.criado_em).toLocaleString('pt-BR')
+      : '—'
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -80,15 +170,17 @@ export default function ConsultarTratativa() {
       <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 mb-6">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Resumo da última ação</h2>
-          <span className="text-sm opacity-80">
-            {ultima?.criado_em ? new Date(ultima.criado_em).toLocaleString('pt-BR') : '—'}
-          </span>
+          <span className="text-sm opacity-80">{dataHoraUltima}</span>
         </div>
-        <div className="mt-1 font-medium">
-          {ultima?.tipo_acao || '—'}
-        </div>
+        <div className="mt-1 font-medium">{ultima?.acao_aplicada || '—'}</div>
         <div className="mt-1 whitespace-pre-wrap">
-          {ultima?.descricao_acao || 'Sem observações registradas.'}
+          {ultima?.observacoes || 'Sem observações registradas.'}
+        </div>
+
+        {/* Evidência/Anexo da última ação */}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>{renderArquivoOuThumb(ultima?.imagem_tratativa, 'Evidência da conclusão')}</div>
+          <div>{renderArquivoOuThumb(ultima?.anexo_tratativa, 'Anexo da tratativa')}</div>
         </div>
       </div>
 
@@ -100,26 +192,22 @@ export default function ConsultarTratativa() {
           <Item titulo="Ocorrência" valor={t.tipo_ocorrencia || '-'} />
           <Item titulo="Prioridade" valor={t.prioridade || '-'} />
           <Item titulo="Setor" valor={t.setor_origem || '-'} />
-          <Item
-            titulo="Linha"
-            valor={t.linha ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}` : '-'}
-          />
+          <Item titulo="Linha" valor={t.linha ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}` : '-'} />
           <Item titulo="Status" valor={t.status || '-'} />
           <Item titulo="Data/Hora" valor={`${dataOcorr} ${horaOcorr}`} />
-          <Item titulo="Última ação" valor={ultima?.tipo_acao || '—'} />
-          <Item titulo="Resumo da ação" valor={ultima?.descricao_acao || '—'} className="md:col-span-2" />
+          <Item titulo="Última ação" valor={ultima?.acao_aplicada || '—'} />
+          <Item titulo="Resumo da ação" valor={ultima?.observacoes || '—'} className="md:col-span-2" />
           <Item titulo="Descrição (abertura)" valor={t.descricao || '-'} className="md:col-span-2" />
 
-          {t.imagem_url && (
+          {/* Evidências da solicitação (compacto) */}
+          <div className="md:col-span-2">
+            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
+          </div>
+
+          {/* Evidência da conclusão denormalizada (se existir em tratativas) */}
+          {t.imagem_tratativa && (
             <div className="md:col-span-2">
-              <span className="block text-sm text-gray-600 mb-1">Imagem enviada (clique para ampliar)</span>
-              <a href={t.imagem_url} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={t.imagem_url}
-                  className="max-h-48 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                  alt="Imagem da ocorrência"
-                />
-              </a>
+              {renderArquivoOuThumb(t.imagem_tratativa, 'Evidência da conclusão (campo em tratativas)')}
             </div>
           )}
         </dl>
@@ -132,38 +220,23 @@ export default function ConsultarTratativa() {
           <div className="text-gray-500">Sem histórico.</div>
         ) : (
           <ul className="space-y-3">
-            {historico.map(h => (
-              <li key={h.id} className="rounded border p-3">
-                <div className="text-sm text-gray-600">
-                  {h.criado_em ? new Date(h.criado_em).toLocaleString('pt-BR') : '—'}
-                </div>
-                <div className="font-medium">{h.tipo_acao || '—'}</div>
-                {h.descricao_acao && (
-                  <div className="text-gray-700 whitespace-pre-wrap">{h.descricao_acao}</div>
-                )}
-                <div className="flex gap-3 mt-2 flex-wrap">
-                  {h.imagem_evidencia_url && (
-                    <a href={h.imagem_evidencia_url} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={h.imagem_evidencia_url}
-                        className="h-20 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                        alt="Imagem da tratativa"
-                      />
-                    </a>
-                  )}
-                  {h.imagem_assinatura_url && (
-                    <a
-                      className="text-blue-600 underline self-end"
-                      href={h.imagem_assinatura_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Ver assinatura
-                    </a>
-                  )}
-                </div>
-              </li>
-            ))}
+            {historico.map((h) => {
+              const when =
+                h.created_at || h.criado_em ? new Date(h.created_at || h.criado_em).toLocaleString('pt-BR') : '—'
+              return (
+                <li key={h.id} className="rounded border p-3">
+                  <div className="text-sm text-gray-600">{when}</div>
+                  <div className="font-medium">{h.acao_aplicada || '—'}</div>
+
+                  {h.observacoes && <div className="text-gray-700 whitespace-pre-wrap">{h.observacoes}</div>}
+
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>{renderArquivoOuThumb(h.imagem_tratativa, 'Evidência da conclusão')}</div>
+                    <div>{renderArquivoOuThumb(h.anexo_tratativa, 'Anexo da tratativa')}</div>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
@@ -175,26 +248,18 @@ export default function ConsultarTratativa() {
           <div className="text-gray-500">Sem suspensões registradas nesta tratativa.</div>
         ) : (
           <ul className="space-y-2">
-            {suspensoes.map(s => (
-              <li key={s.id} className="border rounded p-3">
-                <div className="text-sm text-gray-600">
-                  {s.criado_em ? new Date(s.criado_em).toLocaleString('pt-BR') : '—'}
-                </div>
-                <div className="font-medium">Suspensão aplicada</div>
-                {s.descricao_acao && <div className="text-gray-700">{s.descricao_acao}</div>}
-                {s.imagem_evidencia_url && (
-                  <div className="mt-2">
-                    <a href={s.imagem_evidencia_url} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={s.imagem_evidencia_url}
-                        className="h-20 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                        alt="Imagem da suspensão"
-                      />
-                    </a>
-                  </div>
-                )}
-              </li>
-            ))}
+            {suspensoes.map((s) => {
+              const when =
+                s.created_at || s.criado_em ? new Date(s.created_at || s.criado_em).toLocaleString('pt-BR') : '—'
+              return (
+                <li key={s.id} className="border rounded p-3">
+                  <div className="text-sm text-gray-600">{when}</div>
+                  <div className="font-medium">Suspensão aplicada</div>
+                  {s.observacoes && <div className="text-gray-700 whitespace-pre-wrap">{s.observacoes}</div>}
+                  {s.imagem_tratativa && <div className="mt-2">{renderArquivoOuThumb(s.imagem_tratativa, 'Evidência')}</div>}
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
