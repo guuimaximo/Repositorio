@@ -1,7 +1,8 @@
 // src/pages/LancarAvaria.jsx
 // (Revertido 'TipoOcorrencia' para input de texto)
+// ✅ AJUSTE: aceitar múltiplas evidências (já salva array de URLs em urls_evidencias)
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import CampoMotorista from '../components/CampoMotorista';
 import CampoPrefixo from '../components/CampoPrefixo';
@@ -9,7 +10,7 @@ import CampoPrefixo from '../components/CampoPrefixo';
 // --- Componente OrcamentoLinha (Item do Orçamento) ---
 function OrcamentoLinha({ item, index, onRemove, onChange }) {
   const totalLinha = (item.qtd || 0) * (item.valorUnitario || 0);
-  
+
   return (
     <div className="grid grid-cols-12 gap-3 mb-2 items-center">
       <input
@@ -52,13 +53,12 @@ function OrcamentoLinha({ item, index, onRemove, onChange }) {
 
 // --- Componente Principal da Página ---
 export default function LancarAvaria() {
-
   // --- Estados do Formulário ---
   const [formData, setFormData] = useState({
     dataAvaria: '',
     tipoOcorrencia: '',
     descricao: '',
-    numero_da_avaria: '' // <<< ADICIONADO
+    numero_da_avaria: '', // <<< ADICIONADO
   });
 
   // States separados para os componentes de busca
@@ -70,17 +70,18 @@ export default function LancarAvaria() {
   const [servicos, setServicos] = useState([]);
 
   // --- Estados de Upload e Loading ---
-  const [arquivos, setArquivos] = useState([]);
+  const [arquivos, setArquivos] = useState([]); // ✅ AGORA vira uma lista real de múltiplos arquivos
   const [loading, setLoading] = useState(false);
 
   // --- Handlers do Formulário ---
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // --- Handlers do Orçamento (Sem alteração) ---
-  const handleAddPeca = () => setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  const handleAddPeca = () =>
+    setPecas([...pecas, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
   const handleRemovePeca = (index) => setPecas(pecas.filter((_, i) => i !== index));
   const handleChangePeca = (index, field, value) => {
     const novasPecas = [...pecas];
@@ -88,7 +89,8 @@ export default function LancarAvaria() {
     setPecas(novasPecas);
   };
 
-  const handleAddServico = () => setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
+  const handleAddServico = () =>
+    setServicos([...servicos, { id: Date.now(), descricao: '', qtd: 1, valorUnitario: 0 }]);
   const handleRemoveServico = (index) => setServicos(servicos.filter((_, i) => i !== index));
   const handleChangeServico = (index, field, value) => {
     const novosServicos = [...servicos];
@@ -96,129 +98,157 @@ export default function LancarAvaria() {
     setServicos(novosServicos);
   };
 
-  // --- Handlers de Arquivos e Cálculos (Sem alteração) ---
-  const handleFileChange = (e) => setArquivos([...e.target.files]);
-  const calcularTotal = (lista) => lista.reduce((acc, item) => acc + (item.qtd || 0) * (item.valorUnitario || 0), 0);
+  // ✅ AJUSTE: garante múltiplos arquivos (Array) e não FileList
+  const handleFileChange = (e) => {
+    const list = Array.from(e.target.files || []);
+    setArquivos(list); // mantém como array
+  };
+
+  const calcularTotal = (lista) =>
+    lista.reduce((acc, item) => acc + (item.qtd || 0) * (item.valorUnitario || 0), 0);
   const totalPecas = useMemo(() => calcularTotal(pecas), [pecas]);
   const totalServicos = useMemo(() => calcularTotal(servicos), [servicos]);
   const totalOrcamento = totalPecas + totalServicos;
 
-  // --- Handler para salvar tudo (Sem alteração) ---
+  // --- Handler para salvar tudo ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Upload de arquivos
-    const uploadedFileUrls = [];
-    for (const file of arquivos) {
-      const fileName = `${Date.now()}_${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage.from('avarias').upload(fileName, file);
-      if (uploadError) { alert('Falha no upload: ' + uploadError.message); setLoading(false); return; }
-      const { data: urlData } = supabase.storage.from('avarias').getPublicUrl(uploadData.path);
-      uploadedFileUrls.push(urlData.publicUrl);
-    }
+    try {
+      // 1. Upload de arquivos (MÚLTIPLOS) ✅
+      const uploadedFileUrls = [];
 
-    // 2. Salvar dados na tabela 'avarias'
-    const motoristaString = (motorista.chapa || motorista.nome)
-      ? [motorista.chapa, motorista.nome].filter(Boolean).join(' - ')
-      : null;
+      for (const file of arquivos) {
+        const safeName = (file.name || 'arquivo')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-zA-Z0-9._-]/g, '');
 
-    const { data: avariaData, error: avariaError } = await supabase
-      .from('avarias')
-      .insert({
-        ...formData, // <<< INCLUI número_da_avaria
-        prefixo: prefixo,
-        "motoristaId": motoristaString,
-        status: 'Pendente de Aprovação',
-        urls_evidencias: uploadedFileUrls,
-        valor_total_orcamento: totalOrcamento,
-      })
-      .select().single();
+        const fileName = `avaria_${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
 
-    if (avariaError) {
-      console.error('Erro ao salvar avaria:', avariaError);
-      alert('Falha ao salvar avaria: ' + avariaError.message);
-      setLoading(false);
-      return;
-    }
-    const avariaId = avariaData.id;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('avarias')
+          .upload(fileName, file, { upsert: false, contentType: file.type || undefined });
 
-    // 3. Salvar itens do orçamento
-    const orcamentoItens = [
-      ...pecas.map(p => ({ ...p, tipo: 'Peca', avaria_id: avariaId, valorUnitario: p.valorUnitario })),
-      ...servicos.map(s => ({ ...s, tipo: 'Servico', avaria_id: avariaId, valorUnitario: s.valorUnitario })),
-    ];
+        if (uploadError) throw uploadError;
 
-    const itensParaSalvar = orcamentoItens.map(({ id, valorUnitario, ...rest }) => ({
+        const { data: urlData } = supabase.storage.from('avarias').getPublicUrl(uploadData.path);
+        if (urlData?.publicUrl) uploadedFileUrls.push(urlData.publicUrl);
+      }
+
+      // 2. Salvar dados na tabela 'avarias'
+      const motoristaString =
+        motorista.chapa || motorista.nome
+          ? [motorista.chapa, motorista.nome].filter(Boolean).join(' - ')
+          : null;
+
+      const { data: avariaData, error: avariaError } = await supabase
+        .from('avarias')
+        .insert({
+          ...formData, // inclui numero_da_avaria
+          prefixo: prefixo,
+          motoristaId: motoristaString,
+          status: 'Pendente de Aprovação',
+
+          // ✅ múltiplas evidências
+          urls_evidencias: uploadedFileUrls,
+
+          valor_total_orcamento: totalOrcamento,
+        })
+        .select()
+        .single();
+
+      if (avariaError) throw avariaError;
+
+      const avariaId = avariaData.id;
+
+      // 3. Salvar itens do orçamento
+      const orcamentoItens = [
+        ...pecas.map((p) => ({ ...p, tipo: 'Peca', avaria_id: avariaId, valorUnitario: p.valorUnitario })),
+        ...servicos.map((s) => ({
+          ...s,
+          tipo: 'Servico',
+          avaria_id: avariaId,
+          valorUnitario: s.valorUnitario,
+        })),
+      ];
+
+      const itensParaSalvar = orcamentoItens.map(({ id, valorUnitario, ...rest }) => ({
         ...rest,
-        "valorUnitario": valorUnitario
-    }));
+        valorUnitario: valorUnitario,
+      }));
 
-    const { error: orcamentoError } = await supabase.from('cobrancas_avarias').insert(itensParaSalvar);
-    if (orcamentoError) { alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message); } 
-    else { alert('Avaria lançada para aprovação com sucesso!'); }
-    setLoading(false);
+      const { error: orcamentoError } = await supabase.from('cobrancas_avarias').insert(itensParaSalvar);
+
+      if (orcamentoError) {
+        alert('Falha ao salvar itens do orçamento: ' + orcamentoError.message);
+      } else {
+        alert('Avaria lançada para aprovação com sucesso!');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Falha: ' + (err?.message || String(err)));
+    } finally {
+      setLoading(false);
+    }
   };
-
 
   // --- RENDERIZAÇÃO (JSX) ---
   return (
-    <div className="max-w-7xl mx-auto p-6"> 
+    <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">Registrar Lançamento de Avaria</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
-
         {/* --- Seção 1 & 2: Identificação e Detalhes --- */}
         <div className="bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Identificação e Detalhes</h2>
+          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">
+            Identificação e Detalhes
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* Campo Prefixo (Usa o novo componente) */}
+            {/* Campo Prefixo */}
             <div className="flex flex-col">
-              <CampoPrefixo 
-                value={prefixo} 
-                onChange={setPrefixo} 
-                label="Prefixo"
-              />
+              <CampoPrefixo value={prefixo} onChange={setPrefixo} label="Prefixo" />
             </div>
 
-            {/* Campo Motorista (Usa o seu componente) */}
+            {/* Campo Motorista */}
             <div className="flex flex-col">
-              <CampoMotorista 
-                value={motorista} 
-                onChange={setMotorista} 
-                label="Motorista (Opcional)"
-              />
+              <CampoMotorista value={motorista} onChange={setMotorista} label="Motorista (Opcional)" />
             </div>
 
             {/* Campo Data */}
             <div className="flex flex-col">
-              <label htmlFor="dataAvaria" className="mb-1 text-sm font-medium text-gray-600">Data e Hora da Avaria</label>
-              <input 
-                type="datetime-local" 
-                name="dataAvaria" 
-                id="dataAvaria" 
+              <label htmlFor="dataAvaria" className="mb-1 text-sm font-medium text-gray-600">
+                Data e Hora da Avaria
+              </label>
+              <input
+                type="datetime-local"
+                name="dataAvaria"
+                id="dataAvaria"
                 className="border rounded-md px-3 py-2"
-                onChange={handleFormChange} 
+                onChange={handleFormChange}
                 value={formData.dataAvaria}
-                required 
+                required
               />
             </div>
 
             {/* CAMPO TIPO OCORRÊNCIA */}
             <div className="flex flex-col">
-              <label htmlFor="tipoOcorrencia" className="mb-1 text-sm font-medium text-gray-600">Tipo de Ocorrência</label>
-              <input 
-                type="text" 
-                name="tipoOcorrencia" 
-                id="tipoOcorrencia" 
-                className="border rounded-md px-3 py-2" 
+              <label htmlFor="tipoOcorrencia" className="mb-1 text-sm font-medium text-gray-600">
+                Tipo de Ocorrência
+              </label>
+              <input
+                type="text"
+                name="tipoOcorrencia"
+                id="tipoOcorrencia"
+                className="border rounded-md px-3 py-2"
                 onChange={handleFormChange}
                 value={formData.tipoOcorrencia}
-                required 
+                required
               />
             </div>
 
-            {/* NOVO CAMPO — Número da Avaria */}
+            {/* Número da Avaria */}
             <div className="flex flex-col">
               <label htmlFor="numero_da_avaria" className="mb-1 text-sm font-medium text-gray-600">
                 Número da Avaria
@@ -234,9 +264,11 @@ export default function LancarAvaria() {
               />
             </div>
 
-            {/* CAMPO DESCRIÇÃO */}
+            {/* DESCRIÇÃO */}
             <div className="flex flex-col md:col-span-3">
-              <label htmlFor="descricao" className="mb-1 text-sm font-medium text-gray-600">Descrição da Avaria (Relato)</label>
+              <label htmlFor="descricao" className="mb-1 text-sm font-medium text-gray-600">
+                Descrição da Avaria (Relato)
+              </label>
               <textarea
                 name="descricao"
                 id="descricao"
@@ -245,7 +277,7 @@ export default function LancarAvaria() {
                 placeholder="Descreva o que foi identificado pela manutenção..."
                 onChange={handleFormChange}
                 value={formData.descricao}
-              ></textarea>
+              />
             </div>
           </div>
         </div>
@@ -265,7 +297,13 @@ export default function LancarAvaria() {
               <span className="col-span-1">Ação</span>
             </div>
             {pecas.map((item, index) => (
-              <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemovePeca} onChange={handleChangePeca} />
+              <OrcamentoLinha
+                key={item.id}
+                item={item}
+                index={index}
+                onRemove={handleRemovePeca}
+                onChange={handleChangePeca}
+              />
             ))}
             <button
               type="button"
@@ -292,7 +330,13 @@ export default function LancarAvaria() {
               <span className="col-span-1">Ação</span>
             </div>
             {servicos.map((item, index) => (
-              <OrcamentoLinha key={item.id} item={item} index={index} onRemove={handleRemoveServico} onChange={handleChangeServico} />
+              <OrcamentoLinha
+                key={item.id}
+                item={item}
+                index={index}
+                onRemove={handleRemoveServico}
+                onChange={handleChangeServico}
+              />
             ))}
             <button
               type="button"
@@ -314,24 +358,39 @@ export default function LancarAvaria() {
 
         {/* EVIDÊNCIAS */}
         <div className="bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Evidências (Fotos e Vídeos)</h2>
+          <h2 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">
+            Evidências (Fotos e Vídeos)
+          </h2>
           <label
             htmlFor="file-upload"
             className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
           >
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Clique para enviar</span> ou arraste e solte</p>
+              <p className="mb-2 text-sm text-gray-500">
+                <span className="font-semibold">Clique para enviar</span> ou arraste e solte
+              </p>
               <p className="text-xs text-gray-500">Imagens (PNG, JPG) ou Vídeos (MP4, MOV)</p>
             </div>
-            <input id="file-upload" type="file" className="hidden" multiple onChange={handleFileChange} accept="image/*,video/*" />
+
+            {/* ✅ mantém multiple */}
+            <input
+              id="file-upload"
+              type="file"
+              className="hidden"
+              multiple
+              onChange={handleFileChange}
+              accept="image/*,video/*"
+            />
           </label>
 
           {arquivos.length > 0 && (
             <div className="mt-4">
               <h4 className="font-medium text-gray-700">Arquivos selecionados:</h4>
               <ul className="list-disc list-inside text-gray-600">
-                {Array.from(arquivos).map((file, index) => (
-                  <li key={index}>{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</li>
+                {arquivos.map((file, index) => (
+                  <li key={index}>
+                    {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  </li>
                 ))}
               </ul>
             </div>
@@ -340,10 +399,7 @@ export default function LancarAvaria() {
 
         {/* AÇÕES */}
         <div className="flex justify-end gap-4 pt-4">
-          <button
-            type="button"
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
-          >
+          <button type="button" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">
             Limpar
           </button>
           <button
@@ -354,7 +410,6 @@ export default function LancarAvaria() {
             {loading ? 'Salvando...' : 'Enviar para Aprovação'}
           </button>
         </div>
-
       </form>
     </div>
   );
