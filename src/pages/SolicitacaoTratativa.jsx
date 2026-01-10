@@ -1,12 +1,16 @@
 // src/pages/SolicitacaoTratativa.jsx
 // Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
 // + Múltiplas evidências (salva TODAS em evidencias_urls)
+// ✅ AJUSTE: grava criado_por_login, criado_por_nome, criado_por_id (sem alterar o resto)
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { supabase } from '../supabase';
 import CampoMotorista from '../components/CampoMotorista';
+import { AuthContext } from '../context/AuthContext'; // ✅ AJUSTE
 
 export default function SolicitacaoTratativa() {
+  const { user } = useContext(AuthContext); // ✅ AJUSTE
+
   const [motorista, setMotorista] = useState({ chapa: '', nome: '' });
   const [form, setForm] = useState({
     tipo_ocorrencia: '',
@@ -93,35 +97,51 @@ export default function SolicitacaoTratativa() {
 
     setLoading(true);
     try {
+      // ✅ AJUSTE: resolve nome/login/id do usuário logado (fallback para buscar no usuarios_aprovadores)
+      const loginSessao = user?.login || null;
+      const idSessao = user?.id || user?.auth_user_id || null;
+
+      let nomeSessao = user?.nome || null;
+      if (!nomeSessao && loginSessao) {
+        const { data: u, error: eu } = await supabase
+          .from('usuarios_aprovadores')
+          .select('nome')
+          .eq('login', loginSessao)
+          .maybeSingle();
+
+        if (!eu) nomeSessao = u?.nome || null;
+      }
+
       let evidenciasUrls = [];
-if (files.length > 0) {
-  // NÃO coloque "tratativas/" aqui (isso é o bucket)
-  const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
-    .toString()
-    .trim()
-    .replace(/\s+/g, '_')}`;
+      if (files.length > 0) {
+        // NÃO coloque "tratativas/" aqui (isso é o bucket)
+        const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
+          .toString()
+          .trim()
+          .replace(/\s+/g, '_')}`;
 
-  for (const f of files) {
-    // sanitiza nome do arquivo
-    const safeName = (f.name || 'arquivo')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // remove acentos
-      .replace(/\s+/g, '_')                              // espaços -> _
-      .replace(/[^a-zA-Z0-9._-]/g, '');                  // remove caracteres inválidos
+        for (const f of files) {
+          // sanitiza nome do arquivo
+          const safeName = (f.name || 'arquivo')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // remove acentos
+            .replace(/\s+/g, '_') // espaços -> _
+            .replace(/[^a-zA-Z0-9._-]/g, ''); // remove caracteres inválidos
 
-    // garante unicidade para não colidir
-    const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
-    const path = `${folder}/${unique}`; // <-- key correta (sem "tratativas/")
+          // garante unicidade para não colidir
+          const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+          const path = `${folder}/${unique}`; // <-- key correta (sem "tratativas/")
 
-    const up = await supabase.storage.from('tratativas').upload(path, f, {
-      upsert: false,
-      contentType: f.type || undefined,
-    });
-    if (up.error) throw up.error;
+          const up = await supabase.storage.from('tratativas').upload(path, f, {
+            upsert: false,
+            contentType: f.type || undefined,
+          });
+          if (up.error) throw up.error;
 
-    const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
-    if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
-  }
-}
+          const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
+          if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
+        }
+      }
 
       const payload = {
         motorista_chapa: motorista.chapa || null,
@@ -142,6 +162,11 @@ if (files.length > 0) {
 
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
+
+        // ✅ AJUSTE (NOVO): auditoria do criador
+        criado_por_login: loginSessao,
+        criado_por_nome: nomeSessao || loginSessao,
+        criado_por_id: idSessao,
       };
 
       const { error } = await supabase.from('tratativas').insert(payload);
