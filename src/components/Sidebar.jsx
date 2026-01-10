@@ -20,7 +20,8 @@ import {
   FaUserCog,
   FaSignOutAlt,
   FaDownload,
-  FaRoad, // ✅ novo ícone
+  FaRoad,
+  FaGasPump, // ✅ NOVO (Desempenho Diesel)
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -41,7 +42,7 @@ const ACCESS = {
     "/sos-tratamento",
     "/sos-central",
     "/sos-dashboard",
-    "/km-rodado", // ✅
+    "/km-rodado",
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
@@ -54,7 +55,7 @@ const ACCESS = {
     "/sos-tratamento",
     "/sos-central",
     "/sos-dashboard",
-    "/km-rodado", // ✅
+    "/km-rodado",
   ],
   CCO: [
     "/",
@@ -62,7 +63,7 @@ const ACCESS = {
     "/sos-solicitacao",
     "/sos-fechamento",
     "/sos-dashboard",
-    "/km-rodado", // ✅
+    "/km-rodado",
   ],
 };
 
@@ -108,8 +109,11 @@ export default function Sidebar() {
         { path: "/sos-tratamento", label: "Manutenção", icon: <FaScrewdriver /> },
         { path: "/sos-central", label: "Central", icon: <FaEye /> },
         { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> },
-        { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> }, // ✅ NOVO LINK
+        { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> },
       ],
+
+      // ✅ NOVO: somente Administrador deve ver
+      desempenhoDiesel: { path: "/desempenho-diesel", label: "Desempenho Diesel", icon: <FaGasPump /> },
 
       configuracoes: [{ path: "/usuarios", label: "Usuários", icon: <FaUserCog /> }],
     }),
@@ -138,6 +142,9 @@ export default function Sidebar() {
   const showSOS = links.sos.some((l) => canSee(user, l.path));
   const showConfig = isAdmin;
 
+  // ✅ NOVO: Desempenho Diesel só Admin
+  const showDesempenhoDiesel = isAdmin;
+
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
@@ -154,6 +161,13 @@ export default function Sidebar() {
         {canSee(user, links.inicio.path) && (
           <NavLink to={links.inicio.path} className={navLinkClass}>
             {links.inicio.icon} <span>{links.inicio.label}</span>
+          </NavLink>
+        )}
+
+        {/* ✅ NOVO LINK (somente Admin) */}
+        {showDesempenhoDiesel && (
+          <NavLink to={links.desempenhoDiesel.path} className={navLinkClass}>
+            {links.desempenhoDiesel.icon} <span>{links.desempenhoDiesel.label}</span>
           </NavLink>
         )}
 
