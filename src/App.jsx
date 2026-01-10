@@ -22,6 +22,9 @@ import SOSDashboard from "./pages/SOSDashboard"; // ✅ Dashboard Intervenções
 
 import KMRodado from "./pages/KMRodado"; // ✅ NOVA PAGE (KM Rodado do dia)
 
+// ✅ Desempenho Diesel
+import DesempenhoDiesel from "./pages/DesempenhoDiesel";
+
 import Usuarios from "./pages/Usuarios"; // ⚙️ tela de configuração
 import RequireAuth from "./routes/RequireAuth"; // proteção geral
 
@@ -63,7 +66,10 @@ export default function App() {
           <Route path="/sos-dashboard" element={<SOSDashboard />} />
 
           {/* KM Rodado */}
-          <Route path="/km-rodado" element={<KMRodado />} /> {/* ✅ NOVA ROTA */}
+          <Route path="/km-rodado" element={<KMRodado />} />
+
+          {/* ✅ Desempenho Diesel (4 abas internas via hash) */}
+          <Route path="/desempenho-diesel" element={<DesempenhoDiesel />} />
 
           {/* ⚙️ Configurações — acesso direto */}
           <Route path="/usuarios" element={<Usuarios />} />
@@ -75,3 +81,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+
