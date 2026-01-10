@@ -1,7 +1,8 @@
 // src/pages/TratarTratativa.jsx
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useContext } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { AuthContext } from '../context/AuthContext' // ✅ NOVO
 
 const acoes = [
   'Orientação',
@@ -17,6 +18,8 @@ const acoes = [
 export default function TratarTratativa() {
   const { id } = useParams()
   const nav = useNavigate()
+
+  const { user } = useContext(AuthContext) // ✅ NOVO (pega usuário logado)
 
   const [t, setT] = useState(null)
   const [resumo, setResumo] = useState('')
@@ -72,18 +75,6 @@ export default function TratarTratativa() {
     const dt = d instanceof Date ? d : new Date(d)
     if (Number.isNaN(dt.getTime())) return '—'
     return dt.toLocaleDateString('pt-BR')
-  }
-
-  // ✅ NOVO (APENAS ISSO): Data/hora de criação + quem criou (topo)
-  const fmtDataHoraCriacao = (row) => {
-    const d = row?.created_at || row?.criado_em || null
-    if (!d) return { data: '—', hora: '—' }
-    const dt = new Date(d)
-    if (Number.isNaN(dt.getTime())) return { data: '—', hora: '—' }
-    return {
-      data: dt.toLocaleDateString('pt-BR'),
-      hora: dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }
   }
 
   // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
@@ -320,6 +311,11 @@ export default function TratarTratativa() {
         observacoes: resumo,
         imagem_tratativa: evidencia_conclusao_url,
         anexo_tratativa: anexo_tratativa_url,
+
+        // ✅ NOVO: quem tratou (auditoria)
+        tratado_por_login: user?.login || null,
+        tratado_por_nome: user?.nome || null,
+        tratado_por_id: user?.id || null,
       })
       if (ins.error) throw ins.error
 
@@ -647,24 +643,9 @@ export default function TratarTratativa() {
       ? [t.imagem_url]
       : []
 
-  // ✅ NOVO (APENAS ISSO): valores topo
-  const { data: dataCriacao, hora: horaCriacao } = fmtDataHoraCriacao(t)
-  const criadoPor = t?.criado_por_nome || t?.criado_por_login || '—'
-
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
-
-      {/* ✅ NOVO (APENAS ISSO): Data, hora e quem criou (azul e pequeno) */}
-      <div className="text-sm text-blue-700 -mt-1 mb-4">
-        <span className="font-semibold">Criado por:</span> {criadoPor}
-        <span className="mx-2">|</span>
-        <span className="font-semibold">Data:</span> {dataCriacao}
-        <span className="mx-2">|</span>
-        <span className="font-semibold">Hora:</span> {horaCriacao}
-                
-      </div>
-
       <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
 
       {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
@@ -795,10 +776,7 @@ export default function TratarTratativa() {
 
           {/* Evidências da solicitação (compacto) */}
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(
-              evidenciasSolicitacao,
-              'Evidências da solicitação (reclamação)'
-            )}
+            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
           </div>
         </dl>
       </div>
@@ -896,9 +874,6 @@ export default function TratarTratativa() {
               Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
             </p>
 
-            {/* Se você já estiver salvando/anexando o link em tratativas_detalhes, você pode também renderizar aqui.
-                Como no seu código atual não existe t.anexo_tratativa, mantive apenas o comportamento pedido
-                para quando existir URL. Se você tiver um campo na tabela tratativas, basta trocar abaixo. */}
             {renderArquivoOuThumb(t.anexo_tratativa || null, 'Anexo já anexado (se houver)')}
           </div>
         </div>
