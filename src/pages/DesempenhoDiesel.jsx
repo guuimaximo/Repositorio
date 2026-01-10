@@ -1,45 +1,60 @@
 // src/pages/DesempenhoDiesel.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-const TABS = ["Resumo", "Acompanhamento", "Tratativas", "Agente Diesel"];
+const TABS = [
+  { key: "resumo", label: "Resumo" },
+  { key: "acompanhamento", label: "Acompanhamento" },
+  { key: "tratativas", label: "Tratativas" },
+  { key: "agente", label: "Agente Diesel" },
+];
 
 export default function DesempenhoDiesel() {
-  const [active, setActive] = useState("Resumo");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [active, setActive] = useState("resumo");
 
-  const content = useMemo(() => {
-    return (
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold mb-2">{active}</h2>
-        <p className="text-gray-600">
-          Tela em construção. Este módulo será concluído em breve.
-        </p>
-      </div>
-    );
+  useEffect(() => {
+    const hash = (location.hash || "").replace("#", "");
+    const exists = TABS.some((t) => t.key === hash);
+    setActive(exists ? hash : "resumo");
+  }, [location.hash]);
+
+  const title = useMemo(() => {
+    const tab = TABS.find((t) => t.key === active);
+    return tab?.label || "Resumo";
   }, [active]);
 
+  const go = (key) => navigate(`/desempenho-diesel#${key}`);
+
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-6">
+      <div className="mb-4">
         <h1 className="text-2xl font-bold">Desempenho Diesel</h1>
-        <span className="text-sm text-gray-500">Em construção</span>
+        <p className="text-gray-600">Módulo em construção. Estamos finalizando esta tela.</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-2 mb-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 mb-4">
         {TABS.map((t) => (
           <button
-            key={t}
-            onClick={() => setActive(t)}
+            key={t.key}
+            onClick={() => go(t.key)}
             className={[
-              "px-4 py-2 rounded-md text-sm font-medium transition",
-              active === t ? "bg-blue-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700",
+              "px-4 py-2 rounded-md border",
+              active === t.key ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700",
             ].join(" ")}
           >
-            {t}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {content}
+      <div className="bg-white rounded-lg shadow-sm p-5">
+        <div className="text-lg font-semibold mb-2">{title}</div>
+        <div className="text-gray-700">
+          Conteúdo desta aba ainda não foi implementado.
+        </div>
+      </div>
     </div>
   );
 }
