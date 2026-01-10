@@ -94,6 +94,28 @@ export default function ConsultarTratativa() {
     )
   }
 
+  // ===== helpers data/hora =====
+  const fmtData = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    if (Number.isNaN(dt.getTime())) return '—'
+    return dt.toLocaleDateString('pt-BR')
+  }
+
+  const fmtHora = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    if (Number.isNaN(dt.getTime())) return '—'
+    return dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const fmtDataHora = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    if (Number.isNaN(dt.getTime())) return '—'
+    return dt.toLocaleString('pt-BR')
+  }
+
   useEffect(() => {
     ;(async () => {
       // Tratativa
@@ -101,11 +123,12 @@ export default function ConsultarTratativa() {
       if (error) console.error(error)
       setT(data || null)
 
-      // Histórico (mais recente primeiro) COM OS NOMES DO TRATAR
-      // Ajustado para: tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa
+      // Histórico (mais recente primeiro) + traz quem tratou
       const h = await supabase
         .from('tratativas_detalhes')
-        .select('id, created_at, criado_em, tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa')
+        .select(
+          'id, created_at, criado_em, tratativa_id, acao_aplicada, observacoes, imagem_tratativa, anexo_tratativa, tratado_por_login, tratado_por_nome, tratado_por_id'
+        )
         .eq('tratativa_id', id)
         .order('created_at', { ascending: false })
 
@@ -149,10 +172,15 @@ export default function ConsultarTratativa() {
     String(h.acao_aplicada || '').toLowerCase().includes('susp')
   )
 
-  const dataHoraUltima =
-    ultima?.created_at || ultima?.criado_em
-      ? new Date(ultima.created_at || ultima.criado_em).toLocaleString('pt-BR')
-      : '—'
+  // ===== Criado por (já existe na tratativas) =====
+  const criadoPor = t.criado_por_nome || t.criado_por_login || '—'
+  const createdAtTratativa = t.created_at || t.criado_em || null
+  const dataCriacao = fmtData(createdAtTratativa)
+  const horaCriacao = fmtHora(createdAtTratativa)
+
+  // ===== Conclusão (vem da última ação do histórico) =====
+  const dataHoraUltima = fmtDataHora(ultima?.created_at || ultima?.criado_em)
+  const tratadoPor = ultima?.tratado_por_nome || ultima?.tratado_por_login || '—'
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -166,54 +194,72 @@ export default function ConsultarTratativa() {
         </button>
       </div>
 
-      {/* Resumo da última ação aplicada */}
-      <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Resumo da última ação</h2>
-          <span className="text-sm opacity-80">{dataHoraUltima}</span>
-        </div>
-        <div className="mt-1 font-medium">{ultima?.acao_aplicada || '—'}</div>
-        <div className="mt-1 whitespace-pre-wrap">
-          {ultima?.observacoes || 'Sem observações registradas.'}
-        </div>
-
-        {/* Evidência/Anexo da última ação */}
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>{renderArquivoOuThumb(ultima?.imagem_tratativa, 'Evidência da conclusão')}</div>
-          <div>{renderArquivoOuThumb(ultima?.anexo_tratativa, 'Anexo da tratativa')}</div>
-        </div>
-      </div>
-
-      {/* Dados da tratativa */}
+      {/* =========================
+          BLOCO 1 — DETALHES DA TRATATIVA (igual print + criado por)
+         ========================= */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold">Detalhes da Tratativa</h2>
+          <div className="text-sm text-blue-700 mt-1">
+            <span className="font-semibold">Data:</span> {dataCriacao}
+            <span className="mx-2">|</span>
+            <span className="font-semibold">Hora:</span> {horaCriacao}
+            <span className="mx-2">|</span>
+            <span className="font-semibold">Criado por:</span> {criadoPor}
+          </div>
+        </div>
+
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Item titulo="Motorista" valor={t.motorista_nome || '-'} />
           <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
           <Item titulo="Ocorrência" valor={t.tipo_ocorrencia || '-'} />
           <Item titulo="Prioridade" valor={t.prioridade || '-'} />
           <Item titulo="Setor" valor={t.setor_origem || '-'} />
-          <Item titulo="Linha" valor={t.linha ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}` : '-'} />
+          <Item
+            titulo="Linha"
+            valor={t.linha ? `${t.linha}${linhaDesc ? ` - ${linhaDesc}` : ''}` : '-'}
+          />
           <Item titulo="Status" valor={t.status || '-'} />
           <Item titulo="Data/Hora" valor={`${dataOcorr} ${horaOcorr}`} />
-          <Item titulo="Última ação" valor={ultima?.acao_aplicada || '—'} />
-          <Item titulo="Resumo da ação" valor={ultima?.observacoes || '—'} className="md:col-span-2" />
+
           <Item titulo="Descrição (abertura)" valor={t.descricao || '-'} className="md:col-span-2" />
 
           {/* Evidências da solicitação (compacto) */}
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
+            {renderListaArquivosCompacta(
+              evidenciasSolicitacao,
+              'Evidências da solicitação (reclamação)'
+            )}
           </div>
-
-          {/* Evidência da conclusão denormalizada (se existir em tratativas) */}
-          {t.imagem_tratativa && (
-            <div className="md:col-span-2">
-              {renderArquivoOuThumb(t.imagem_tratativa, 'Evidência da conclusão (campo em tratativas)')}
-            </div>
-          )}
         </dl>
       </div>
 
-      {/* Histórico completo */}
+      {/* =========================
+          BLOCO 2 — CONCLUSÃO DA TRATATIVA
+         ========================= */}
+      <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Conclusão da Tratativa</h2>
+          <span className="text-sm opacity-80">{dataHoraUltima}</span>
+        </div>
+
+        <div className="mt-1 font-medium">{ultima?.acao_aplicada || '—'}</div>
+
+        <div className="mt-2 text-sm text-blue-800">
+          <span className="font-semibold">Quem tratou:</span> {tratadoPor}
+        </div>
+
+        <div className="mt-2 whitespace-pre-wrap">
+          {ultima?.observacoes || 'Sem observações registradas.'}
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>{renderArquivoOuThumb(ultima?.imagem_tratativa, 'Evidência da conclusão')}</div>
+          <div>{renderArquivoOuThumb(ultima?.anexo_tratativa, 'Anexo da tratativa')}</div>
+        </div>
+      </div>
+
+      {/* Histórico completo (mantém como estava, para não perder nada) */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
         <h2 className="font-semibold mb-3">Histórico / Ações aplicadas</h2>
         {historico.length === 0 ? (
@@ -221,12 +267,16 @@ export default function ConsultarTratativa() {
         ) : (
           <ul className="space-y-3">
             {historico.map((h) => {
-              const when =
-                h.created_at || h.criado_em ? new Date(h.created_at || h.criado_em).toLocaleString('pt-BR') : '—'
+              const when = fmtDataHora(h.created_at || h.criado_em)
+              const quem = h.tratado_por_nome || h.tratado_por_login || '—'
               return (
                 <li key={h.id} className="rounded border p-3">
                   <div className="text-sm text-gray-600">{when}</div>
                   <div className="font-medium">{h.acao_aplicada || '—'}</div>
+
+                  <div className="text-sm text-blue-700 mt-1">
+                    <span className="font-semibold">Tratado por:</span> {quem}
+                  </div>
 
                   {h.observacoes && <div className="text-gray-700 whitespace-pre-wrap">{h.observacoes}</div>}
 
@@ -241,7 +291,7 @@ export default function ConsultarTratativa() {
         )}
       </div>
 
-      {/* Recorte de Suspensões */}
+      {/* Recorte de Suspensões (mantém como estava) */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <h2 className="font-semibold mb-3">Histórico de Suspensões</h2>
         {suspensoes.length === 0 ? (
@@ -249,8 +299,7 @@ export default function ConsultarTratativa() {
         ) : (
           <ul className="space-y-2">
             {suspensoes.map((s) => {
-              const when =
-                s.created_at || s.criado_em ? new Date(s.created_at || s.criado_em).toLocaleString('pt-BR') : '—'
+              const when = fmtDataHora(s.created_at || s.criado_em)
               return (
                 <li key={s.id} className="border rounded p-3">
                   <div className="text-sm text-gray-600">{when}</div>
