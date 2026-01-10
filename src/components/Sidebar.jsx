@@ -21,7 +21,11 @@ import {
   FaSignOutAlt,
   FaDownload,
   FaRoad,
-  FaGasPump, // ✅ NOVO ÍCONE (se não existir, troque por outro Fa*)
+  FaGasPump,
+  FaChartBar,     // ✅ ícone para Resumo
+  FaSearch,       // ✅ ícone para Acompanhamento
+  FaClipboardCheck as FaTratativasIcon, // ✅ ícone para Tratativas
+  FaRobot,        // ✅ ícone para Agente Diesel
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -70,7 +74,7 @@ function canSee(user, path) {
 }
 
 export default function Sidebar() {
-  const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false); // ✅ NOVO
+  const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
@@ -86,16 +90,16 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ NOVO — Desempenho Diesel (Admin only)
+      // ✅ Desempenho Diesel (Admin only) - agora em uma linha e com ícones em subitens
       desempenhoDiesel: {
         base: "/desempenho-diesel",
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
-          { hash: "#resumo", label: "Resumo" },
-          { hash: "#acompanhamento", label: "Acompanhamento" },
-          { hash: "#tratativas", label: "Tratativas" },
-          { hash: "#agente", label: "Agente Diesel" },
+          { hash: "#resumo", label: "Resumo", icon: <FaChartBar /> },
+          { hash: "#acompanhamento", label: "Acompanhamento", icon: <FaSearch /> },
+          { hash: "#tratativas", label: "Tratativas", icon: <FaTratativasIcon /> },
+          { hash: "#agente", label: "Agente Diesel", icon: <FaRobot /> },
         ],
       },
 
@@ -150,7 +154,9 @@ export default function Sidebar() {
     }`;
   };
 
-  const showDesempenhoDiesel = isAdmin; // ✅ SOMENTE ADM
+  // ✅ mantém admin-only
+  const showDesempenhoDiesel = isAdmin;
+
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
   const showAvarias = links.avarias.some((l) => canSee(user, l.path));
   const showSOS = links.sos.some((l) => canSee(user, l.path));
@@ -171,19 +177,21 @@ export default function Sidebar() {
       <nav className="flex-1 p-3 overflow-y-auto">
         {canSee(user, links.inicio.path) && (
           <NavLink to={links.inicio.path} className={navLinkClass}>
-            {links.inicio.icon} <span>{links.inicio.label}</span>
+            {links.inicio.icon} <span className="whitespace-nowrap">{links.inicio.label}</span>
           </NavLink>
         )}
 
-        {/* ✅ NOVO — Desempenho Diesel (Admin only) */}
+        {/* ✅ Desempenho Diesel (Admin only) */}
         {showDesempenhoDiesel && (
           <>
             <button
               onClick={() => setDesempenhoDieselOpen(!desempenhoDieselOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
             >
-              <div className="flex items-center gap-3">
-                {links.desempenhoDiesel.icon} <span>{links.desempenhoDiesel.label}</span>
+              <div className="flex items-center gap-3 min-w-0">
+                {links.desempenhoDiesel.icon}
+                {/* ✅ garante 1 linha */}
+                <span className="whitespace-nowrap truncate">{links.desempenhoDiesel.label}</span>
               </div>
               {desempenhoDieselOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
             </button>
@@ -196,7 +204,7 @@ export default function Sidebar() {
                     to={`${links.desempenhoDiesel.base}${t.hash}`}
                     className={() => subHashClass(t.hash)}
                   >
-                    <span>{t.label}</span>
+                    {t.icon} <span className="whitespace-nowrap">{t.label}</span>
                   </NavLink>
                 ))}
               </div>
