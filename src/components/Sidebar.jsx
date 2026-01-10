@@ -163,7 +163,7 @@ export default function Sidebar() {
   const showConfig = isAdmin;
 
   return (
-    <aside className="w-60 bg-blue-700 text-white flex flex-col">
+    <aside className="w-72 bg-blue-700 text-white flex flex-col">
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
