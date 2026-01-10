@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   FaHome,
   FaClipboardList,
@@ -21,7 +21,7 @@ import {
   FaSignOutAlt,
   FaDownload,
   FaRoad,
-  FaGasPump, // ✅ NOVO (Desempenho Diesel)
+  FaGasPump, // ✅ NOVO ÍCONE (se não existir, troque por outro Fa*)
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -57,14 +57,7 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
   ],
-  CCO: [
-    "/",
-    "/solicitar",
-    "/sos-solicitacao",
-    "/sos-fechamento",
-    "/sos-dashboard",
-    "/km-rodado",
-  ],
+  CCO: ["/", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
 };
 
 // helper de acesso
@@ -77,6 +70,7 @@ function canSee(user, path) {
 }
 
 export default function Sidebar() {
+  const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false); // ✅ NOVO
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
@@ -84,12 +78,26 @@ export default function Sidebar() {
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const isAdmin = user?.nivel === "Administrador";
 
   const links = useMemo(
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
+
+      // ✅ NOVO — Desempenho Diesel (Admin only)
+      desempenhoDiesel: {
+        base: "/desempenho-diesel",
+        label: "Desempenho Diesel",
+        icon: <FaGasPump />,
+        tabs: [
+          { hash: "#resumo", label: "Resumo" },
+          { hash: "#acompanhamento", label: "Acompanhamento" },
+          { hash: "#tratativas", label: "Tratativas" },
+          { hash: "#agente", label: "Agente Diesel" },
+        ],
+      },
 
       tratativas: [
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
@@ -111,9 +119,6 @@ export default function Sidebar() {
         { path: "/sos-dashboard", label: "Dashboard (Excel)", icon: <FaDownload /> },
         { path: "/km-rodado", label: "KM Rodado (Dia)", icon: <FaRoad /> },
       ],
-
-      // ✅ NOVO: somente Administrador deve ver
-      desempenhoDiesel: { path: "/desempenho-diesel", label: "Desempenho Diesel", icon: <FaGasPump /> },
 
       configuracoes: [{ path: "/usuarios", label: "Usuários", icon: <FaUserCog /> }],
     }),
@@ -137,13 +142,19 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
+  // ✅ hash-active (porque NavLink não marca ativo por hash)
+  const subHashClass = (hash) => {
+    const active = location.pathname === links.desempenhoDiesel.base && location.hash === hash;
+    return `flex items-center gap-3 px-3 py-2 rounded-lg mb-1 ml-4 transition-all duration-200 text-sm ${
+      active ? "bg-blue-500" : "hover:bg-blue-600"
+    }`;
+  };
+
+  const showDesempenhoDiesel = isAdmin; // ✅ SOMENTE ADM
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
   const showAvarias = links.avarias.some((l) => canSee(user, l.path));
   const showSOS = links.sos.some((l) => canSee(user, l.path));
   const showConfig = isAdmin;
-
-  // ✅ NOVO: Desempenho Diesel só Admin
-  const showDesempenhoDiesel = isAdmin;
 
   return (
     <aside className="w-60 bg-blue-700 text-white flex flex-col">
@@ -164,11 +175,33 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ NOVO LINK (somente Admin) */}
+        {/* ✅ NOVO — Desempenho Diesel (Admin only) */}
         {showDesempenhoDiesel && (
-          <NavLink to={links.desempenhoDiesel.path} className={navLinkClass}>
-            {links.desempenhoDiesel.icon} <span>{links.desempenhoDiesel.label}</span>
-          </NavLink>
+          <>
+            <button
+              onClick={() => setDesempenhoDieselOpen(!desempenhoDieselOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+            >
+              <div className="flex items-center gap-3">
+                {links.desempenhoDiesel.icon} <span>{links.desempenhoDiesel.label}</span>
+              </div>
+              {desempenhoDieselOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {desempenhoDieselOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.desempenhoDiesel.tabs.map((t) => (
+                  <NavLink
+                    key={t.hash}
+                    to={`${links.desempenhoDiesel.base}${t.hash}`}
+                    className={() => subHashClass(t.hash)}
+                  >
+                    <span>{t.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {showTratativas && (
