@@ -166,7 +166,7 @@ export default function SolicitacaoTratativa() {
         // ✅ AJUSTE (NOVO): auditoria do criador
         criado_por_login: loginSessao,
         criado_por_nome: nomeSessao || loginSessao,
-        criado_por_id: idSessao,
+        //criado_por_id: idSessao,
       };
 
       const { error } = await supabase.from('tratativas').insert(payload);
