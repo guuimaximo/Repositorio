@@ -18,15 +18,15 @@ import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
 import SOSCentral from "./pages/SOSCentral";
-import SOSDashboard from "./pages/SOSDashboard"; // ✅ Dashboard Intervenções (Tempo Real)
+import SOSDashboard from "./pages/SOSDashboard";
 
-import KMRodado from "./pages/KMRodado"; // ✅ NOVA PAGE (KM Rodado do dia)
+import KMRodado from "./pages/KMRodado";
 
-// ✅ Desempenho Diesel
+import Usuarios from "./pages/Usuarios";
+import RequireAuth from "./routes/RequireAuth";
+
+// ✅ NOVO
 import DesempenhoDiesel from "./pages/DesempenhoDiesel";
-
-import Usuarios from "./pages/Usuarios"; // ⚙️ tela de configuração
-import RequireAuth from "./routes/RequireAuth"; // proteção geral
 
 export default function App() {
   return (
@@ -45,6 +45,9 @@ export default function App() {
         >
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
+
+          {/* ✅ Desempenho Diesel (Admin) */}
+          <Route path="/desempenho-diesel" element={<DesempenhoDiesel />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
@@ -68,9 +71,6 @@ export default function App() {
           {/* KM Rodado */}
           <Route path="/km-rodado" element={<KMRodado />} />
 
-          {/* ✅ Desempenho Diesel (4 abas internas via hash) */}
-          <Route path="/desempenho-diesel" element={<DesempenhoDiesel />} />
-
           {/* ⚙️ Configurações — acesso direto */}
           <Route path="/usuarios" element={<Usuarios />} />
         </Route>
@@ -81,4 +81,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
