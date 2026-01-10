@@ -74,6 +74,18 @@ export default function TratarTratativa() {
     return dt.toLocaleDateString('pt-BR')
   }
 
+  // ✅ NOVO (APENAS ISSO): Data/hora de criação + quem criou (topo)
+  const fmtDataHoraCriacao = (row) => {
+    const d = row?.created_at || row?.criado_em || null
+    if (!d) return { data: '—', hora: '—' }
+    const dt = new Date(d)
+    if (Number.isNaN(dt.getTime())) return { data: '—', hora: '—' }
+    return {
+      data: dt.toLocaleDateString('pt-BR'),
+      hora: dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    }
+  }
+
   // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
   const parseDateLocal = (dateStr) => {
     if (!dateStr) return new Date()
@@ -635,9 +647,23 @@ export default function TratarTratativa() {
       ? [t.imagem_url]
       : []
 
+  // ✅ NOVO (APENAS ISSO): valores topo
+  const { data: dataCriacao, hora: horaCriacao } = fmtDataHoraCriacao(t)
+  const criadoPor = t?.criado_por_nome || t?.criado_por_login || '—'
+
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+
+      {/* ✅ NOVO (APENAS ISSO): Data, hora e quem criou (azul e pequeno) */}
+      <div className="text-xs text-blue-700 -mt-1 mb-4">
+        <span className="font-semibold">Data:</span> {dataCriacao}
+        <span className="mx-2">|</span>
+        <span className="font-semibold">Hora:</span> {horaCriacao}
+        <span className="mx-2">|</span>
+        <span className="font-semibold">Criado por:</span> {criadoPor}
+      </div>
+
       <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
 
       {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
@@ -768,7 +794,10 @@ export default function TratarTratativa() {
 
           {/* Evidências da solicitação (compacto) */}
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
+            {renderListaArquivosCompacta(
+              evidenciasSolicitacao,
+              'Evidências da solicitação (reclamação)'
+            )}
           </div>
         </dl>
       </div>
