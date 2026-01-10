@@ -1,83 +1,45 @@
 // src/pages/DesempenhoDiesel.jsx
-import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 
-import Layout from "../components/tatico/Layout";
-
-import DesempenhoDieselResumo from "./DesempenhoDieselResumo";
-import DesempenhoDieselAcompanhamento from "./DesempenhoDieselAcompanhamento";
-import DesempenhoDieselTratativas from "./DesempenhoDieselTratativas";
-import DesempenhoDieselAgente from "./DesempenhoDieselAgente";
+const TABS = ["Resumo", "Acompanhamento", "Tratativas", "Agente Diesel"];
 
 export default function DesempenhoDiesel() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("resumo");
+  const [active, setActive] = useState("Resumo");
 
-  useEffect(() => {
-    const hash = (location.hash || "").replace("#", "");
-    setActiveTab(hash || "resumo");
-  }, [location.hash]);
-
-  const tabs = [
-    { key: "resumo", label: "Resumo" },
-    { key: "acompanhamento", label: "Acompanhamento" },
-    { key: "tratativas", label: "Tratativas" },
-    { key: "agente-diesel", label: "Agente Diesel" },
-  ];
-
-  const onTab = (key) => {
-    setActiveTab(key);
-    navigate(`/desempenho-diesel#${key}`, { replace: true });
-  };
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case "resumo":
-        return <DesempenhoDieselResumo />;
-      case "acompanhamento":
-        return <DesempenhoDieselAcompanhamento />;
-      case "tratativas":
-        return <DesempenhoDieselTratativas />;
-      case "agente-diesel":
-        return <DesempenhoDieselAgente />;
-      default:
-        return <DesempenhoDieselResumo />;
-    }
-  };
+  const content = useMemo(() => {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h2 className="text-lg font-semibold mb-2">{active}</h2>
+        <p className="text-gray-600">
+          Tela em construção. Este módulo será concluído em breve.
+        </p>
+      </div>
+    );
+  }, [active]);
 
   return (
-    <Layout>
-      <div className="mx-auto max-w-6xl p-6">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold">Desempenho Diesel</h1>
-          <p className="text-gray-600">Módulo em construção. Conteúdo em conclusão.</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-2 mb-6">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((t) => {
-              const active = activeTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => onTab(t.key)}
-                  className={[
-                    "rounded-md px-4 py-2 text-sm font-medium border transition",
-                    active
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
-                  ].join(" ")}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {renderTab()}
+    <div className="mx-auto max-w-6xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Desempenho Diesel</h1>
+        <span className="text-sm text-gray-500">Em construção</span>
       </div>
-    </Layout>
+
+      <div className="bg-white rounded-lg shadow-sm p-2 mb-4 flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setActive(t)}
+            className={[
+              "px-4 py-2 rounded-md text-sm font-medium transition",
+              active === t ? "bg-blue-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700",
+            ].join(" ")}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {content}
+    </div>
   );
 }
