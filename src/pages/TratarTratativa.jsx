@@ -77,6 +77,14 @@ export default function TratarTratativa() {
     return dt.toLocaleDateString('pt-BR')
   }
 
+  // ✅ NOVO: formata Data+Hora (pt-BR) para exibir no topo
+  const brDateTime = (d) => {
+    if (!d) return '—'
+    const dt = d instanceof Date ? d : new Date(d)
+    if (Number.isNaN(dt.getTime())) return '—'
+    return dt.toLocaleString('pt-BR')
+  }
+
   // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
   const parseDateLocal = (dateStr) => {
     if (!dateStr) return new Date()
@@ -303,8 +311,6 @@ export default function TratarTratativa() {
       }
 
       // detalhe/histórico
-      // OBS: para salvar "anexo_tratativa", crie a coluna:
-      // ALTER TABLE public.tratativas_detalhes ADD COLUMN IF NOT EXISTS anexo_tratativa text;
       const ins = await supabase.from('tratativas_detalhes').insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
@@ -312,7 +318,7 @@ export default function TratarTratativa() {
         imagem_tratativa: evidencia_conclusao_url,
         anexo_tratativa: anexo_tratativa_url,
 
-        // ✅ NOVO: quem tratou (auditoria)
+        // ✅ quem tratou (auditoria)
         tratado_por_login: user?.login || null,
         tratado_por_nome: user?.nome || null,
         tratado_por_id: user?.id || null,
@@ -643,9 +649,21 @@ export default function TratarTratativa() {
       ? [t.imagem_url]
       : []
 
+  // ✅ NOVO: texto do topo (Nome + Data/Hora)
+  const criadoPor = t.criado_por_nome || t.criado_por_login || '—'
+  const criadoEm = brDateTime(t.created_at)
+
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+
+      {/* ✅ NOVO: Linha azul com Nome + Data/Hora de criação */}
+      <div className="text-sm text-blue-700 mb-4">
+        <span className="font-semibold">Criado por:</span> {criadoPor}{' '}
+        <span className="mx-2 text-blue-300">•</span>
+        <span className="font-semibold">Data/Hora:</span> {criadoEm}
+      </div>
+
       <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
 
       {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
