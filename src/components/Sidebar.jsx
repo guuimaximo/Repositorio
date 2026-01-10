@@ -225,7 +225,7 @@ export default function Sidebar() {
             </button>
 
             {tratativasOpen && (
-              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+              <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) =>
                   canSee(user, link.path) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
