@@ -656,12 +656,13 @@ export default function TratarTratativa() {
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
 
       {/* ✅ NOVO (APENAS ISSO): Data, hora e quem criou (azul e pequeno) */}
-      <div className="text-xs text-blue-700 -mt-1 mb-4">
+      <div className="text-sm text-blue-700 -mt-1 mb-4">
+        <span className="font-semibold">Criado por:</span> {criadoPor}
+        <span className="mx-2">|</span>
         <span className="font-semibold">Data:</span> {dataCriacao}
         <span className="mx-2">|</span>
         <span className="font-semibold">Hora:</span> {horaCriacao}
-        <span className="mx-2">|</span>
-        <span className="font-semibold">Criado por:</span> {criadoPor}
+                
       </div>
 
       <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
