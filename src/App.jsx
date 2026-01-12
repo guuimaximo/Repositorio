@@ -14,7 +14,7 @@ import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
 import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
-// ✅ NOVO: Resumo Avarias (Interno x Externo)
+// ✅ Resumo Avarias (Interno x Externo)
 import AvariasResumo from "./pages/AvariasResumo";
 
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
@@ -28,11 +28,12 @@ import KMRodado from "./pages/KMRodado";
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
 
-// ✅ NOVO
-import DesempenhoDiesel from "./pages/DesempenhoDiesel";
-
-// ✅ NOVO (governança)
+// ✅ Desempenho Diesel (PAGES separadas)
 import DesempenhoLancamento from "./pages/DesempenhoLancamento";
+import DesempenhoDieselResumo from "./pages/DesempenhoDieselResumo";
+import DesempenhoDieselAcompanhamento from "./pages/DesempenhoDieselAcompanhamento";
+import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
+import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 
 export default function App() {
   return (
@@ -52,11 +53,15 @@ export default function App() {
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
 
-          {/* ✅ Desempenho Diesel (Admin) */}
-          <Route path="/desempenho-diesel" element={<DesempenhoDiesel />} />
-
-          {/* ✅ Desempenho Lançamento (Admin) */}
+          {/* ✅ Desempenho Diesel (rotas novas) */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
+          <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
+          <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
+          <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
+          <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
+
+          {/* (opcional) mantém /desempenho-diesel vivo, redirecionando pro Resumo */}
+          <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
@@ -68,10 +73,7 @@ export default function App() {
           <Route path="/lancar-avaria" element={<LancarAvaria />} />
           <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
           <Route path="/cobrancas" element={<CobrancasAvarias />} />
-
-          {/* ✅ NOVO: Resumo Avarias */}
           <Route path="/avarias-resumo" element={<AvariasResumo />} />
-
           <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
           {/* SOS */}
@@ -84,7 +86,7 @@ export default function App() {
           {/* KM Rodado */}
           <Route path="/km-rodado" element={<KMRodado />} />
 
-          {/* ⚙️ Configurações — acesso direto */}
+          {/* ⚙️ Configurações */}
           <Route path="/usuarios" element={<Usuarios />} />
         </Route>
 
