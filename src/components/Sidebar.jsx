@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaHome,
   FaClipboardList,
@@ -31,6 +31,15 @@ import {
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
+// ✅ Rotas novas (sem hash) — precisam casar com o App.jsx
+const DIESEL_ROUTES = {
+  lancamento: "/desempenho-lancamento",
+  resumo: "/desempenho-diesel-resumo",
+  acompanhamento: "/desempenho-diesel-acompanhamento",
+  tratativas: "/desempenho-diesel-tratativas",
+  agente: "/desempenho-diesel-agente",
+};
+
 // mapa de acesso por nível
 const ACCESS = {
   Administrador: "ALL",
@@ -50,8 +59,8 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
 
-    // ✅ Gestor também vê Desempenho Diesel
-    "/desempenho-diesel",
+    // ✅ Gestor também vê Desempenho Diesel (novas rotas)
+    ...Object.values(DIESEL_ROUTES),
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
@@ -87,7 +96,6 @@ export default function Sidebar() {
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
-  const location = useLocation();
 
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
@@ -96,17 +104,16 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ Desempenho Diesel (Admin + Gestor)
+      // ✅ Desempenho Diesel (Admin + Gestor) — agora por rotas (sem hash)
       desempenhoDiesel: {
-        base: "/desempenho-diesel",
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
-          { hash: "#lancamento", label: "Lançamento", icon: <FaPenSquare /> },
-          { hash: "#resumo", label: "Resumo", icon: <FaChartBar /> },
-          { hash: "#acompanhamento", label: "Acompanhamento", icon: <FaSearch /> },
-          { hash: "#tratativas", label: "Tratativas", icon: <FaTratativasIcon /> },
-          { hash: "#agente", label: "Agente Diesel", icon: <FaRobot /> },
+          { path: DIESEL_ROUTES.lancamento, label: "Lançamento", icon: <FaPenSquare /> },
+          { path: DIESEL_ROUTES.resumo, label: "Resumo", icon: <FaChartBar /> },
+          { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
+          { path: DIESEL_ROUTES.tratativas, label: "Tratativas", icon: <FaTratativasIcon /> },
+          { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
         ],
       },
 
@@ -154,14 +161,6 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // hash-active (NavLink não marca ativo por hash)
-  const subHashClass = (hash) => {
-    const active = location.pathname === links.desempenhoDiesel.base && location.hash === hash;
-    return `flex items-center gap-3 px-3 py-2 rounded-lg mb-1 ml-4 transition-all duration-200 text-sm ${
-      active ? "bg-blue-500" : "hover:bg-blue-600"
-    }`;
-  };
-
   // ✅ Admin OU Gestor vê Desempenho Diesel
   const showDesempenhoDiesel = isAdmin || isGestor;
 
@@ -175,7 +174,7 @@ export default function Sidebar() {
 
   const showSOS = links.sos.some((l) => canSee(user, l.path));
 
-  // ✅ Configurações: SOMENTE Admin (Gestor não mexe)
+  // ✅ Configurações: SOMENTE Admin
   const showConfig = isAdmin;
 
   return (
@@ -213,15 +212,13 @@ export default function Sidebar() {
 
             {desempenhoDieselOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.desempenhoDiesel.tabs.map((t) => (
-                  <NavLink
-                    key={t.hash}
-                    to={`${links.desempenhoDiesel.base}${t.hash}`}
-                    className={() => subHashClass(t.hash)}
-                  >
-                    {t.icon} <span className="whitespace-nowrap">{t.label}</span>
-                  </NavLink>
-                ))}
+                {links.desempenhoDiesel.tabs.map((t) =>
+                  canSee(user, t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon} <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
               </div>
             )}
           </>
@@ -270,7 +267,8 @@ export default function Sidebar() {
                 {links.avarias.map((link) => {
                   if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
 
-                  return canSee(user, link.path) || (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
+                  return canSee(user, link.path) ||
+                    (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
