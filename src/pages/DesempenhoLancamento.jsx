@@ -1,16 +1,31 @@
 // src/pages/DesempenhoLancamento.jsx
-import { useMemo, useState, useContext } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
 import CampoPrefixo from "../components/CampoPrefixo";
-import { supabase } from "../supabase";
-import { AuthContext } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext"; // ajuste se seu context expõe diferente
 
-const MOTIVOS = ["KM/L abaixo da meta", "Tendência de queda", "Comparativo com cluster", "Outro"];
+const MOTIVOS = [
+  "KM/L abaixo da meta",
+  "Tendência de queda",
+  "Comparativo com cluster",
+  "Outro",
+];
+
 const DIAS_OPCOES = [7, 15, 30];
 
-// ✅ AJUSTE AQUI: bucket do Storage
-const BUCKET = "desempenho-diesel";
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
+}
+
+function addDaysISO(dateISO, days) {
+  const d = new Date(`${dateISO}T00:00:00`);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().slice(0, 10);
+}
 
 function filesToList(files) {
   if (!files?.length) return [];
@@ -23,36 +38,53 @@ function filesToList(files) {
   }));
 }
 
-function addDaysISO(dateISO, days) {
-  // dateISO: "YYYY-MM-DD"
-  const d = new Date(`${dateISO}T00:00:00`);
-  d.setDate(d.getDate() + Number(days || 0));
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function dedupeFiles(list) {
+  const seen = new Set();
+  return (list || []).filter((x) => {
+    const k = `${x.name}__${x.size}__${x.lastModified}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
-function todayISO() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
+async function uploadManyToStorage({ files, bucket, folder }) {
+  // Salva como: bucket/<folder>/<timestamp>_<idx>_<nome>
+  // Retorna array de { path, publicUrl }
+  if (!files?.length) return [];
 
-function sanitizeFileName(name = "arquivo") {
-  return String(name)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w.\-]+/g, "_")
-    .replace(/_+/g, "_")
-    .slice(0, 120);
+  const out = [];
+  const ts = Date.now();
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]?.file;
+    if (!f) continue;
+
+    const safeName = String(f.name || `arquivo_${i}`)
+      .replaceAll(" ", "_")
+      .replace(/[^\w.\-()]/g, "");
+    const path = `${folder}/${ts}_${i}_${safeName}`;
+
+    const { error: upErr } = await supabase.storage.from(bucket).upload(path, f, {
+      upsert: false,
+      cacheControl: "3600",
+      contentType: f.type || undefined,
+    });
+    if (upErr) throw upErr;
+
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+    out.push({ path, publicUrl: pub?.publicUrl || null });
+  }
+
+  return out;
 }
 
 export default function DesempenhoLancamento() {
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
+
+  // ✅ ajuste conforme seu AuthContext (você pode ter user em outro hook)
+  // Se não existir useAuth, troque para: const { user } = useContext(AuthContext)
+  const { user } = useAuth ? useAuth() : { user: null };
 
   // Obrigatórios do lançamento
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
@@ -70,32 +102,19 @@ export default function DesempenhoLancamento() {
   const [kmlInicial, setKmlInicial] = useState("");
   const [evidAcomp, setEvidAcomp] = useState([]); // multi + PDF
 
-  // Tratativa (placeholder)
+  // Tratativa (por enquanto: captura do que foi realizado)
   const [acaoRealizada, setAcaoRealizada] = useState("");
-  const [evidTratativa, setEvidTratativa] = useState([]);
+  const [evidTratativa, setEvidTratativa] = useState([]); // multi + PDF
 
-  // Histórico placeholder
+  // Histórico (placeholder; depois liga no Supabase)
   const [historicoResumo] = useState([]);
-
-  // UI estados
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState("");
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
   function addFiles(setter) {
     return (e) => {
       const list = filesToList(e.target.files);
-      setter((prev) => {
-        const merged = [...(prev || []), ...list];
-        const seen = new Set();
-        return merged.filter((x) => {
-          const k = `${x.name}__${x.size}__${x.lastModified}`;
-          if (seen.has(k)) return false;
-          seen.add(k);
-          return true;
-        });
-      });
+      setter((prev) => dedupeFiles([...(prev || []), ...list]));
       e.target.value = "";
     };
   }
@@ -131,137 +150,110 @@ export default function DesempenhoLancamento() {
 
   const pronto = tipo === "ACOMPANHAMENTO" ? prontoAcompanhamento : prontoTratativa;
 
+  const [saving, setSaving] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+
   function limpar() {
-    setErro("");
     setMotorista({ chapa: "", nome: "" });
     setPrefixo("");
     setLinha("");
     setCluster("");
+
     setTipo("ACOMPANHAMENTO");
+
     setMotivo(MOTIVOS[0]);
     setMotivoOutro("");
     setDias(7);
     setKmlInicial("");
     setEvidAcomp([]);
+
     setAcaoRealizada("");
     setEvidTratativa([]);
+
+    setErrMsg("");
   }
 
-  async function uploadEvidenceFiles({ chapa, acompanhamentoId, files }) {
-    // Retorna array de URLs públicas (ou signed, se preferir depois)
-    const urls = [];
+  async function salvarAcompanhamento() {
+    setSaving(true);
+    setErrMsg("");
 
-    for (const item of files || []) {
-      const file = item?.file;
-      if (!file) continue;
+    try {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const dtFimPlanejado = addDaysISO(hoje, Number(dias));
 
-      const safeName = sanitizeFileName(file.name);
-      const stamp = Date.now();
-      const path = `acompanhamentos/${chapa}/${acompanhamentoId}/${stamp}_${safeName}`;
+      // ✅ lançador (quem está logado agora)
+      const lancadorLogin = user?.login || user?.email || null;
+      const lancadorNome = user?.nome || null;
+      const lancadorIdNum = user?.id ?? null; // pode ser 5, 7 etc (NÃO é UUID)
 
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
+      // 1) Upload evidências (bucket: diesel)
+      // Se seu bucket tiver outro nome, troque aqui.
+      const folder = `diesel/acompanhamentos/${motorista.chapa || "sem_chapa"}/${Date.now()}`;
+      const uploaded = await uploadManyToStorage({
+        files: evidAcomp,
+        bucket: "diesel",
+        folder,
       });
 
-      if (upErr) throw new Error(`Falha no upload (${file.name}): ${upErr.message}`);
+      const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
 
-      // URL pública (bucket precisa estar público). Se for privado, a gente troca por signed URL.
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      if (!data?.publicUrl) throw new Error(`Não foi possível gerar URL do arquivo: ${file.name}`);
-
-      urls.push(data.publicUrl);
-    }
-
-    return urls;
-  }
-
-  async function handleAvancar() {
-    setErro("");
-
-    if (!pronto || saving) return;
-
-    if (tipo === "TRATATIVA") {
-      // Placeholder até ligar tratativas + herança do histórico
-      navigate("/desempenho-diesel#tratativas");
-      return;
-    }
-
-    // ✅ ACOMPANHAMENTO: salvar no Supabase
-    try {
-      setSaving(true);
-
-      const chapa = String(motorista?.chapa || "").trim();
-      const nome = String(motorista?.nome || "").trim();
-
-      const dt_inicio = todayISO();
-      const dt_fim_planejado = addDaysISO(dt_inicio, dias);
-
-      // 1) Criar acompanhamento primeiro (sem evidências ainda) para obter ID
+      // 2) INSERT acompanhamento (instrutor_* = null)
       const payloadAcomp = {
-        motorista_chapa: chapa,
-        motorista_nome: nome || null,
-
-        instrutor_login: user?.login || user?.email || null,
-        instrutor_nome: user?.nome || null,
-        instrutor_id: user?.id || null,
-
+        motorista_chapa: String(motorista?.chapa || "").trim(),
+        motorista_nome: String(motorista?.nome || "").trim() || null,
         motivo: motivoFinal,
         status: "ACOMPANHAMENTO",
-
-        dias_monitoramento: Number(dias) || 7,
-        dt_inicio,
-        dt_fim_planejado,
-
+        dias_monitoramento: Number(dias),
+        dt_inicio: hoje,
+        dt_fim_planejado: dtFimPlanejado,
+        dt_fim_real: null,
         kml_inicial: Number(kmlInicial),
-        // kml_meta: (pode entrar depois)
+        kml_meta: null,
+        kml_final: null,
         observacao_inicial: null,
+        evidencias_urls: evidenciasUrls,
 
-        evidencias_urls: [],
+        // ✅ instrutor só depois
+        instrutor_login: null,
+        instrutor_nome: null,
+        instrutor_id: null,
 
+        tratativa_id: null,
         metadata: {
           prefixo: String(prefixo || "").trim(),
           linha: String(linha || "").trim(),
           cluster: String(cluster || "").trim(),
-          tipo_lancamento: "ACOMPANHAMENTO",
+
+          // ✅ rastreio do lançador
+          lancado_por_login: lancadorLogin,
+          lancado_por_nome: lancadorNome,
+          lancado_por_usuario_id: lancadorIdNum, // numérico OK em metadata
         },
       };
 
-      const { data: created, error: insErr } = await supabase
+      const { data: acomp, error: eA } = await supabase
         .from("diesel_acompanhamentos")
         .insert(payloadAcomp)
         .select("id")
         .single();
 
-      if (insErr) throw new Error(insErr.message);
-      if (!created?.id) throw new Error("Não foi possível obter o ID do acompanhamento.");
+      if (eA) throw eA;
 
-      const acompanhamentoId = created.id;
-
-      // 2) Upload evidências e atualizar acompanhamento com URLs
-      const urls = await uploadEvidenceFiles({
-        chapa,
-        acompanhamentoId,
-        files: evidAcomp,
-      });
-
-      const { error: updErr } = await supabase
-        .from("diesel_acompanhamentos")
-        .update({ evidencias_urls: urls })
-        .eq("id", acompanhamentoId);
-
-      if (updErr) throw new Error(updErr.message);
-
-      // 3) Criar evento LANCAMENTO com as mesmas evidências
+      // 3) INSERT evento LANCAMENTO (criado_por_* = lançador)
       const payloadEvento = {
-        acompanhamento_id: acompanhamentoId,
+        acompanhamento_id: acomp.id,
         tipo: "LANCAMENTO",
-        observacoes: `Lançamento do acompanhamento. Motivo: ${motivoFinal}.`,
-        evidencias_urls: urls,
+        observacoes: motivoFinal,
+        evidencias_urls: evidenciasUrls,
+        km: null,
+        litros: null,
         kml: Number(kmlInicial),
-        criado_por_login: user?.login || user?.email || null,
-        criado_por_nome: user?.nome || null,
-        criado_por_id: user?.id || null,
+        periodo_inicio: null,
+        periodo_fim: null,
+        criado_por_login: lancadorLogin,
+        criado_por_nome: lancadorNome,
+        // ✅ só grava se for UUID (geralmente seu user.id é número, então fica null)
+        criado_por_id: isUuid(user?.id) ? user.id : null,
         extra: {
           prefixo: String(prefixo || "").trim(),
           linha: String(linha || "").trim(),
@@ -269,20 +261,37 @@ export default function DesempenhoLancamento() {
         },
       };
 
-      const { error: evErr } = await supabase
+      const { error: eE } = await supabase
         .from("diesel_acompanhamento_eventos")
         .insert(payloadEvento);
 
-      if (evErr) throw new Error(evErr.message);
+      if (eE) throw eE;
 
-      // 4) Ir para acompanhamento
+      // 4) Navega para a tela de acompanhamento
       navigate("/desempenho-diesel#acompanhamento");
-    } catch (e) {
-      console.error(e);
-      setErro(e?.message || "Erro ao lançar acompanhamento.");
+    } catch (err) {
+      console.error(err);
+      setErrMsg(err?.message || "Erro ao salvar.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function salvarTratativaPlaceholder() {
+    // Mantemos como placeholder por enquanto (você disse que o instrutor/ações vem depois).
+    // Aqui apenas navega para tratativas.
+    navigate("/desempenho-diesel#tratativas");
+  }
+
+  async function handleAvancar() {
+    if (!pronto || saving) return;
+
+    if (tipo === "ACOMPANHAMENTO") {
+      await salvarAcompanhamento();
+      return;
+    }
+
+    await salvarTratativaPlaceholder();
   }
 
   return (
@@ -294,9 +303,9 @@ export default function DesempenhoLancamento() {
         </p>
       </div>
 
-      {erro && (
-        <div className="mb-4 border border-red-200 bg-red-50 text-red-800 rounded-lg p-3 text-sm">
-          {erro}
+      {errMsg && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {errMsg}
         </div>
       )}
 
@@ -408,7 +417,7 @@ export default function DesempenhoLancamento() {
 
             <div className="md:col-span-3">
               <label className="block text-sm text-gray-600 mb-1">
-                Evidências (instrutor / lançamento) — múltiplos arquivos + PDF
+                Evidências (lançamento) — múltiplos arquivos + PDF
               </label>
               <input
                 type="file"
@@ -450,15 +459,20 @@ export default function DesempenhoLancamento() {
 
               {historicoResumo.length === 0 ? (
                 <div className="text-sm text-gray-500">
-                  Nenhum histórico encontrado (quando ligar no Supabase, aqui aparece acompanhamento/tratativa e melhora/piora).
+                  Nenhum histórico encontrado (quando ligar no Supabase, aqui aparece se já foi
+                  acompanhamento/tratativa e se melhorou/piorou).
                 </div>
               ) : (
                 <div className="border rounded-md">
                   {historicoResumo.map((h, i) => (
                     <div key={i} className="px-3 py-2 border-b last:border-b-0 text-sm">
                       <span className="font-medium">{h.data}</span>{" "}
-                      <span className="px-2 py-[2px] rounded bg-gray-100 text-gray-700">{h.tipo}</span>{" "}
-                      <span className="px-2 py-[2px] rounded bg-blue-50 text-blue-700">{h.status}</span>{" "}
+                      <span className="px-2 py-[2px] rounded bg-gray-100 text-gray-700">
+                        {h.tipo}
+                      </span>{" "}
+                      <span className="px-2 py-[2px] rounded bg-blue-50 text-blue-700">
+                        {h.status}
+                      </span>{" "}
                       <span className="text-gray-600">— {h.detalhe}</span>
                     </div>
                   ))}
@@ -469,14 +483,10 @@ export default function DesempenhoLancamento() {
         </div>
       )}
 
-      {/* TRATATIVA (placeholder) */}
+      {/* TRATATIVA (placeholder por enquanto) */}
       {tipo === "TRATATIVA" && (
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
           <h2 className="text-lg font-semibold mb-3">Tratativa</h2>
-
-          <div className="mb-4 text-sm text-gray-500">
-            Em breve: puxar histórico detalhado + evidências do acompanhamento e herdar tudo na tratativa.
-          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
