@@ -1,6 +1,6 @@
 // src/components/CobrancaDetalheModal.jsx
 // Ajustes: Origem (Interno/Externo) + Bloco Externo (Terceiro/Veículo/Fotos) + Persistência em avarias_terceiros
-// Mantém toda a base existente.
+// + NOVO: permitir editar/reverter quando status for Cancelada
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabase";
@@ -19,8 +19,8 @@ export default function CobrancaDetalheModal({
   avaria,
   onClose,
   onAtualizarStatus,
-  canDelete, // NOVO
-  onExcluir, // NOVO
+  canDelete,
+  onExcluir,
 }) {
   const [itensOrcamento, setItensOrcamento] = useState([]);
   const [urlsEvidencias, setUrlsEvidencias] = useState([]);
@@ -31,19 +31,14 @@ export default function CobrancaDetalheModal({
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [selectedMotorista, setSelectedMotorista] = useState({ chapa: "", nome: "" });
   const [dataAvaria, setDataAvaria] = useState("");
-  const [isEditing, setIsEditing] = useState(false); // edição da cobrança (quando já Cobrada)
+  const [isEditing, setIsEditing] = useState(false);
   const [tratativaTexto, setTratativaTexto] = useState("");
-  const [salvandoInfo, setSalvandoInfo] = useState(false); // loading do salvar informações
+  const [salvandoInfo, setSalvandoInfo] = useState(false);
 
-  // =========================
-  // NOVO: Origem (Interno/Externo)
-  // =========================
+  // Origem (Interno/Externo)
   const [origem, setOrigem] = useState("Interno");
 
-  // =========================
-  // NOVO: Dados do terceiro / veículo / fotos (somente se Externo)
-  // Persistidos na tabela public.avarias_terceiros (1:1 via avaria_id)
-  // =========================
+  // Dados do terceiro (Externo)
   const [terceiroNome, setTerceiroNome] = useState("");
   const [terceiroDocumento, setTerceiroDocumento] = useState("");
   const [terceiroTelefone, setTerceiroTelefone] = useState("");
@@ -53,7 +48,7 @@ export default function CobrancaDetalheModal({
   const [terceiroModelo, setTerceiroModelo] = useState("");
   const [terceiroCor, setTerceiroCor] = useState("");
 
-  const [fotosTerceiro, setFotosTerceiro] = useState([]); // array de URLs públicas
+  const [fotosTerceiro, setFotosTerceiro] = useState([]);
   const [loadingTerceiro, setLoadingTerceiro] = useState(false);
   const [salvandoTerceiro, setSalvandoTerceiro] = useState(false);
 
@@ -72,10 +67,8 @@ export default function CobrancaDetalheModal({
       setNumParcelas(avaria.numero_parcelas || 1);
       setMotivoCancelamento(avaria.motivo_cancelamento_cobranca || "");
 
-      // Origem (fallback Interno)
       setOrigem(avaria.origem === "Externo" ? "Externo" : "Interno");
 
-      // Motorista vindo da avaria (fallback)
       if (avaria.motoristaId) {
         const parts = String(avaria.motoristaId).split(" - ");
         setSelectedMotorista({
@@ -86,10 +79,8 @@ export default function CobrancaDetalheModal({
         setSelectedMotorista({ chapa: "", nome: "" });
       }
 
-      // Data da avaria
       setDataAvaria(avaria.dataAvaria || avaria.data_avaria || new Date().toISOString());
 
-      // Evidências
       if (avaria.urls_evidencias) {
         let urls = [];
         if (Array.isArray(avaria.urls_evidencias)) urls = avaria.urls_evidencias;
@@ -100,7 +91,6 @@ export default function CobrancaDetalheModal({
         setUrlsEvidencias([]);
       }
 
-      // Tratativa (pode ter vindo como array ou string)
       if (avaria.urls_tratativa) {
         if (Array.isArray(avaria.urls_tratativa)) {
           setTratativaTexto(avaria.urls_tratativa.join("\n"));
@@ -117,7 +107,6 @@ export default function CobrancaDetalheModal({
         setTratativaTexto("");
       }
 
-      // Itens do orçamento
       const { data, error } = await supabase
         .from("cobrancas_avarias")
         .select("id, descricao, qtd, valorUnitario, tipo")
@@ -126,9 +115,6 @@ export default function CobrancaDetalheModal({
       if (!error && Array.isArray(data)) setItensOrcamento(data);
       setLoadingItens(false);
 
-      // =========================
-      // NOVO: Carregar dados do terceiro (somente se Externo)
-      // =========================
       if ((avaria.origem || "Interno") === "Externo") {
         setLoadingTerceiro(true);
         try {
@@ -138,9 +124,7 @@ export default function CobrancaDetalheModal({
             .eq("avaria_id", avaria.id)
             .maybeSingle();
 
-          if (tErr) {
-            console.warn("Erro ao carregar avarias_terceiros:", tErr.message);
-          }
+          if (tErr) console.warn("Erro ao carregar avarias_terceiros:", tErr.message);
 
           setTerceiroNome(tData?.terceiro_nome || "");
           setTerceiroDocumento(tData?.terceiro_documento || "");
@@ -156,7 +140,6 @@ export default function CobrancaDetalheModal({
           setLoadingTerceiro(false);
         }
       } else {
-        // Se Interno: limpa estados do terceiro para não “vazar” dados
         setTerceiroNome("");
         setTerceiroDocumento("");
         setTerceiroTelefone("");
@@ -171,11 +154,9 @@ export default function CobrancaDetalheModal({
     carregarDados();
   }, [avaria]);
 
-  // Se usuário trocar para Externo dentro do modal (ainda Pendente), tentamos carregar/criar base
   useEffect(() => {
     if (!avaria) return;
 
-    // Se virou Externo e ainda não carregou, tenta buscar
     const run = async () => {
       if (origem !== "Externo") return;
       setLoadingTerceiro(true);
@@ -188,7 +169,6 @@ export default function CobrancaDetalheModal({
 
         if (tErr) console.warn("Erro ao carregar avarias_terceiros:", tErr.message);
 
-        // Se existir, popula; se não existir, mantém vazio
         setTerceiroNome(tData?.terceiro_nome || "");
         setTerceiroDocumento(tData?.terceiro_documento || "");
         setTerceiroTelefone(tData?.terceiro_telefone || "");
@@ -224,16 +204,18 @@ export default function CobrancaDetalheModal({
     return { chapa: "", nome: "" };
   };
 
+  // ✅ agora: editar básico não só para pendente, mas também quando isEditing estiver true
   const podeEditarBasico = avaria.status_cobranca === "Pendente";
   const somenteLeituraOperacao = avaria.status_cobranca !== "Pendente" && !isEditing;
+
   const dataAvariaFmt = new Date(dataAvaria).toLocaleDateString("pt-BR");
 
-  // --- UPLOAD DE ARQUIVOS DE TRATATIVA (imagens / PDFs etc) ---
+  // Upload tratativa
   const handleUploadTratativaFiles = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    const bucketName = "tratativas-avarias"; // bucket novo no Supabase
+    const bucketName = "tratativas-avarias";
     const novosLinks = [];
 
     for (const file of files) {
@@ -268,14 +250,12 @@ export default function CobrancaDetalheModal({
     event.target.value = "";
   };
 
-  // =========================
-  // NOVO: Upload de fotos do terceiro (bucket "avarias-terceiros")
-  // =========================
+  // Upload fotos terceiro
   const handleUploadFotosTerceiro = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    const bucketName = "avarias-terceiros"; // crie este bucket no Supabase Storage (público)
+    const bucketName = "avarias-terceiros";
     const novosLinks = [];
 
     for (const file of files) {
@@ -307,9 +287,7 @@ export default function CobrancaDetalheModal({
     event.target.value = "";
   };
 
-  // =========================
-  // NOVO: salvar/atualizar ficha do terceiro (upsert avarias_terceiros)
-  // =========================
+  // upsert terceiro
   const salvarTerceiroUpsert = async () => {
     if (!avaria?.id) return;
 
@@ -327,17 +305,14 @@ export default function CobrancaDetalheModal({
 
     setSalvandoTerceiro(true);
     try {
-      const { error } = await supabase
-        .from("avarias_terceiros")
-        .upsert(payload, { onConflict: "avaria_id" });
-
+      const { error } = await supabase.from("avarias_terceiros").upsert(payload, { onConflict: "avaria_id" });
       if (error) throw error;
     } finally {
       setSalvandoTerceiro(false);
     }
   };
 
-  // --- SALVAR INFORMAÇÕES BÁSICAS (antes da cobrança) ---
+  // salvar info (pendente)
   const handleSalvarInfo = async () => {
     const m = motoristaAtual();
 
@@ -350,14 +325,12 @@ export default function CobrancaDetalheModal({
       motoristaId: `${m.chapa} - ${m.nome}`,
       dataAvaria,
       observacao_operacao: observacaoOperacao,
-      // NOVO: origem também fica salva na base (avarias)
       origem,
     };
 
     try {
       setSalvandoInfo(true);
 
-      // Se origem Externo, salva/upsert dados do terceiro antes (sem travar se vazio)
       if (origem === "Externo") {
         await salvarTerceiroUpsert();
       }
@@ -378,7 +351,7 @@ export default function CobrancaDetalheModal({
     }
   };
 
-  // --- SALVAR STATUS ---
+  // ✅ aceitar Pendente também
   const handleSalvarStatus = async (novoStatus) => {
     const valorNumerico = parseCurrency(valorCobrado);
 
@@ -389,19 +362,27 @@ export default function CobrancaDetalheModal({
 
     const m = motoristaAtual();
 
+    // Regras por status
+    const isCobrada = novoStatus === "Cobrada";
+    const isCancelada = novoStatus === "Cancelada";
+    const isPendente = novoStatus === "Pendente";
+
     const updateData = {
       status_cobranca: novoStatus,
-      valor_cobrado: valorNumerico,
-      numero_parcelas: Number(numParcelas) || 1,
       observacao_operacao: observacaoOperacao,
-      motivo_cancelamento_cobranca: novoStatus === "Cancelada" ? motivoCancelamento : null,
-      // NOVO: data_cobranca só faz sentido quando for Cobrada
-      data_cobranca: novoStatus === "Cobrada" ? new Date().toISOString() : null,
       urls_tratativa: urlsTratativaArray.length > 0 ? urlsTratativaArray : null,
-      // manter data avaria atualizável
       dataAvaria,
-      // NOVO: origem na base
       origem,
+
+      // valores / parcelas:
+      valor_cobrado: isCobrada ? valorNumerico : null,
+      numero_parcelas: isCobrada ? Number(numParcelas) || 1 : null,
+
+      // cancelamento:
+      motivo_cancelamento_cobranca: isCancelada ? motivoCancelamento : null,
+
+      // data cobrança:
+      data_cobranca: isCobrada ? new Date().toISOString() : null,
     };
 
     if (m.chapa) {
@@ -411,7 +392,6 @@ export default function CobrancaDetalheModal({
     if (!window.confirm(`Confirma marcar como ${novoStatus.toLowerCase()}?`)) return;
 
     try {
-      // Se Externo, salva o terceiro antes de concluir a cobrança (sem exigir campos agora)
       if (origem === "Externo") {
         await salvarTerceiroUpsert();
       }
@@ -424,7 +404,7 @@ export default function CobrancaDetalheModal({
     }
   };
 
-  // --- IMPRESSÃO ---
+  // impressão
   const handlePrint = () => {
     const baseUrl = window.location.origin;
     let printContents = document.getElementById("printable-area").innerHTML;
@@ -458,7 +438,6 @@ export default function CobrancaDetalheModal({
     }, 500);
   };
 
-  // Lista de URLs de tratativa (para exibir thumbnails)
   const tratativaUrls = tratativaTexto
     .split("\n")
     .map((u) => u.trim())
@@ -469,10 +448,8 @@ export default function CobrancaDetalheModal({
 
   return (
     <>
-      {/* === Modal === */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4 print:hidden">
         <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
-          {/* Cabeçalho */}
           <div className="flex justify-between items-center p-4 border-b">
             <h2 className="text-2xl font-bold text-gray-800">🧾 Detalhes da Cobrança</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-gray-800" aria-label="Fechar">
@@ -480,7 +457,6 @@ export default function CobrancaDetalheModal({
             </button>
           </div>
 
-          {/* Corpo */}
           <div className="p-6 space-y-6 overflow-y-auto">
             {/* Identificação */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b pb-4">
@@ -514,7 +490,6 @@ export default function CobrancaDetalheModal({
                 />
               </div>
 
-              {/* NOVO: Origem */}
               <div className="md:col-span-2">
                 <label className="text-xs font-medium text-gray-500 block">Origem da Cobrança</label>
                 <select
@@ -532,7 +507,7 @@ export default function CobrancaDetalheModal({
               </div>
             </div>
 
-            {/* NOVO: Bloco Externo (simples) */}
+            {/* Externo */}
             {origem === "Externo" && (
               <div className="border rounded-lg p-4 bg-gray-50">
                 <h3 className="text-lg font-semibold mb-3">👤 Cobrança Externa — Dados do Terceiro</h3>
@@ -659,7 +634,6 @@ export default function CobrancaDetalheModal({
                       <p className="text-sm text-gray-500">Nenhuma foto do terceiro anexada.</p>
                     )}
 
-                    {/* Botão opcional para salvar só o bloco externo (sem mexer no status) */}
                     {(podeEditarBasico || isEditing) && (
                       <div className="mt-3 flex justify-end">
                         <button
@@ -741,9 +715,7 @@ export default function CobrancaDetalheModal({
                       ))}
                     </tbody>
                   </table>
-                  <div className="text-right text-xl font-bold mt-3">
-                    Valor Total: {formatCurrency(avaria.valor_total_orcamento)}
-                  </div>
+                  <div className="text-right text-xl font-bold mt-3">Valor Total: {formatCurrency(avaria.valor_total_orcamento)}</div>
                 </>
               )}
             </div>
@@ -876,6 +848,7 @@ export default function CobrancaDetalheModal({
                 </button>
               )}
 
+              {/* Pendente */}
               {avaria.status_cobranca === "Pendente" && (
                 <>
                   <button
@@ -893,13 +866,12 @@ export default function CobrancaDetalheModal({
                 </>
               )}
 
+              {/* Cobrada */}
               {avaria.status_cobranca === "Cobrada" && !isEditing && (
                 <button
                   onClick={() => {
                     setIsEditing(true);
-                    alert(
-                      '✏️ Edição liberada. Faça os ajustes (motorista, data, valores) e salve novamente como "Cobrada".'
-                    );
+                    alert('✏️ Edição liberada. Faça os ajustes e salve novamente como "Cobrada".');
                   }}
                   className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
                 >
@@ -907,16 +879,48 @@ export default function CobrancaDetalheModal({
                 </button>
               )}
 
-              {isEditing && (
+              {/* Cancelada (NOVO) */}
+              {avaria.status_cobranca === "Cancelada" && !isEditing && (
                 <button
-                  onClick={() => handleSalvarStatus("Cobrada")}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                  onClick={() => {
+                    setIsEditing(true);
+                    alert("✏️ Edição liberada. Você pode reabrir para Pendente ou marcar como Cobrada novamente.");
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
                 >
-                  💾 Salvar Alterações
+                  ✏️ Editar Cancelamento
                 </button>
               )}
 
-              {/* NOVO: Botão Excluir Avaria */}
+              {/* Modo edição - ações */}
+              {isEditing && (
+                <>
+                  <button
+                    onClick={() => handleSalvarStatus("Pendente")}
+                    className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                    title="Reabrir para pendente"
+                  >
+                    ↩️ Voltar para Pendente
+                  </button>
+
+                  <button
+                    onClick={() => handleSalvarStatus("Cobrada")}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                  >
+                    💰 Marcar como Cobrada
+                  </button>
+
+                  <button
+                    onClick={() => handleSalvarStatus("Cancelada")}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+                    title="Manter cancelada, mas salvar ajustes (motivo/observações/tratativa)"
+                  >
+                    💾 Salvar Cancelamento
+                  </button>
+                </>
+              )}
+
+              {/* Excluir */}
               {canDelete && typeof onExcluir === "function" && (
                 <button
                   onClick={onExcluir}
@@ -938,7 +942,7 @@ export default function CobrancaDetalheModal({
         </div>
       </div>
 
-      {/* === LAYOUT DE IMPRESSÃO (verde) === */}
+      {/* === LAYOUT DE IMPRESSÃO === */}
       <div id="printable-area" className="hidden font-sans text-[11px] leading-tight text-gray-900">
         <style>{`
           @page { margin: 12mm; }
@@ -948,36 +952,30 @@ export default function CobrancaDetalheModal({
           h1, h2 { margin: 0; padding: 0; }
         `}</style>
 
-        {/* Cabeçalho */}
         <header className="mb-2">
           <h1 className="text-center text-[14px] font-extrabold">ORÇAMENTO PARA COBRANÇA DE AVARIA</h1>
         </header>
 
-        {/* Identificação */}
         <section className="mb-2">
           <div className="grid grid-cols-3 gap-2">
             <div>
               <span className="text-gray-600">Prefixo:</span> <strong>{avaria.prefixo}</strong>
             </div>
             <div>
-              <span className="text-gray-600">Nº Avaria:</span>{" "}
-              <strong>{avaria.numero_da_avaria || "-"}</strong>
+              <span className="text-gray-600">Nº Avaria:</span> <strong>{avaria.numero_da_avaria || "-"}</strong>
             </div>
             <div>
-              <span className="text-gray-600">Motorista:</span>{" "}
-              <strong>{motoristaAtual().nome || "N/A"}</strong>
+              <span className="text-gray-600">Motorista:</span> <strong>{motoristaAtual().nome || "N/A"}</strong>
             </div>
             <div>
               <span className="text-gray-600">Data Avaria:</span> <strong>{dataAvariaFmt}</strong>
             </div>
             <div className="col-span-3">
-              <span className="text-gray-600">Descrição:</span>{" "}
-              <strong>{avaria.descricao || "Não informada"}</strong>
+              <span className="text-gray-600">Descrição:</span> <strong>{avaria.descricao || "Não informada"}</strong>
             </div>
           </div>
         </section>
 
-        {/* Peças */}
         <section className="mb-2 nobreak">
           <h2 className="text-[12px] font-bold mb-1">Peças</h2>
           <table className="w-full border border-gray-300 border-collapse compact">
@@ -1010,7 +1008,6 @@ export default function CobrancaDetalheModal({
           </table>
         </section>
 
-        {/* Serviços */}
         <section className="mb-2 nobreak">
           <h2 className="text-[12px] font-bold mb-1">Serviços</h2>
           <table className="w-full border border-gray-300 border-collapse compact">
@@ -1043,7 +1040,6 @@ export default function CobrancaDetalheModal({
           </table>
         </section>
 
-        {/* Totais */}
         <section className="mb-2 nobreak">
           <div className="w-full flex justify-end">
             <div className="w-[260px]">
@@ -1071,13 +1067,11 @@ export default function CobrancaDetalheModal({
           </div>
         </section>
 
-        {/* Observações */}
         <section className="mb-2 nobreak">
           <span>Observações:</span>
           <div className="border rounded p-2 min-h-[40px]">{observacaoOperacao}</div>
         </section>
 
-        {/* Tratativa */}
         <section className="mb-3 nobreak">
           <span>Tratativa (links/anexos):</span>
           <div className="border rounded p-2 min-h-[40px]">
@@ -1085,7 +1079,6 @@ export default function CobrancaDetalheModal({
           </div>
         </section>
 
-        {/* Assinaturas */}
         <section className="mt-4 nobreak">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
