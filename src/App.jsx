@@ -31,6 +31,9 @@ import RequireAuth from "./routes/RequireAuth";
 // ✅ NOVO
 import DesempenhoDiesel from "./pages/DesempenhoDiesel";
 
+// ✅ NOVO (governança)
+import DesempenhoLancamento from "./pages/DesempenhoLancamento";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -51,6 +54,9 @@ export default function App() {
 
           {/* ✅ Desempenho Diesel (Admin) */}
           <Route path="/desempenho-diesel" element={<DesempenhoDiesel />} />
+
+          {/* ✅ Desempenho Lançamento (Admin) */}
+          <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
