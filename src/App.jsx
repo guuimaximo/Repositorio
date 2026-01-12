@@ -14,6 +14,9 @@ import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
 import AvariasEmRevisao from "./pages/AvariasEmRevisao";
 
+// ✅ NOVO: Resumo Avarias (Interno x Externo)
+import AvariasResumo from "./pages/AvariasResumo";
+
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
 import SOSFechamento from "./pages/SOSFechamento";
 import SOSTratamento from "./pages/SOSTratamento";
@@ -59,6 +62,10 @@ export default function App() {
           <Route path="/lancar-avaria" element={<LancarAvaria />} />
           <Route path="/aprovar-avarias" element={<AprovacaoAvarias />} />
           <Route path="/cobrancas" element={<CobrancasAvarias />} />
+
+          {/* ✅ NOVO: Resumo Avarias */}
+          <Route path="/avarias-resumo" element={<AvariasResumo />} />
+
           <Route path="/avarias-em-revisao" element={<AvariasEmRevisao />} />
 
           {/* SOS */}
