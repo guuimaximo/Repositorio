@@ -1,3 +1,4 @@
+// src/pages/CobrancasAvarias.jsx
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { FaSearch } from "react-icons/fa";
@@ -18,6 +19,9 @@ export default function CobrancasAvarias() {
   const [filtro, setFiltro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // ✅ NOVO: filtro de origem (Interno/Externo)
+  const [origemFiltro, setOrigemFiltro] = useState("");
 
   const [resumo, setResumo] = useState({
     total: 0,
@@ -60,7 +64,7 @@ export default function CobrancasAvarias() {
     const { data: ua, error: uaErr } = await supabase
       .from("usuarios_aprovadores")
       .select("nivel, status_cadastro")
-      .ilike("email", user.email) // case-insensitive
+      .ilike("email", user.email)
       .maybeSingle();
 
     if (uaErr) {
@@ -92,17 +96,23 @@ export default function CobrancasAvarias() {
         });
 
   // =========================
-  // AJUSTE: helpers para Data Cobrança e Origem
-  // (mantém fallback para campos antigos)
+  // Helpers para Data Cobrança e Origem
   // =========================
   const pickDataAvariaRaw = (c) => c.dataAvaria || c.data_avaria || c.created_at || null;
   const pickDataCobrancaRaw = (c) => c.data_cobranca || c.cobrado_em || null; // fallback
   const pickOrigemCobranca = (c) => c.origem || c.origem_cobranca || null; // fallback
 
+  const normalizarOrigem = (v) => {
+    const s = String(v || "").trim().toLowerCase();
+    if (!s) return null;
+    if (s === "interno" || s === "interna") return "Interno";
+    if (s === "externo" || s === "externa") return "Externo";
+    return v; // mantém como está se vier algo diferente
+  };
+
   const carregarCobrancas = async () => {
     let query = supabase
       .from("avarias")
-      // AJUSTE: garantir que venha data_cobranca e origem (select * já traz, mas mantive assim)
       .select("*")
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
@@ -111,10 +121,17 @@ export default function CobrancasAvarias() {
       query = query.eq("status_cobranca", statusFiltro);
     }
 
+    // ✅ NOVO: filtro por origem (Interno/Externo)
+    if (origemFiltro) {
+      // tenta nos dois nomes possíveis (origem / origem_cobranca)
+      query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
+    }
+
     if (filtro) {
       query = query.or(
-        `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,tipoOcorrencia.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
+        `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
       );
+      // ✅ removido tipoOcorrencia do filtro também, já que você vai tirar a coluna
     }
 
     // Se no banco for "data_avaria", troque "dataAvaria" por "data_avaria"
@@ -136,11 +153,15 @@ export default function CobrancasAvarias() {
   };
 
   const carregarResumo = async () => {
-    // AJUSTE: trazer também valor_cobrado, além do orçado
     let query = supabase
       .from("avarias")
-      .select("status_cobranca, valor_total_orcamento, valor_cobrado, dataAvaria")
+      .select("status_cobranca, valor_total_orcamento, valor_cobrado, dataAvaria, origem, origem_cobranca")
       .eq("status", "Aprovado");
+
+    // ✅ aplica o mesmo filtro no resumo
+    if (origemFiltro) {
+      query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
+    }
 
     if (dataInicio) {
       query = query.gte("dataAvaria", dataInicio);
@@ -167,16 +188,9 @@ export default function CobrancasAvarias() {
       cobradas: cobradas.length,
       canceladas: canceladas.length,
 
-      // Total aprovado (mantém orçado)
       totalAprovadoValue: data.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
-
-      // Pendentes (mantém orçado)
       pendentesTotalValue: pendentes.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
-
-      // AJUSTE PRINCIPAL: Cobradas agora soma valor_cobrado
       cobradasTotalValue: cobradas.reduce((sum, a) => sum + (a.valor_cobrado || 0), 0),
-
-      // Canceladas (mantém orçado)
       canceladasTotalValue: canceladas.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
     });
   };
@@ -190,7 +204,7 @@ export default function CobrancasAvarias() {
   useEffect(() => {
     carregarTudo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro, statusFiltro, dataInicio, dataFim]);
+  }, [filtro, statusFiltro, origemFiltro, dataInicio, dataFim]);
 
   const handleVerDetalhes = (avaria) => {
     setSelectedAvaria(avaria);
@@ -202,10 +216,6 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
-  // =========================
-  // AJUSTE: após salvar, recarregar listagem/resumo
-  // (mantém sua lógica)
-  // =========================
   const handleAtualizarStatusCobranca = async (avariaId, novoStatus, updateData) => {
     const { error } = await supabase.from("avarias").update(updateData).eq("id", avariaId);
 
@@ -262,9 +272,6 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
-  // =========================
-  // AJUSTE: Data Cobrança
-  // =========================
   const formatarDataCobranca = (c) => {
     const dataRaw = pickDataCobrancaRaw(c);
     if (!dataRaw) return "-";
@@ -288,9 +295,6 @@ export default function CobrancasAvarias() {
     return diffDias;
   };
 
-  // =========================
-  // AJUSTE: sort inclui data_cobranca e origem
-  // =========================
   const getSortValue = (item, key) => {
     switch (key) {
       case "numero_da_avaria":
@@ -310,7 +314,7 @@ export default function CobrancasAvarias() {
       }
 
       case "origem":
-        return (pickOrigemCobranca(item) || "").toString().toLowerCase();
+        return (normalizarOrigem(pickOrigemCobranca(item)) || "").toString().toLowerCase();
 
       case "delta_dias": {
         const delta = calcularDeltaDias(item);
@@ -322,9 +326,6 @@ export default function CobrancasAvarias() {
 
       case "prefixo":
         return item.prefixo || "";
-
-      case "tipoOcorrencia":
-        return item.tipoOcorrencia || "";
 
       case "valor_total_orcamento":
         return Number(item.valor_total_orcamento) || 0;
@@ -381,7 +382,7 @@ export default function CobrancasAvarias() {
           <FaSearch className="text-gray-400 mr-2" />
           <input
             type="text"
-            placeholder="Buscar (motorista, prefixo, tipo, nº avaria...)"
+            placeholder="Buscar (motorista, prefixo, nº avaria...)"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
             className="flex-1 outline-none py-1"
@@ -421,10 +422,23 @@ export default function CobrancasAvarias() {
           <option value="Cancelada">Canceladas</option>
         </select>
 
+        {/* ✅ NOVO: filtro Interno / Externo */}
+        <select
+          className="border rounded-md p-2"
+          value={origemFiltro}
+          onChange={(e) => setOrigemFiltro(e.target.value)}
+          title="Filtrar por origem"
+        >
+          <option value="">Todas as Origens</option>
+          <option value="Interno">Interno</option>
+          <option value="Externo">Externo</option>
+        </select>
+
         <button
           onClick={() => {
             setFiltro("");
             setStatusFiltro("");
+            setOrigemFiltro("");
             setDataInicio("");
             setDataFim("");
           }}
@@ -479,12 +493,10 @@ export default function CobrancasAvarias() {
                 Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
 
-              {/* NOVO */}
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_cobranca")}>
                 Data Cobrança{renderSortIndicator("data_cobranca")}
               </th>
 
-              {/* NOVO */}
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("origem")}>
                 Origem{renderSortIndicator("origem")}
               </th>
@@ -501,9 +513,7 @@ export default function CobrancasAvarias() {
                 Prefixo{renderSortIndicator("prefixo")}
               </th>
 
-              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("tipoOcorrencia")}>
-                Tipo Avaria{renderSortIndicator("tipoOcorrencia")}
-              </th>
+              {/* ✅ REMOVIDO: Tipo Avaria */}
 
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_total_orcamento")}>
                 Valor Orçado{renderSortIndicator("valor_total_orcamento")}
@@ -524,13 +534,13 @@ export default function CobrancasAvarias() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="13" className="text-center p-6 text-gray-500">
+                <td colSpan="12" className="text-center p-6 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : sortedCobrancas.length === 0 ? (
               <tr>
-                <td colSpan="13" className="text-center p-6 text-gray-500">
+                <td colSpan="12" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
@@ -538,20 +548,14 @@ export default function CobrancasAvarias() {
               sortedCobrancas.map((c) => {
                 const deltaDias = calcularDeltaDias(c);
                 const statusCobranca = c.status_cobranca || "Pendente";
-                const origem = pickOrigemCobranca(c) || "-";
+                const origem = normalizarOrigem(pickOrigemCobranca(c)) || "-";
 
                 return (
                   <tr key={c.id} className="border-b hover:bg-gray-50">
                     <td className="p-3 text-gray-700">{c.numero_da_avaria || "-"}</td>
-
                     <td className="p-3 text-gray-700">{formatarDataAvaria(c)}</td>
-
                     <td className="p-3 text-gray-700">{formatarDataAprovacao(c)}</td>
-
-                    {/* NOVO */}
                     <td className="p-3 text-gray-700">{formatarDataCobranca(c)}</td>
-
-                    {/* NOVO */}
                     <td className="p-3 text-gray-700">{origem}</td>
 
                     <td className="p-3">
@@ -566,10 +570,8 @@ export default function CobrancasAvarias() {
 
                     <td className="p-3 text-gray-700">{c.motoristaId || "-"}</td>
                     <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
-                    <td className="p-3 text-gray-700">{c.tipoOcorrencia || "-"}</td>
 
                     <td className="p-3 text-gray-700">{formatCurrency(c.valor_total_orcamento)}</td>
-
                     <td className="p-3 text-gray-900 font-medium">{formatCurrency(c.valor_cobrado)}</td>
 
                     <td className="p-3">
