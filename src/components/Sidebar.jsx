@@ -26,7 +26,7 @@ import {
   FaSearch,
   FaClipboardCheck as FaTratativasIcon,
   FaRobot,
-  FaChartPie, // ✅ NOVO: ícone do Resumo Avarias
+  FaChartPie, // ✅ ícone do Resumo Avarias
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -42,13 +42,16 @@ const ACCESS = {
     "/avarias-em-revisao",
     "/aprovar-avarias",
     "/cobrancas",
-    "/avarias-resumo", // ✅ NOVO
+    "/avarias-resumo",
     "/sos-solicitacao",
     "/sos-fechamento",
     "/sos-tratamento",
     "/sos-central",
     "/sos-dashboard",
     "/km-rodado",
+
+    // ✅ Gestor também vê Desempenho Diesel
+    "/desempenho-diesel",
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
@@ -93,7 +96,7 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ Desempenho Diesel (Admin only)
+      // ✅ Desempenho Diesel (Admin + Gestor)
       desempenhoDiesel: {
         base: "/desempenho-diesel",
         label: "Desempenho Diesel",
@@ -112,9 +115,7 @@ export default function Sidebar() {
       ],
 
       avarias: [
-        // ✅ NOVO: Resumo Avarias (somente Gestor e Admin)
         { path: "/avarias-resumo", label: "Resumo", icon: <FaChartPie /> },
-
         { path: "/lancar-avaria", label: "Lançamento", icon: <FaWrench /> },
         { path: "/avarias-em-revisao", label: "Pendências de Revisão", icon: <FaUndo /> },
         { path: "/aprovar-avarias", label: "Aprovações", icon: <FaClipboardCheck /> },
@@ -160,12 +161,12 @@ export default function Sidebar() {
     }`;
   };
 
-  // ✅ mantém admin-only
-  const showDesempenhoDiesel = isAdmin;
+  // ✅ agora Admin OU Gestor vê
+  const showDesempenhoDiesel = isAdmin || isGestor;
 
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
 
-  // ✅ Avarias: agora o Resumo fica visível apenas para Gestor/Admin (e o resto segue permissão)
+  // ✅ Avarias: Resumo só Admin/Gestor (resto segue permissão)
   const showAvarias = links.avarias.some((l) => {
     if (l.path === "/avarias-resumo") return isAdmin || isGestor;
     return canSee(user, l.path);
@@ -193,7 +194,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ Desempenho Diesel (Admin only) */}
+        {/* ✅ Desempenho Diesel (Admin + Gestor) */}
         {showDesempenhoDiesel && (
           <>
             <button
@@ -264,7 +265,6 @@ export default function Sidebar() {
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.avarias.map((link) => {
-                  // ✅ Resumo só Admin/Gestor
                   if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
 
                   return canSee(user, link.path) || (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
