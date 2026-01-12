@@ -1,6 +1,3 @@
-// src/pages/CobrancasAvarias.jsx
-// (Valores nos cards + Nº Avaria + ordenação + data de aprovação + delta em dias + filtro de período)
-
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { FaSearch } from "react-icons/fa";
@@ -11,9 +8,7 @@ function CardResumo({ titulo, valor, cor, subValor = null }) {
     <div className={`${cor} rounded-lg shadow p-5 text-center`}>
       <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
       <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
-      {subValor !== null && (
-        <p className="text-xs font-medium mt-1">{subValor}</p>
-      )}
+      {subValor !== null && <p className="text-xs font-medium mt-1">{subValor}</p>}
     </div>
   );
 }
@@ -31,7 +26,7 @@ export default function CobrancasAvarias() {
     canceladas: 0,
     totalAprovadoValue: 0,
     pendentesTotalValue: 0,
-    cobradasTotalValue: 0,
+    cobradasTotalValue: 0, // agora soma valor_cobrado
     canceladasTotalValue: 0,
   });
 
@@ -49,7 +44,7 @@ export default function CobrancasAvarias() {
   });
 
   // =========================================================
-  // NOVO: Permissão de exclusão via tabela usuarios_aprovadores
+  // Permissão de exclusão via tabela usuarios_aprovadores
   // =========================================================
   const [canDelete, setCanDelete] = useState(false);
 
@@ -74,9 +69,7 @@ export default function CobrancasAvarias() {
       return;
     }
 
-    setCanDelete(
-      ua?.nivel === "Administrador" && ua?.status_cadastro === "Aprovado"
-    );
+    setCanDelete(ua?.nivel === "Administrador" && ua?.status_cadastro === "Aprovado");
   };
 
   useEffect(() => {
@@ -97,6 +90,11 @@ export default function CobrancasAvarias() {
           style: "currency",
           currency: "BRL",
         });
+
+  // Helpers NOVOS (campos futuros)
+  const pickDataAvariaRaw = (c) => c.dataAvaria || c.data_avaria || c.created_at || null;
+  const pickDataCobrancaRaw = (c) => c.data_cobranca || c.cobrado_em || null; // fallback
+  const pickOrigemCobranca = (c) => c.origem || c.origem_cobranca || null; // fallback
 
   const carregarCobrancas = async () => {
     let query = supabase
@@ -134,9 +132,10 @@ export default function CobrancasAvarias() {
   };
 
   const carregarResumo = async () => {
+    // AJUSTE: trazer também valor_cobrado, além do orçado
     let query = supabase
       .from("avarias")
-      .select("status_cobranca, valor_total_orcamento, dataAvaria")
+      .select("status_cobranca, valor_total_orcamento, valor_cobrado, dataAvaria")
       .eq("status", "Aprovado");
 
     if (dataInicio) {
@@ -154,10 +153,7 @@ export default function CobrancasAvarias() {
       return;
     }
 
-    // considerar null/undefined como "Pendente"
-    const pendentes = data.filter(
-      (c) => (c.status_cobranca || "Pendente") === "Pendente"
-    );
+    const pendentes = data.filter((c) => (c.status_cobranca || "Pendente") === "Pendente");
     const cobradas = data.filter((c) => c.status_cobranca === "Cobrada");
     const canceladas = data.filter((c) => c.status_cobranca === "Cancelada");
 
@@ -166,22 +162,18 @@ export default function CobrancasAvarias() {
       pendentes: pendentes.length,
       cobradas: cobradas.length,
       canceladas: canceladas.length,
-      totalAprovadoValue: data.reduce(
-        (sum, a) => sum + (a.valor_total_orcamento || 0),
-        0
-      ),
-      pendentesTotalValue: pendentes.reduce(
-        (sum, a) => sum + (a.valor_total_orcamento || 0),
-        0
-      ),
-      cobradasTotalValue: cobradas.reduce(
-        (sum, a) => sum + (a.valor_total_orcamento || 0),
-        0
-      ),
-      canceladasTotalValue: canceladas.reduce(
-        (sum, a) => sum + (a.valor_total_orcamento || 0),
-        0
-      ),
+
+      // Total aprovado (mantém orçado)
+      totalAprovadoValue: data.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
+
+      // Pendentes (mantém orçado)
+      pendentesTotalValue: pendentes.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
+
+      // AJUSTE PRINCIPAL: Cobradas agora soma valor_cobrado
+      cobradasTotalValue: cobradas.reduce((sum, a) => sum + (a.valor_cobrado || 0), 0),
+
+      // Canceladas (mantém orçado - se quiser mudar para valor_cobrado, é só trocar aqui)
+      canceladasTotalValue: canceladas.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
     });
   };
 
@@ -193,6 +185,7 @@ export default function CobrancasAvarias() {
 
   useEffect(() => {
     carregarTudo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro, statusFiltro, dataInicio, dataFim]);
 
   const handleVerDetalhes = (avaria) => {
@@ -205,15 +198,8 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
-  const handleAtualizarStatusCobranca = async (
-    avariaId,
-    novoStatus,
-    updateData
-  ) => {
-    const { error } = await supabase
-      .from("avarias")
-      .update(updateData)
-      .eq("id", avariaId);
+  const handleAtualizarStatusCobranca = async (avariaId, novoStatus, updateData) => {
+    const { error } = await supabase.from("avarias").update(updateData).eq("id", avariaId);
 
     if (!error) {
       alert(`✅ Cobrança marcada como ${novoStatus}`);
@@ -225,7 +211,7 @@ export default function CobrancasAvarias() {
   };
 
   // =========================================
-  // NOVO: Excluir avaria (somente Admin)
+  // Excluir avaria (somente Admin)
   // =========================================
   const handleExcluirAvaria = async (avaria) => {
     if (!canDelete) {
@@ -253,7 +239,7 @@ export default function CobrancasAvarias() {
   // =========================================
 
   const formatarDataAvaria = (c) => {
-    const dataRaw = c.dataAvaria || c.data_avaria || c.created_at;
+    const dataRaw = pickDataAvariaRaw(c);
     if (!dataRaw) return "-";
     const d = new Date(dataRaw);
     if (Number.isNaN(d.getTime())) return "-";
@@ -268,8 +254,16 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
+  const formatarDataCobranca = (c) => {
+    const dataRaw = pickDataCobrancaRaw(c);
+    if (!dataRaw) return "-";
+    const d = new Date(dataRaw);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("pt-BR");
+  };
+
   const calcularDeltaDias = (c) => {
-    const dataAvariaRaw = c.dataAvaria || c.data_avaria || c.created_at;
+    const dataAvariaRaw = pickDataAvariaRaw(c);
     const dataAprovRaw = c.aprovado_em;
     if (!dataAvariaRaw || !dataAprovRaw) return null;
 
@@ -287,28 +281,46 @@ export default function CobrancasAvarias() {
     switch (key) {
       case "numero_da_avaria":
         return Number(item.numero_da_avaria) || 0;
+
       case "data_avaria": {
-        const dataRaw = item.dataAvaria || item.data_avaria || item.created_at;
+        const dataRaw = pickDataAvariaRaw(item);
         return dataRaw ? new Date(dataRaw).getTime() : 0;
       }
+
       case "aprovado_em":
         return item.aprovado_em ? new Date(item.aprovado_em).getTime() : 0;
+
+      case "data_cobranca": {
+        const dataRaw = pickDataCobrancaRaw(item);
+        return dataRaw ? new Date(dataRaw).getTime() : 0;
+      }
+
+      case "origem":
+        return (pickOrigemCobranca(item) || "").toString().toLowerCase();
+
       case "delta_dias": {
         const delta = calcularDeltaDias(item);
         return delta ?? 0;
       }
+
       case "motoristaId":
         return item.motoristaId || "";
+
       case "prefixo":
         return item.prefixo || "";
+
       case "tipoOcorrencia":
         return item.tipoOcorrencia || "";
+
       case "valor_total_orcamento":
         return Number(item.valor_total_orcamento) || 0;
+
       case "valor_cobrado":
         return Number(item.valor_cobrado) || 0;
+
       case "status_cobranca":
         return item.status_cobranca || "";
+
       case "created_at":
       default:
         return item.created_at ? new Date(item.created_at).getTime() : 0;
@@ -334,10 +346,7 @@ export default function CobrancasAvarias() {
   const handleSort = (key) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
-        return {
-          key,
-          direction: prev.direction === "asc" ? "desc" : "asc",
-        };
+        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
       }
       return { key, direction: "asc" };
     });
@@ -430,7 +439,7 @@ export default function CobrancasAvarias() {
         <CardResumo
           titulo="Cobradas"
           valor={resumo.cobradas}
-          subValor={formatCurrency(resumo.cobradasTotalValue)}
+          subValor={formatCurrency(resumo.cobradasTotalValue)} // agora é valor_cobrado
           cor="bg-green-100 text-green-700"
         />
         <CardResumo
@@ -446,66 +455,56 @@ export default function CobrancasAvarias() {
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="bg-blue-600 text-white text-left">
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("numero_da_avaria")}
-              >
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("numero_da_avaria")}>
                 Nº Avaria{renderSortIndicator("numero_da_avaria")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("data_avaria")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_avaria")}>
                 Data da Avaria{renderSortIndicator("data_avaria")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("aprovado_em")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("aprovado_em")}>
                 Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("delta_dias")}
-              >
+
+              {/* NOVO */}
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_cobranca")}>
+                Data Cobrança{renderSortIndicator("data_cobranca")}
+              </th>
+
+              {/* NOVO */}
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("origem")}>
+                Origem{renderSortIndicator("origem")}
+              </th>
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("delta_dias")}>
                 Δ (dias){renderSortIndicator("delta_dias")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("motoristaId")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("motoristaId")}>
                 Motorista{renderSortIndicator("motoristaId")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("prefixo")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("prefixo")}>
                 Prefixo{renderSortIndicator("prefixo")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("tipoOcorrencia")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("tipoOcorrencia")}>
                 Tipo Avaria{renderSortIndicator("tipoOcorrencia")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("valor_total_orcamento")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_total_orcamento")}>
                 Valor Orçado{renderSortIndicator("valor_total_orcamento")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("valor_cobrado")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_cobrado")}>
                 Valor Cobrado{renderSortIndicator("valor_cobrado")}
               </th>
-              <th
-                className="p-3 cursor-pointer select-none"
-                onClick={() => handleSort("status_cobranca")}
-              >
+
+              <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("status_cobranca")}>
                 Status Cobrança{renderSortIndicator("status_cobranca")}
               </th>
+
               <th className="p-3">Ações</th>
             </tr>
           </thead>
@@ -513,13 +512,13 @@ export default function CobrancasAvarias() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="11" className="text-center p-6 text-gray-500">
+                <td colSpan="13" className="text-center p-6 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : sortedCobrancas.length === 0 ? (
               <tr>
-                <td colSpan="11" className="text-center p-6 text-gray-500">
+                <td colSpan="13" className="text-center p-6 text-gray-500">
                   Nenhuma cobrança encontrada.
                 </td>
               </tr>
@@ -527,44 +526,40 @@ export default function CobrancasAvarias() {
               sortedCobrancas.map((c) => {
                 const deltaDias = calcularDeltaDias(c);
                 const statusCobranca = c.status_cobranca || "Pendente";
+                const origem = pickOrigemCobranca(c) || "-";
 
                 return (
                   <tr key={c.id} className="border-b hover:bg-gray-50">
-                    <td className="p-3 text-gray-700">
-                      {c.numero_da_avaria || "-"}
-                    </td>
-                    <td className="p-3 text-gray-700">
-                      {formatarDataAvaria(c)}
-                    </td>
-                    <td className="p-3 text-gray-700">
-                      {formatarDataAprovacao(c)}
-                    </td>
+                    <td className="p-3 text-gray-700">{c.numero_da_avaria || "-"}</td>
+
+                    <td className="p-3 text-gray-700">{formatarDataAvaria(c)}</td>
+
+                    <td className="p-3 text-gray-700">{formatarDataAprovacao(c)}</td>
+
+                    {/* NOVO */}
+                    <td className="p-3 text-gray-700">{formatarDataCobranca(c)}</td>
+
+                    {/* NOVO */}
+                    <td className="p-3 text-gray-700">{origem}</td>
+
                     <td className="p-3">
                       {deltaDias !== null ? (
-                        <span
-                          className={`font-semibold ${
-                            deltaDias > 7 ? "text-red-600" : "text-green-600"
-                          }`}
-                        >
+                        <span className={`font-semibold ${deltaDias > 7 ? "text-red-600" : "text-green-600"}`}>
                           {deltaDias}d
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="p-3 text-gray-700">
-                      {c.motoristaId || "-"}
-                    </td>
+
+                    <td className="p-3 text-gray-700">{c.motoristaId || "-"}</td>
                     <td className="p-3 text-gray-700">{c.prefixo || "-"}</td>
-                    <td className="p-3 text-gray-700">
-                      {c.tipoOcorrencia || "-"}
-                    </td>
-                    <td className="p-3 text-gray-700">
-                      {formatCurrency(c.valor_total_orcamento)}
-                    </td>
-                    <td className="p-3 text-gray-900 font-medium">
-                      {formatCurrency(c.valor_cobrado)}
-                    </td>
+                    <td className="p-3 text-gray-700">{c.tipoOcorrencia || "-"}</td>
+
+                    <td className="p-3 text-gray-700">{formatCurrency(c.valor_total_orcamento)}</td>
+
+                    <td className="p-3 text-gray-900 font-medium">{formatCurrency(c.valor_cobrado)}</td>
+
                     <td className="p-3">
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${
@@ -578,6 +573,7 @@ export default function CobrancasAvarias() {
                         {statusCobranca}
                       </span>
                     </td>
+
                     <td className="p-3">
                       {statusCobranca === "Pendente" ? (
                         <button
