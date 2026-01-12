@@ -20,7 +20,7 @@ export default function CobrancasAvarias() {
   const [statusFiltro, setStatusFiltro] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // ✅ NOVO: filtro de origem (Interno/Externo)
+  // ✅ filtro de origem (Interno/Externo)
   const [origemFiltro, setOrigemFiltro] = useState("");
 
   const [resumo, setResumo] = useState({
@@ -107,7 +107,7 @@ export default function CobrancasAvarias() {
     if (!s) return null;
     if (s === "interno" || s === "interna") return "Interno";
     if (s === "externo" || s === "externa") return "Externo";
-    return v; // mantém como está se vier algo diferente
+    return v;
   };
 
   const carregarCobrancas = async () => {
@@ -121,9 +121,7 @@ export default function CobrancasAvarias() {
       query = query.eq("status_cobranca", statusFiltro);
     }
 
-    // ✅ NOVO: filtro por origem (Interno/Externo)
     if (origemFiltro) {
-      // tenta nos dois nomes possíveis (origem / origem_cobranca)
       query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
     }
 
@@ -131,10 +129,8 @@ export default function CobrancasAvarias() {
       query = query.or(
         `prefixo.ilike.%${filtro}%,motoristaId.ilike.%${filtro}%,numero_da_avaria.ilike.%${filtro}%`
       );
-      // ✅ removido tipoOcorrencia do filtro também, já que você vai tirar a coluna
     }
 
-    // Se no banco for "data_avaria", troque "dataAvaria" por "data_avaria"
     if (dataInicio) {
       query = query.gte("dataAvaria", dataInicio);
     }
@@ -158,7 +154,6 @@ export default function CobrancasAvarias() {
       .select("status_cobranca, valor_total_orcamento, valor_cobrado, dataAvaria, origem, origem_cobranca")
       .eq("status", "Aprovado");
 
-    // ✅ aplica o mesmo filtro no resumo
     if (origemFiltro) {
       query = query.or(`origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`);
     }
@@ -389,7 +384,7 @@ export default function CobrancasAvarias() {
           />
         </div>
 
-        {/* Período - Data Início / Data Fim */}
+        {/* Período */}
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex flex-col">
             <label className="text-xs text-gray-500 mb-1">Início</label>
@@ -411,18 +406,13 @@ export default function CobrancasAvarias() {
           </div>
         </div>
 
-        <select
-          className="border rounded-md p-2"
-          value={statusFiltro}
-          onChange={(e) => setStatusFiltro(e.target.value)}
-        >
+        <select className="border rounded-md p-2" value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
           <option value="">Todos os Status</option>
           <option value="Pendente">Pendentes</option>
           <option value="Cobrada">Cobradas</option>
           <option value="Cancelada">Canceladas</option>
         </select>
 
-        {/* ✅ NOVO: filtro Interno / Externo */}
         <select
           className="border rounded-md p-2"
           value={origemFiltro}
@@ -450,30 +440,10 @@ export default function CobrancasAvarias() {
 
       {/* Cards resumo */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <CardResumo
-          titulo="Total Aprovado"
-          valor={resumo.total}
-          subValor={formatCurrency(resumo.totalAprovadoValue)}
-          cor="bg-blue-100 text-blue-700"
-        />
-        <CardResumo
-          titulo="Pendentes Cobrança"
-          valor={resumo.pendentes}
-          subValor={formatCurrency(resumo.pendentesTotalValue)}
-          cor="bg-yellow-100 text-yellow-700"
-        />
-        <CardResumo
-          titulo="Cobradas"
-          valor={resumo.cobradas}
-          subValor={formatCurrency(resumo.cobradasTotalValue)}
-          cor="bg-green-100 text-green-700"
-        />
-        <CardResumo
-          titulo="Canceladas"
-          valor={resumo.canceladas}
-          subValor={formatCurrency(resumo.canceladasTotalValue)}
-          cor="bg-red-100 text-red-700"
-        />
+        <CardResumo titulo="Total Aprovado" valor={resumo.total} subValor={formatCurrency(resumo.totalAprovadoValue)} cor="bg-blue-100 text-blue-700" />
+        <CardResumo titulo="Pendentes Cobrança" valor={resumo.pendentes} subValor={formatCurrency(resumo.pendentesTotalValue)} cor="bg-yellow-100 text-yellow-700" />
+        <CardResumo titulo="Cobradas" valor={resumo.cobradas} subValor={formatCurrency(resumo.cobradasTotalValue)} cor="bg-green-100 text-green-700" />
+        <CardResumo titulo="Canceladas" valor={resumo.canceladas} subValor={formatCurrency(resumo.canceladasTotalValue)} cor="bg-red-100 text-red-700" />
       </div>
 
       {/* Tabela */}
@@ -484,49 +454,36 @@ export default function CobrancasAvarias() {
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("numero_da_avaria")}>
                 Nº Avaria{renderSortIndicator("numero_da_avaria")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_avaria")}>
                 Data da Avaria{renderSortIndicator("data_avaria")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("aprovado_em")}>
                 Data Aprovação{renderSortIndicator("aprovado_em")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("data_cobranca")}>
                 Data Cobrança{renderSortIndicator("data_cobranca")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("origem")}>
                 Origem{renderSortIndicator("origem")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("delta_dias")}>
                 Δ (dias){renderSortIndicator("delta_dias")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("motoristaId")}>
                 Motorista{renderSortIndicator("motoristaId")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("prefixo")}>
                 Prefixo{renderSortIndicator("prefixo")}
               </th>
-
-              {/* ✅ REMOVIDO: Tipo Avaria */}
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_total_orcamento")}>
                 Valor Orçado{renderSortIndicator("valor_total_orcamento")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("valor_cobrado")}>
                 Valor Cobrado{renderSortIndicator("valor_cobrado")}
               </th>
-
               <th className="p-3 cursor-pointer select-none" onClick={() => handleSort("status_cobranca")}>
                 Status Cobrança{renderSortIndicator("status_cobranca")}
               </th>
-
               <th className="p-3">Ações</th>
             </tr>
           </thead>
@@ -604,11 +561,12 @@ export default function CobrancasAvarias() {
                           ✏️ Editar
                         </button>
                       ) : (
+                        // ✅ ALTERADO: Cancelada agora mostra Editar (não mais só Detalhes)
                         <button
                           onClick={() => handleVerDetalhes(c)}
                           className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                         >
-                          👁️ Detalhes
+                          ✏️ Editar
                         </button>
                       )}
                     </td>
