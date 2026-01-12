@@ -50,7 +50,7 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
 
-    // ✅ Gestor também vê Desempenho Diesel
+    // ✅ Gestor vê Desempenho Diesel
     "/desempenho-diesel",
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
@@ -96,12 +96,15 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ Desempenho Diesel (Admin + Gestor)
+      // ✅ Desempenho Diesel (SOMENTE Gestor)
       desempenhoDiesel: {
         base: "/desempenho-diesel",
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
+          // ✅ NOVO: Lançamento
+          { hash: "#lancamento", label: "Lançamento", icon: <FaPenSquare /> },
+
           { hash: "#resumo", label: "Resumo", icon: <FaChartBar /> },
           { hash: "#acompanhamento", label: "Acompanhamento", icon: <FaSearch /> },
           { hash: "#tratativas", label: "Tratativas", icon: <FaTratativasIcon /> },
@@ -161,8 +164,8 @@ export default function Sidebar() {
     }`;
   };
 
-  // ✅ agora Admin OU Gestor vê
-  const showDesempenhoDiesel = isAdmin || isGestor;
+  // ✅ SOMENTE Gestor vê (Admin NÃO vê)
+  const showDesempenhoDiesel = isGestor;
 
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
 
@@ -194,7 +197,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ Desempenho Diesel (Admin + Gestor) */}
+        {/* ✅ Desempenho Diesel (SOMENTE Gestor) */}
         {showDesempenhoDiesel && (
           <>
             <button
