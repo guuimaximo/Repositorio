@@ -26,7 +26,7 @@ import {
   FaSearch,
   FaClipboardCheck as FaTratativasIcon,
   FaRobot,
-  FaChartPie, // ✅ ícone do Resumo Avarias
+  FaChartPie,
 } from "react-icons/fa";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
@@ -50,7 +50,7 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
 
-    // ✅ Gestor vê Desempenho Diesel
+    // ✅ Gestor também vê Desempenho Diesel
     "/desempenho-diesel",
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
@@ -96,15 +96,13 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ Desempenho Diesel (SOMENTE Gestor)
+      // ✅ Desempenho Diesel (Admin + Gestor)
       desempenhoDiesel: {
         base: "/desempenho-diesel",
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
-          // ✅ NOVO: Lançamento
           { hash: "#lancamento", label: "Lançamento", icon: <FaPenSquare /> },
-
           { hash: "#resumo", label: "Resumo", icon: <FaChartBar /> },
           { hash: "#acompanhamento", label: "Acompanhamento", icon: <FaSearch /> },
           { hash: "#tratativas", label: "Tratativas", icon: <FaTratativasIcon /> },
@@ -156,7 +154,7 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // ✅ hash-active (porque NavLink não marca ativo por hash)
+  // hash-active (NavLink não marca ativo por hash)
   const subHashClass = (hash) => {
     const active = location.pathname === links.desempenhoDiesel.base && location.hash === hash;
     return `flex items-center gap-3 px-3 py-2 rounded-lg mb-1 ml-4 transition-all duration-200 text-sm ${
@@ -164,18 +162,20 @@ export default function Sidebar() {
     }`;
   };
 
-  // ✅ SOMENTE Gestor vê (Admin NÃO vê)
-  const showDesempenhoDiesel = isGestor;
+  // ✅ Admin OU Gestor vê Desempenho Diesel
+  const showDesempenhoDiesel = isAdmin || isGestor;
 
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
 
-  // ✅ Avarias: Resumo só Admin/Gestor (resto segue permissão)
+  // ✅ Avarias: Resumo só Admin/Gestor; resto segue permissão
   const showAvarias = links.avarias.some((l) => {
     if (l.path === "/avarias-resumo") return isAdmin || isGestor;
     return canSee(user, l.path);
   });
 
   const showSOS = links.sos.some((l) => canSee(user, l.path));
+
+  // ✅ Configurações: SOMENTE Admin (Gestor não mexe)
   const showConfig = isAdmin;
 
   return (
@@ -197,7 +197,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ Desempenho Diesel (SOMENTE Gestor) */}
+        {/* ✅ Desempenho Diesel (Admin + Gestor) */}
         {showDesempenhoDiesel && (
           <>
             <button
@@ -307,6 +307,7 @@ export default function Sidebar() {
           </>
         )}
 
+        {/* ✅ Configurações (somente Admin) */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
