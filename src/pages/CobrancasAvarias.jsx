@@ -26,7 +26,7 @@ export default function CobrancasAvarias() {
     canceladas: 0,
     totalAprovadoValue: 0,
     pendentesTotalValue: 0,
-    cobradasTotalValue: 0, // agora soma valor_cobrado
+    cobradasTotalValue: 0, // soma valor_cobrado
     canceladasTotalValue: 0,
   });
 
@@ -91,7 +91,10 @@ export default function CobrancasAvarias() {
           currency: "BRL",
         });
 
-  // Helpers NOVOS (campos futuros)
+  // =========================
+  // AJUSTE: helpers para Data Cobrança e Origem
+  // (mantém fallback para campos antigos)
+  // =========================
   const pickDataAvariaRaw = (c) => c.dataAvaria || c.data_avaria || c.created_at || null;
   const pickDataCobrancaRaw = (c) => c.data_cobranca || c.cobrado_em || null; // fallback
   const pickOrigemCobranca = (c) => c.origem || c.origem_cobranca || null; // fallback
@@ -99,6 +102,7 @@ export default function CobrancasAvarias() {
   const carregarCobrancas = async () => {
     let query = supabase
       .from("avarias")
+      // AJUSTE: garantir que venha data_cobranca e origem (select * já traz, mas mantive assim)
       .select("*")
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
@@ -172,7 +176,7 @@ export default function CobrancasAvarias() {
       // AJUSTE PRINCIPAL: Cobradas agora soma valor_cobrado
       cobradasTotalValue: cobradas.reduce((sum, a) => sum + (a.valor_cobrado || 0), 0),
 
-      // Canceladas (mantém orçado - se quiser mudar para valor_cobrado, é só trocar aqui)
+      // Canceladas (mantém orçado)
       canceladasTotalValue: canceladas.reduce((sum, a) => sum + (a.valor_total_orcamento || 0), 0),
     });
   };
@@ -198,6 +202,10 @@ export default function CobrancasAvarias() {
     setSelectedAvaria(null);
   };
 
+  // =========================
+  // AJUSTE: após salvar, recarregar listagem/resumo
+  // (mantém sua lógica)
+  // =========================
   const handleAtualizarStatusCobranca = async (avariaId, novoStatus, updateData) => {
     const { error } = await supabase.from("avarias").update(updateData).eq("id", avariaId);
 
@@ -254,6 +262,9 @@ export default function CobrancasAvarias() {
     return d.toLocaleDateString("pt-BR");
   };
 
+  // =========================
+  // AJUSTE: Data Cobrança
+  // =========================
   const formatarDataCobranca = (c) => {
     const dataRaw = pickDataCobrancaRaw(c);
     if (!dataRaw) return "-";
@@ -277,6 +288,9 @@ export default function CobrancasAvarias() {
     return diffDias;
   };
 
+  // =========================
+  // AJUSTE: sort inclui data_cobranca e origem
+  // =========================
   const getSortValue = (item, key) => {
     switch (key) {
       case "numero_da_avaria":
@@ -359,9 +373,7 @@ export default function CobrancasAvarias() {
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4 text-gray-700">
-        Central de Cobranças de Avarias
-      </h1>
+      <h1 className="text-2xl font-semibold mb-4 text-gray-700">Central de Cobranças de Avarias</h1>
 
       {/* Filtros */}
       <div className="bg-white p-4 shadow rounded-lg mb-6 flex flex-wrap gap-3 items-center">
@@ -439,7 +451,7 @@ export default function CobrancasAvarias() {
         <CardResumo
           titulo="Cobradas"
           valor={resumo.cobradas}
-          subValor={formatCurrency(resumo.cobradasTotalValue)} // agora é valor_cobrado
+          subValor={formatCurrency(resumo.cobradasTotalValue)}
           cor="bg-green-100 text-green-700"
         />
         <CardResumo
