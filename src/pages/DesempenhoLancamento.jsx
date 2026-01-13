@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
+import CampoPrefixo from "../components/CampoPrefixo"; // ✅ ADICIONADO
 import { useAuth } from "../context/AuthContext";
 
 const MOTIVOS = [
@@ -70,9 +71,8 @@ async function uploadManyToStorage({ files, bucket, folder }) {
 export default function DesempenhoLancamento() {
   const { user } = useAuth ? useAuth() : { user: null };
 
-  // refs (linhas/prefixos)
+  // refs (linhas)
   const [linhasOpt, setLinhasOpt] = useState([]);
-  const [prefixosOpt, setPrefixosOpt] = useState([]);
   const [refsLoading, setRefsLoading] = useState(false);
 
   // Dados do lançamento
@@ -80,7 +80,7 @@ export default function DesempenhoLancamento() {
 
   const [prefixo, setPrefixo] = useState("");
   const [linha, setLinha] = useState("");
-  const [cluster, setCluster] = useState(""); // automático do prefixo
+  const [cluster, setCluster] = useState(""); // ✅ automático via CampoPrefixo
 
   // Lançamento (fila)
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
@@ -95,12 +95,11 @@ export default function DesempenhoLancamento() {
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
-  // ========= Carregar LINHAS e PREFIXOS =========
+  // ========= Carregar LINHAS =========
   useEffect(() => {
     (async () => {
       setRefsLoading(true);
       try {
-        // LINHAS: id, codigo, descricao
         const { data: linhasData, error: eLinhas } = await supabase
           .from("linhas")
           .select("id, codigo, descricao")
@@ -108,15 +107,6 @@ export default function DesempenhoLancamento() {
 
         if (eLinhas) throw eLinhas;
         setLinhasOpt(linhasData || []);
-
-        // PREFIXOS: coluna do prefixo é "codigo" + coluna "cluster"
-        const { data: prefData, error: ePref } = await supabase
-          .from("prefixos")
-          .select("id, codigo, descricao, cluster")
-          .order("codigo", { ascending: true });
-
-        if (ePref) throw ePref;
-        setPrefixosOpt(prefData || []);
       } catch (e) {
         console.error(e);
       } finally {
@@ -124,28 +114,6 @@ export default function DesempenhoLancamento() {
       }
     })();
   }, []);
-
-  // ✅ agora o valor do prefixo vem APENAS de "codigo"
-  function getPrefixValue(row) {
-    return String(row?.codigo || "").trim();
-  }
-
-  function getPrefixLabel(row) {
-    const p = getPrefixValue(row);
-    const d = String(row?.descricao || "").trim();
-    return d ? `${p} — ${d}` : p;
-  }
-
-  function onChangePrefixo(v) {
-    setPrefixo(v);
-
-    // cluster automático pelo prefixo selecionado
-    const found = (prefixosOpt || []).find(
-      (r) => getPrefixValue(r) === String(v || "").trim()
-    );
-    const cl = String(found?.cluster || "").trim();
-    setCluster(cl);
-  }
 
   function addFiles(e) {
     const list = filesToList(e.target.files);
@@ -319,31 +287,15 @@ export default function DesempenhoLancamento() {
             <CampoMotorista value={motorista} onChange={setMotorista} label="Motorista" />
           </div>
 
-          {/* Prefixo (select do banco) */}
+          {/* ✅ Prefixo via componente */}
           <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Prefixo</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 bg-white"
+            <CampoPrefixo
               value={prefixo}
-              onChange={(e) => onChangePrefixo(e.target.value)}
-              disabled={refsLoading}
-            >
-              <option value="">
-                {refsLoading ? "Carregando..." : "Selecione o prefixo"}
-              </option>
-              {prefixosOpt.map((p) => {
-                const val = getPrefixValue(p);
-                if (!val) return null;
-                return (
-                  <option key={p.id || val} value={val}>
-                    {getPrefixLabel(p)}
-                  </option>
-                );
-              })}
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              O cluster virá automaticamente do prefixo.
-            </p>
+              onChange={setPrefixo}
+              onChangeCluster={setCluster}
+              disabled={saving}
+              label="Prefixo"
+            />
           </div>
 
           {/* Linha (select do banco) */}
@@ -353,7 +305,7 @@ export default function DesempenhoLancamento() {
               className="w-full rounded-md border px-3 py-2 bg-white"
               value={linha}
               onChange={(e) => setLinha(e.target.value)}
-              disabled={refsLoading}
+              disabled={refsLoading || saving}
             >
               <option value="">
                 {refsLoading ? "Carregando..." : "Selecione a linha"}
@@ -395,6 +347,7 @@ export default function DesempenhoLancamento() {
               placeholder="Ex.: 2.41"
               value={kmlInicial}
               onChange={(e) => setKmlInicial(e.target.value)}
+              disabled={saving}
             />
           </div>
         </div>
@@ -412,6 +365,7 @@ export default function DesempenhoLancamento() {
                 value={m}
                 checked={motivo === m}
                 onChange={() => setMotivo(m)}
+                disabled={saving}
               />
               {m}
             </label>
@@ -424,6 +378,7 @@ export default function DesempenhoLancamento() {
             placeholder="Descreva o motivo..."
             value={motivoOutro}
             onChange={(e) => setMotivoOutro(e.target.value)}
+            disabled={saving}
           />
         )}
       </div>
@@ -440,6 +395,7 @@ export default function DesempenhoLancamento() {
           accept="image/*,application/pdf"
           className="w-full rounded-md border px-3 py-2"
           onChange={addFiles}
+          disabled={saving}
         />
 
         {(evidAcomp || []).length > 0 && (
@@ -459,6 +415,7 @@ export default function DesempenhoLancamento() {
                   type="button"
                   className="text-xs text-red-600 hover:underline"
                   onClick={() => removeFile(idx)}
+                  disabled={saving}
                 >
                   remover
                 </button>
@@ -490,4 +447,3 @@ export default function DesempenhoLancamento() {
     </div>
   );
 }
-
