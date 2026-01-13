@@ -1,8 +1,7 @@
 // src/pages/DesempenhoLancamento.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
-import CampoPrefixo from "../components/CampoPrefixo";
 import { useAuth } from "../context/AuthContext";
 
 const MOTIVOS = [
@@ -11,8 +10,6 @@ const MOTIVOS = [
   "Comparativo com cluster",
   "Outro",
 ];
-
-const DIAS_OPCOES = [10]; // fluxo novo: monitoramento é 10 dias (inicia no 1º acompanhamento do instrutor)
 
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -73,18 +70,24 @@ async function uploadManyToStorage({ files, bucket, folder }) {
 export default function DesempenhoLancamento() {
   const { user } = useAuth ? useAuth() : { user: null };
 
+  // refs (linhas/prefixos)
+  const [linhasOpt, setLinhasOpt] = useState([]);
+  const [prefixosOpt, setPrefixosOpt] = useState([]);
+  const [refsLoading, setRefsLoading] = useState(false);
+
   // Dados do lançamento
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
+
   const [prefixo, setPrefixo] = useState("");
   const [linha, setLinha] = useState("");
-  const [cluster, setCluster] = useState("");
+  const [cluster, setCluster] = useState(""); // agora automático pelo prefixo
 
   // Lançamento (fila)
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [motivoOutro, setMotivoOutro] = useState("");
-  const [dias] = useState(10); // fixo
+  const dias = 10; // fixo no fluxo novo
   const [kmlInicial, setKmlInicial] = useState("");
-  const [evidAcomp, setEvidAcomp] = useState([]); // evidências do lançamento (obrigatório)
+  const [evidAcomp, setEvidAcomp] = useState([]);
 
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -92,16 +95,64 @@ export default function DesempenhoLancamento() {
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
-  function addFiles(setter) {
-    return (e) => {
-      const list = filesToList(e.target.files);
-      setter((prev) => dedupeFiles([...(prev || []), ...list]));
-      e.target.value = "";
-    };
+  // ========= Carregar LINHAS e PREFIXOS =========
+  useEffect(() => {
+    (async () => {
+      setRefsLoading(true);
+      try {
+        // LINHAS: id, codigo, descricao
+        const { data: linhasData, error: eLinhas } = await supabase
+          .from("linhas")
+          .select("id, codigo, descricao")
+          .order("codigo", { ascending: true });
+
+        if (eLinhas) throw eLinhas;
+        setLinhasOpt(linhasData || []);
+
+        // PREFIXOS: ajuste os campos conforme sua tabela
+        // Aqui assumo que existe uma coluna "prefixo" OU "codigo", e a nova coluna "cluster"
+        const { data: prefData, error: ePref } = await supabase
+          .from("prefixos")
+          .select("id, prefixo, codigo, descricao, cluster")
+          .order("prefixo", { ascending: true });
+
+        if (ePref) throw ePref;
+        setPrefixosOpt(prefData || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setRefsLoading(false);
+      }
+    })();
+  }, []);
+
+  function getPrefixValue(row) {
+    return String(row?.prefixo || row?.codigo || "").trim();
   }
 
-  function removeFile(setter, idx) {
-    setter((prev) => prev.filter((_, i) => i !== idx));
+  function getPrefixLabel(row) {
+    const p = getPrefixValue(row);
+    const d = String(row?.descricao || "").trim();
+    return d ? `${p} — ${d}` : p;
+  }
+
+  function onChangePrefixo(v) {
+    setPrefixo(v);
+
+    // cluster automático pelo prefixo selecionado
+    const found = (prefixosOpt || []).find((r) => getPrefixValue(r) === String(v || "").trim());
+    const cl = String(found?.cluster || "").trim();
+    setCluster(cl);
+  }
+
+  function addFiles(e) {
+    const list = filesToList(e.target.files);
+    setEvidAcomp((prev) => dedupeFiles([...(prev || []), ...list]));
+    e.target.value = "";
+  }
+
+  function removeFile(idx) {
+    setEvidAcomp((prev) => prev.filter((_, i) => i !== idx));
   }
 
   const pronto = useMemo(() => {
@@ -141,12 +192,11 @@ export default function DesempenhoLancamento() {
     setOkMsg("");
 
     try {
-      // ✅ lançador (quem está logado agora)
       const lancadorLogin = user?.login || user?.email || null;
       const lancadorNome = user?.nome || null;
-      const lancadorIdNum = user?.id ?? null; // pode ser numérico
+      const lancadorIdNum = user?.id ?? null;
 
-      // 1) Upload evidências do lançamento (bucket diesel)
+      // Upload evidências do lançamento
       const folder = `diesel/acompanhamentos/${motorista.chapa || "sem_chapa"}/lancamento_${Date.now()}`;
       const uploaded = await uploadManyToStorage({
         files: evidAcomp,
@@ -156,8 +206,7 @@ export default function DesempenhoLancamento() {
 
       const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
 
-      // 2) INSERT acompanhamento como FILA (A_SER_ACOMPANHADO)
-      // - dt_inicio_monitoramento e dt_fim_planejado ficam NULL
+      // INSERT: fila semanal -> A_SER_ACOMPANHADO
       const payloadAcomp = {
         motorista_chapa: String(motorista?.chapa || "").trim(),
         motorista_nome: String(motorista?.nome || "").trim() || null,
@@ -165,7 +214,7 @@ export default function DesempenhoLancamento() {
         status: "A_SER_ACOMPANHADO",
         dias_monitoramento: Number(dias),
 
-        // fila (lançamento)
+        // fila
         dt_inicio: new Date().toISOString().slice(0, 10),
         dt_inicio_monitoramento: null,
         dt_fim_planejado: null,
@@ -177,7 +226,6 @@ export default function DesempenhoLancamento() {
         observacao_inicial: null,
         evidencias_urls: evidenciasUrls,
 
-        // instrutor só no checkpoint
         instrutor_login: null,
         instrutor_nome: null,
         instrutor_id: null,
@@ -188,7 +236,6 @@ export default function DesempenhoLancamento() {
           linha: String(linha || "").trim(),
           cluster: String(cluster || "").trim(),
 
-          // rastreio do lançador
           lancado_por_login: lancadorLogin,
           lancado_por_nome: lancadorNome,
           lancado_por_usuario_id: lancadorIdNum,
@@ -203,7 +250,7 @@ export default function DesempenhoLancamento() {
 
       if (eA) throw eA;
 
-      // 3) Evento LANCAMENTO
+      // Evento LANCAMENTO
       const payloadEvento = {
         acompanhamento_id: acomp.id,
         tipo: "LANCAMENTO",
@@ -230,7 +277,6 @@ export default function DesempenhoLancamento() {
 
       if (eE) throw eE;
 
-      // ✅ NÃO redireciona. Só confirma e limpa (opcional).
       setOkMsg("Lançamento realizado com sucesso. O caso está em 'A ser acompanhado'.");
       limpar();
     } catch (err) {
@@ -246,8 +292,8 @@ export default function DesempenhoLancamento() {
       <div className="mb-4">
         <h1 className="text-2xl font-bold">Desempenho Diesel — Lançamento</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Esta tela apenas lança o acompanhamento (fila da semana). O monitoramento de 10 dias começa no
-          primeiro acompanhamento do instrutor.
+          Aqui você apenas lança a fila da semana. O monitoramento de 10 dias começa no primeiro
+          acompanhamento do instrutor.
         </p>
       </div>
 
@@ -271,42 +317,61 @@ export default function DesempenhoLancamento() {
             <CampoMotorista value={motorista} onChange={setMotorista} label="Motorista" />
           </div>
 
+          {/* Prefixo (select do banco) */}
           <div className="md:col-span-2">
-            <CampoPrefixo value={prefixo} onChange={setPrefixo} label="Prefixo" />
+            <label className="block text-sm text-gray-600 mb-1">Prefixo</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 bg-white"
+              value={prefixo}
+              onChange={(e) => onChangePrefixo(e.target.value)}
+              disabled={refsLoading}
+            >
+              <option value="">{refsLoading ? "Carregando..." : "Selecione o prefixo"}</option>
+              {prefixosOpt.map((p) => {
+                const val = getPrefixValue(p);
+                if (!val) return null;
+                return (
+                  <option key={p.id || val} value={val}>
+                    {getPrefixLabel(p)}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">O cluster virá automaticamente do prefixo.</p>
           </div>
 
+          {/* Linha (select do banco) */}
           <div>
             <label className="block text-sm text-gray-600 mb-1">Linha</label>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              placeholder="Ex.: 07TR"
+            <select
+              className="w-full rounded-md border px-3 py-2 bg-white"
               value={linha}
               onChange={(e) => setLinha(e.target.value)}
-            />
+              disabled={refsLoading}
+            >
+              <option value="">{refsLoading ? "Carregando..." : "Selecione a linha"}</option>
+              {linhasOpt.map((l) => (
+                <option key={l.id || l.codigo} value={String(l.codigo || "").trim()}>
+                  {String(l.codigo || "").trim()} — {String(l.descricao || "").trim()}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* Cluster automático */}
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Cluster</label>
+            <label className="block text-sm text-gray-600 mb-1">Cluster (automático)</label>
             <input
-              className="w-full rounded-md border px-3 py-2"
-              placeholder="Ex.: C10"
+              className="w-full rounded-md border px-3 py-2 bg-gray-50"
               value={cluster}
-              onChange={(e) => setCluster(e.target.value)}
+              readOnly
+              placeholder="Selecione um prefixo"
             />
           </div>
 
           <div className="md:col-span-2">
             <label className="block text-sm text-gray-600 mb-1">Tempo de monitoramento</label>
-            <select className="w-full rounded-md border px-3 py-2 bg-white" value={dias} disabled>
-              {DIAS_OPCOES.map((d) => (
-                <option key={d} value={d}>
-                  {d} dias
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              O prazo conta a partir do primeiro acompanhamento do instrutor.
-            </p>
+            <input className="w-full rounded-md border px-3 py-2 bg-gray-50" value="10 dias" readOnly />
           </div>
 
           <div>
@@ -323,7 +388,6 @@ export default function DesempenhoLancamento() {
         </div>
       </div>
 
-      {/* Motivo */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold mb-3">Motivo do lançamento</h2>
 
@@ -352,7 +416,6 @@ export default function DesempenhoLancamento() {
         )}
       </div>
 
-      {/* Evidências */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold mb-3">Evidências do lançamento</h2>
 
@@ -364,11 +427,7 @@ export default function DesempenhoLancamento() {
           multiple
           accept="image/*,application/pdf"
           className="w-full rounded-md border px-3 py-2"
-          onChange={(e) => {
-            const list = filesToList(e.target.files);
-            setEvidAcomp((prev) => dedupeFiles([...(prev || []), ...list]));
-            e.target.value = "";
-          }}
+          onChange={addFiles}
         />
 
         {(evidAcomp || []).length > 0 && (
@@ -387,7 +446,7 @@ export default function DesempenhoLancamento() {
                 <button
                   type="button"
                   className="text-xs text-red-600 hover:underline"
-                  onClick={() => removeFile(setEvidAcomp, idx)}
+                  onClick={() => removeFile(idx)}
                 >
                   remover
                 </button>
@@ -397,7 +456,6 @@ export default function DesempenhoLancamento() {
         )}
       </div>
 
-      {/* AÇÕES */}
       <div className="flex items-center justify-end gap-3">
         <button
           type="button"
@@ -420,3 +478,4 @@ export default function DesempenhoLancamento() {
     </div>
   );
 }
+
