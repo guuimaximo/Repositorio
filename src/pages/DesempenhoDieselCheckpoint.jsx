@@ -145,6 +145,26 @@ function OkNokToggle({ value, onChange }) {
   );
 }
 
+/* ===========================
+   Helpers para resumo (horas/km)
+=========================== */
+
+function parseTimeToMinutes(hhmm) {
+  if (!hhmm || typeof hhmm !== "string") return null;
+  const [h, m] = hhmm.split(":");
+  const hh = Number(h);
+  const mm = Number(m);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return hh * 60 + mm;
+}
+
+function minutesToHoursStr(mins) {
+  if (!Number.isFinite(mins) || mins < 0) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
 export default function DesempenhoDieselCheckpoint() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -160,8 +180,28 @@ export default function DesempenhoDieselCheckpoint() {
   const [itensChecklist, setItensChecklist] = useState([]);
   const [respostasChecklist, setRespostasChecklist] = useState({});
 
+  // Observações e evidências (já existiam)
   const [observacoes, setObservacoes] = useState("");
   const [evidencias, setEvidencias] = useState([]);
+
+  // ✅ NOVO: Detalhes do acompanhamento (data/hora/km)
+  const [detalhes, setDetalhes] = useState({
+    data_acompanhamento: "",
+    hora_inicial: "",
+    hora_final: "",
+    km_inicial: "",
+    km_final: "",
+  });
+
+  // (mantém seu cálculo de período KM/L durante o teste)
+  const [periodo, setPeriodo] = useState({
+    km_total: null,
+    litros_total: null,
+    kml_periodo: null,
+    dias: 0,
+    data_inicio: null,
+    data_fim: null,
+  });
 
   useEffect(() => {
     (async () => {
@@ -175,12 +215,45 @@ export default function DesempenhoDieselCheckpoint() {
         const { data, error } = await supabase
           .from("diesel_acompanhamentos")
           .select(
-            "id, created_at, motorista_chapa, motorista_nome, motivo, status, dias_monitoramento, dt_inicio, dt_inicio_monitoramento, dt_fim_planejado, instrutor_nome, instrutor_login, metadata, kml_meta"
+            [
+              "id",
+              "created_at",
+              "motorista_chapa",
+              "motorista_nome",
+              "motivo",
+              "status",
+              "dias_monitoramento",
+              "dt_inicio",
+              "dt_inicio_monitoramento",
+              "dt_fim_planejado",
+              "dt_fim_real",
+              "instrutor_nome",
+              "instrutor_login",
+              "metadata",
+              "kml_meta",
+
+              // ✅ NOVO: campos do detalhe
+              "data_acompanhamento",
+              "hora_inicial",
+              "hora_final",
+              "km_inicial",
+              "km_final",
+            ].join(",")
           )
           .eq("id", id)
           .single();
+
         if (error) throw error;
         setAcomp(data || null);
+
+        // ✅ NOVO: carregar detalhes do acompanhamento já salvos
+        setDetalhes({
+          data_acompanhamento: data?.data_acompanhamento || "",
+          hora_inicial: data?.hora_inicial || "",
+          hora_final: data?.hora_final || "",
+          km_inicial: data?.km_inicial != null ? String(data.km_inicial) : "",
+          km_final: data?.km_final != null ? String(data.km_final) : "",
+        });
 
         const itens = await supabase
           .from("diesel_checklist_itens")
@@ -200,6 +273,74 @@ export default function DesempenhoDieselCheckpoint() {
       }
     })();
   }, [id]);
+
+  // KM/L durante o teste (período)
+  useEffect(() => {
+    if (!acomp?.motorista_chapa) return;
+
+    (async () => {
+      try {
+        const inicioISO =
+          acomp.dt_inicio_monitoramento ||
+          acomp.dt_inicio ||
+          (acomp.created_at ? String(acomp.created_at).slice(0, 10) : null) ||
+          null;
+
+        const fimISO = acomp.dt_fim_real || toISODate();
+        if (!inicioISO || !fimISO) {
+          setPeriodo({
+            km_total: null,
+            litros_total: null,
+            kml_periodo: null,
+            dias: 0,
+            data_inicio: inicioISO,
+            data_fim: fimISO,
+          });
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("diesel_metricas_motorista_dia")
+          .select("data, km, litros")
+          .eq("chapa", String(acomp.motorista_chapa))
+          .gte("data", inicioISO)
+          .lte("data", fimISO)
+          .order("data", { ascending: true });
+
+        if (error) throw error;
+
+        const rows = data || [];
+        const kmTotal = rows.reduce((acc, r) => acc + (Number(r.km) || 0), 0);
+        const litrosTotal = rows.reduce((acc, r) => acc + (Number(r.litros) || 0), 0);
+        const kmlPeriodo = litrosTotal > 0 ? kmTotal / litrosTotal : null;
+
+        setPeriodo({
+          km_total: kmTotal,
+          litros_total: litrosTotal,
+          kml_periodo: kmlPeriodo,
+          dias: rows.length,
+          data_inicio: inicioISO,
+          data_fim: fimISO,
+        });
+      } catch (e) {
+        console.error("Erro ao calcular KM/L do período:", e);
+        setPeriodo({
+          km_total: null,
+          litros_total: null,
+          kml_periodo: null,
+          dias: 0,
+          data_inicio: null,
+          data_fim: null,
+        });
+      }
+    })();
+  }, [
+    acomp?.motorista_chapa,
+    acomp?.dt_inicio_monitoramento,
+    acomp?.dt_inicio,
+    acomp?.dt_fim_real,
+    acomp?.created_at,
+  ]);
 
   function addFiles(e) {
     const list = filesToList(e.target.files);
@@ -235,8 +376,29 @@ export default function DesempenhoDieselCheckpoint() {
     return true;
   }, [acomp?.id, observacoes, evidencias, itensChecklist, faltandoResponder]);
 
-  // ✅ CORREÇÃO CRÍTICA: este useMemo precisa ficar ANTES de qualquer return condicional
   const itensPorGrupo = useMemo(() => groupItems(itensChecklist), [itensChecklist]);
+
+  // ✅ NOVO: resumo automático do acompanhamento (horas/km)
+  const resumoDetalhes = useMemo(() => {
+    const iniMin = parseTimeToMinutes(detalhes.hora_inicial);
+    const fimMin = parseTimeToMinutes(detalhes.hora_final);
+
+    let minutos = null;
+    if (iniMin != null && fimMin != null) {
+      // se virou o dia (ex.: 23:00 -> 01:00), soma 24h
+      minutos = fimMin >= iniMin ? fimMin - iniMin : fimMin + 24 * 60 - iniMin;
+    }
+
+    const kmIni = detalhes.km_inicial !== "" ? Number(detalhes.km_inicial) : null;
+    const kmFim = detalhes.km_final !== "" ? Number(detalhes.km_final) : null;
+    const kmAcomp = kmIni != null && kmFim != null ? kmFim - kmIni : null;
+
+    return {
+      minutos,
+      horasStr: minutos != null ? minutesToHoursStr(minutos) : "—",
+      kmAcomp: kmAcomp != null && Number.isFinite(kmAcomp) ? kmAcomp : null,
+    };
+  }, [detalhes.hora_inicial, detalhes.hora_final, detalhes.km_inicial, detalhes.km_final]);
 
   async function salvarCheckpoint() {
     if (!pronto || saving) return;
@@ -279,6 +441,18 @@ export default function DesempenhoDieselCheckpoint() {
           checklist_oknok: true,
           checklist_resumo: checklistResumo,
           checklist_faltando: faltandoResponder,
+
+          // ✅ NOVO: snapshot do detalhe + resumo
+          detalhes_acompanhamento: {
+            data_acompanhamento: detalhes.data_acompanhamento || null,
+            hora_inicial: detalhes.hora_inicial || null,
+            hora_final: detalhes.hora_final || null,
+            km_inicial: detalhes.km_inicial !== "" ? Number(detalhes.km_inicial) : null,
+            km_final: detalhes.km_final !== "" ? Number(detalhes.km_final) : null,
+            horas_acompanhadas_min: resumoDetalhes.minutos,
+            km_acompanhado: resumoDetalhes.kmAcomp,
+            kml_durante_teste: periodo.kml_periodo,
+          },
         },
       };
 
@@ -301,18 +475,25 @@ export default function DesempenhoDieselCheckpoint() {
         resumo: checklistResumo,
       };
 
-      const { error: eChk } = await supabase
-        .from("diesel_checklist_respostas")
-        .insert(payloadChecklist);
+      const { error: eChk } = await supabase.from("diesel_checklist_respostas").insert(payloadChecklist);
       if (eChk) throw eChk;
 
+      // ✅ NOVO: persistir os campos do detalhe no acompanhamento
       const payloadUpdate = {
         status: "EM_ANALISE",
         instrutor_login: instrutorLogin,
         instrutor_nome: instrutorNome,
         instrutor_id: instrutorId,
+
         dt_inicio_monitoramento: dtInicioMon,
         dt_fim_planejado: dtFimPlan,
+
+        data_acompanhamento: detalhes.data_acompanhamento || null,
+        hora_inicial: detalhes.hora_inicial || null,
+        hora_final: detalhes.hora_final || null,
+        km_inicial: detalhes.km_inicial !== "" ? Number(detalhes.km_inicial) : null,
+        km_final: detalhes.km_final !== "" ? Number(detalhes.km_final) : null,
+
         metadata: {
           ...(acomp.metadata || {}),
           ultimo_checklist_resumo: checklistResumo,
@@ -320,10 +501,7 @@ export default function DesempenhoDieselCheckpoint() {
         },
       };
 
-      const { error: eUp } = await supabase
-        .from("diesel_acompanhamentos")
-        .update(payloadUpdate)
-        .eq("id", acomp.id);
+      const { error: eUp } = await supabase.from("diesel_acompanhamentos").update(payloadUpdate).eq("id", acomp.id);
       if (eUp) throw eUp;
 
       setOkMsg(isPrimeiro ? "Checkpoint salvo. Monitoramento iniciado." : "Checkpoint salvo.");
@@ -384,17 +562,14 @@ export default function DesempenhoDieselCheckpoint() {
       </div>
 
       {errMsg && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {errMsg}
-        </div>
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errMsg}</div>
       )}
 
       {okMsg && (
-        <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-          {okMsg}
-        </div>
+        <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{okMsg}</div>
       )}
 
+      {/* Resumo do caso */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -440,6 +615,7 @@ export default function DesempenhoDieselCheckpoint() {
         </div>
       </div>
 
+      {/* Checklist (OK/NOK) */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">Checklist (OK/NOK)</h2>
@@ -494,6 +670,102 @@ export default function DesempenhoDieselCheckpoint() {
         )}
       </div>
 
+      {/* ✅ NOVO: Detalhes do acompanhamento (ANTES das Observações) */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <h2 className="text-lg font-semibold text-gray-800">Detalhes do acompanhamento</h2>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <div className="text-xs text-gray-500 mb-1">Data do acompanhamento</div>
+            <input
+              type="date"
+              className="w-full rounded-md border px-3 py-2"
+              value={detalhes.data_acompanhamento}
+              onChange={(e) => setDetalhes((p) => ({ ...p, data_acompanhamento: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-500 mb-1">Hora inicial</div>
+            <input
+              type="time"
+              className="w-full rounded-md border px-3 py-2"
+              value={detalhes.hora_inicial}
+              onChange={(e) => setDetalhes((p) => ({ ...p, hora_inicial: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-500 mb-1">Hora final</div>
+            <input
+              type="time"
+              className="w-full rounded-md border px-3 py-2"
+              value={detalhes.hora_final}
+              onChange={(e) => setDetalhes((p) => ({ ...p, hora_final: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs text-gray-500 mb-1">KM inicial</div>
+            <input
+              type="number"
+              step="0.01"
+              className="w-full rounded-md border px-3 py-2"
+              value={detalhes.km_inicial}
+              onChange={(e) => setDetalhes((p) => ({ ...p, km_inicial: e.target.value }))}
+              placeholder="Ex.: 12345,67"
+            />
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-500 mb-1">KM final</div>
+            <input
+              type="number"
+              step="0.01"
+              className="w-full rounded-md border px-3 py-2"
+              value={detalhes.km_final}
+              onChange={(e) => setDetalhes((p) => ({ ...p, km_final: e.target.value }))}
+              placeholder="Ex.: 12480,10"
+            />
+          </div>
+        </div>
+
+        {/* Resumo automático */}
+        <div className="mt-4 border rounded-lg p-3 bg-gray-50">
+          <div className="text-sm font-semibold text-gray-800 mb-2">Resumo</div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="border rounded-md p-3 bg-white">
+              <div className="text-xs text-gray-500">Horas acompanhadas</div>
+              <div className="text-lg font-bold text-gray-800">{resumoDetalhes.horasStr}</div>
+            </div>
+
+            <div className="border rounded-md p-3 bg-white">
+              <div className="text-xs text-gray-500">KM acompanhado</div>
+              <div className="text-lg font-bold text-gray-800">
+                {resumoDetalhes.kmAcomp != null ? resumoDetalhes.kmAcomp.toFixed(2) : "—"}
+              </div>
+            </div>
+
+            <div className="border rounded-md p-3 bg-white">
+              <div className="text-xs text-gray-500">KM/L durante o teste</div>
+              <div className="text-lg font-bold text-gray-800">
+                {periodo.kml_periodo != null ? Number(periodo.kml_periodo).toFixed(2) : "—"}
+              </div>
+              {periodo.data_inicio && periodo.data_fim ? (
+                <div className="text-xs text-gray-500 mt-1">
+                  Período: <span className="font-semibold">{periodo.data_inicio}</span> até{" "}
+                  <span className="font-semibold">{periodo.data_fim}</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Observações */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold text-gray-800 mb-2">Observações (obrigatório)</h2>
         <textarea
@@ -504,6 +776,7 @@ export default function DesempenhoDieselCheckpoint() {
         />
       </div>
 
+      {/* Evidências */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold text-gray-800 mb-2">Evidências (obrigatório)</h2>
         <input
@@ -516,11 +789,19 @@ export default function DesempenhoDieselCheckpoint() {
         <EvidenceList list={evidencias} onRemove={removeFile} />
       </div>
 
+      {/* Ações */}
       <div className="flex items-center justify-end gap-3">
         <button
           className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
           onClick={() => {
             setRespostasChecklist({});
+            setDetalhes({
+              data_acompanhamento: "",
+              hora_inicial: "",
+              hora_final: "",
+              km_inicial: "",
+              km_final: "",
+            });
             setObservacoes("");
             setEvidencias([]);
             setErrMsg("");
