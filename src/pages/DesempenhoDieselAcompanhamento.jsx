@@ -78,23 +78,61 @@ function MetricBadge({ kmlAtual, kmlMeta }) {
   );
 }
 
+/* ===========================
+   ✅ AJUSTE (APENAS ISSO):
+   Evidências:
+   - PDF: aparece pequeno (tile) e ao clicar abre o arquivo
+   - Imagem: aparece miniatura pequena e ao clicar abre o arquivo
+=========================== */
+function isImage(url) {
+  return /\.(jpg|jpeg|png|webp)$/i.test(String(url || ""));
+}
+function isPdf(url) {
+  return /\.pdf$/i.test(String(url || ""));
+}
+function getFileName(url) {
+  try {
+    return decodeURIComponent(String(url || "").split("/").pop() || "");
+  } catch {
+    return String(url || "").split("/").pop() || "";
+  }
+}
+
 function EvidenceList({ urls }) {
-  const list = Array.isArray(urls) ? urls : [];
+  const list = Array.isArray(urls) ? urls.filter(Boolean) : [];
   if (list.length === 0) return <span className="text-sm text-gray-500">Sem evidências</span>;
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-wrap gap-3">
       {list.map((u, idx) => (
-        <div key={`${u}-${idx}`} className="text-sm">
-          <a
-            href={u}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 hover:underline break-all"
-          >
-            {u}
-          </a>
-        </div>
+        <a
+          key={`${u}-${idx}`}
+          href={u}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="border rounded-lg p-2 hover:bg-gray-50 transition"
+          title="Abrir arquivo"
+        >
+          {isImage(u) ? (
+            <img
+              src={u}
+              alt="Evidência"
+              className="w-24 h-24 object-cover rounded"
+              loading="lazy"
+            />
+          ) : isPdf(u) ? (
+            <div className="w-24 h-24 flex flex-col items-center justify-center text-[11px] text-gray-700">
+              <span className="text-red-600 font-semibold">PDF</span>
+              <span className="mt-1 text-center break-all line-clamp-3">
+                {getFileName(u) || "arquivo.pdf"}
+              </span>
+            </div>
+          ) : (
+            <div className="w-24 h-24 flex items-center justify-center text-[11px] text-gray-700 text-center break-all">
+              {getFileName(u) || "arquivo"}
+            </div>
+          )}
+        </a>
       ))}
     </div>
   );
@@ -176,7 +214,7 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
             </div>
 
             <div className="mt-3">
-              <div className="text-sm font-semibold text-gray-800 mb-1">Evidências do lançamento</div>
+              <div className="text-sm font-semibold text-gray-800 mb-2">Evidências do lançamento</div>
               <EvidenceList urls={acompanhamento?.evidencias_urls} />
             </div>
           </div>
@@ -238,7 +276,7 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
                   )}
 
                   <div className="mt-3">
-                    <div className="text-xs font-semibold text-gray-700 mb-1">Evidências</div>
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Evidências</div>
                     <EvidenceList urls={e.evidencias_urls} />
                   </div>
                 </div>
@@ -702,11 +740,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </table>
       </div>
 
-      <HistoricoModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        acompanhamento={selected}
-      />
+      <HistoricoModal open={modalOpen} onClose={() => setModalOpen(false)} acompanhamento={selected} />
     </div>
   );
 }
