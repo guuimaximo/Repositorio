@@ -5,13 +5,11 @@ import { supabase } from "../supabase";
 
 /**
  * CENTRAL — ACOMPANHAMENTO (no padrão CentralTratativas)
- * - Filtros em objeto + applyCommonFilters
- * - Lista com limite alto
- * - Contadores via head:true / count:exact (não sofrem limite)
- * - Botões:
- *   - "Lançar acompanhamento" -> abre tela de detalhe do instrutor (checkpoint)
- *   - "Ver histórico" -> modal
- *   - "Analisar" -> quando AGUARDANDO_ANALISE (rota opcional)
+ * Ajustes solicitados:
+ * 1) EM_ANALISE: some "Lançar acompanhamento" e aparece "Análise"
+ * 2) Mostrar KM/L Meta na tabela (vindo do lançamento)
+ * 3) Quando completar X dias (dias_monitoramento): aparece "Encerrar"
+ * 4) "Análise": mostra resumo mastigado do acompanhamento (último checkpoint)
  */
 
 function daysBetween(a, b) {
@@ -23,6 +21,12 @@ function daysBetween(a, b) {
   } catch {
     return 0;
   }
+}
+
+function addDaysISO(dateISO, days) {
+  const d = new Date(`${dateISO}T00:00:00`);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().slice(0, 10);
 }
 
 function StatusBadge({ status }) {
@@ -79,10 +83,7 @@ function MetricBadge({ kmlAtual, kmlMeta }) {
 }
 
 /* ===========================
-   ✅ AJUSTE (APENAS ISSO):
-   Evidências:
-   - PDF: aparece pequeno (tile) e ao clicar abre o arquivo
-   - Imagem: aparece miniatura pequena e ao clicar abre o arquivo
+   Evidências (mantido)
 =========================== */
 function isImage(url) {
   return /\.(jpg|jpeg|png|webp)$/i.test(String(url || ""));
@@ -114,18 +115,11 @@ function EvidenceList({ urls }) {
           title="Abrir arquivo"
         >
           {isImage(u) ? (
-            <img
-              src={u}
-              alt="Evidência"
-              className="w-24 h-24 object-cover rounded"
-              loading="lazy"
-            />
+            <img src={u} alt="Evidência" className="w-24 h-24 object-cover rounded" loading="lazy" />
           ) : isPdf(u) ? (
             <div className="w-24 h-24 flex flex-col items-center justify-center text-[11px] text-gray-700">
               <span className="text-red-600 font-semibold">PDF</span>
-              <span className="mt-1 text-center break-all line-clamp-3">
-                {getFileName(u) || "arquivo.pdf"}
-              </span>
+              <span className="mt-1 text-center break-all line-clamp-3">{getFileName(u) || "arquivo.pdf"}</span>
             </div>
           ) : (
             <div className="w-24 h-24 flex items-center justify-center text-[11px] text-gray-700 text-center break-all">
@@ -134,6 +128,191 @@ function EvidenceList({ urls }) {
           )}
         </a>
       ))}
+    </div>
+  );
+}
+
+/* ===========================
+   ✅ NOVO: Modal de Análise (resumo mastigado)
+   - Puxa o último CHECKPOINT e mostra "o que foi feito"
+=========================== */
+function AnaliseResumoModal({ open, onClose, acompanhamento }) {
+  const [loading, setLoading] = useState(false);
+  const [checkpoint, setCheckpoint] = useState(null);
+
+  useEffect(() => {
+    if (!open || !acompanhamento?.id) return;
+
+    (async () => {
+      setLoading(true);
+      setCheckpoint(null);
+
+      const { data, error } = await supabase
+        .from("diesel_acompanhamento_eventos")
+        .select("id, created_at, tipo, observacoes, evidencias_urls, extra, criado_por_nome, criado_por_login")
+        .eq("acompanhamento_id", acompanhamento.id)
+        .eq("tipo", "CHECKPOINT")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) console.error(error);
+      setCheckpoint(data?.[0] || null);
+      setLoading(false);
+    })();
+  }, [open, acompanhamento?.id]);
+
+  if (!open) return null;
+
+  const nome = acompanhamento?.motorista_nome || "—";
+  const chapa = acompanhamento?.motorista_chapa || "—";
+
+  const det = checkpoint?.extra?.detalhes_acompanhamento || {};
+  const checklistResumo = checkpoint?.extra?.checklist_resumo || "—";
+  const kmlManual = det?.kml_acompanhamento_manual;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-lg font-bold truncate">Análise — Resumo do Acompanhamento</div>
+            <div className="text-sm text-gray-600 truncate">
+              {nome} — Chapa {chapa}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="p-5 max-h-[72vh] overflow-y-auto">
+          <div className="border rounded-lg p-4 mb-4 bg-gray-50">
+            <div className="flex flex-wrap gap-2 items-center justify-between">
+              <div className="flex items-center gap-2">
+                <StatusBadge status={acompanhamento?.status} />
+                <span className="text-sm text-gray-700">
+                  Início monitoramento:{" "}
+                  <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
+                </span>
+                <span className="text-sm text-gray-700">
+                  Vence em: <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
+                </span>
+              </div>
+              <div className="text-sm text-gray-600">
+                Motivo: <span className="font-semibold">{acompanhamento?.motivo || "—"}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="border rounded-md bg-white p-3">
+                <div className="text-xs text-gray-500">KM/L inicial</div>
+                <div className="text-lg font-bold text-gray-800">
+                  {acompanhamento?.kml_inicial != null ? Number(acompanhamento.kml_inicial).toFixed(2) : "—"}
+                </div>
+              </div>
+
+              <div className="border rounded-md bg-white p-3">
+                <div className="text-xs text-gray-500">KM/L meta</div>
+                <div className="text-lg font-bold text-gray-800">
+                  {acompanhamento?.kml_meta != null ? Number(acompanhamento.kml_meta).toFixed(2) : "—"}
+                </div>
+              </div>
+
+              <div className="border rounded-md bg-white p-3">
+                <div className="text-xs text-gray-500">Último checklist</div>
+                <div className="text-lg font-bold text-gray-800">{checklistResumo}</div>
+              </div>
+
+              <div className="border rounded-md bg-white p-3">
+                <div className="text-xs text-gray-500">KM/L (manual do acompanhamento)</div>
+                <div className="text-lg font-bold text-gray-800">
+                  {kmlManual != null ? Number(kmlManual).toFixed(2) : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm font-semibold text-gray-800 mb-2">O que foi realizado (último CHECKPOINT)</div>
+
+          {loading ? (
+            <div className="text-sm text-gray-600">Carregando resumo...</div>
+          ) : !checkpoint ? (
+            <div className="text-sm text-gray-500">Ainda não existe CHECKPOINT registrado.</div>
+          ) : (
+            <div className="border rounded-lg p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
+                    CHECKPOINT
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {checkpoint.created_at ? new Date(checkpoint.created_at).toLocaleString("pt-BR") : "—"}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Instrutor:{" "}
+                  <span className="font-semibold">
+                    {checkpoint.criado_por_nome || checkpoint.criado_por_login || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* resumo mastigado do extra */}
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="border rounded-md p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500">Data / Hora</div>
+                  <div className="text-sm text-gray-800">
+                    {det?.data_acompanhamento || "—"} • {det?.hora_inicial || "—"} → {det?.hora_final || "—"}
+                  </div>
+                </div>
+                <div className="border rounded-md p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500">KM do acompanhamento</div>
+                  <div className="text-sm text-gray-800">
+                    {det?.km_inicial != null ? Number(det.km_inicial).toFixed(2) : "—"} →{" "}
+                    {det?.km_final != null ? Number(det.km_final).toFixed(2) : "—"}
+                    {det?.km_acompanhado != null ? (
+                      <>
+                        {" "}
+                        <span className="text-gray-500">|</span>{" "}
+                        <span className="font-semibold">{Number(det.km_acompanhado).toFixed(2)} km</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="border rounded-md p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500">Horas acompanhadas</div>
+                  <div className="text-sm text-gray-800">
+                    {det?.horas_acompanhadas_min != null
+                      ? `${Math.floor(Number(det.horas_acompanhadas_min) / 60)}h ${String(
+                          Number(det.horas_acompanhadas_min) % 60
+                        ).padStart(2, "0")}m`
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {checkpoint.observacoes ? (
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">Observações</div>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap">{checkpoint.observacoes}</div>
+                </div>
+              ) : null}
+
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-gray-700 mb-2">Evidências do checkpoint</div>
+                <EvidenceList urls={checkpoint.evidencias_urls} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t bg-gray-50 text-xs text-gray-600">
+          Encerramento: ao completar os dias, compare KM/L final vs meta e decida (Tratativa | +X dias | Concluído).
+        </div>
+      </div>
     </div>
   );
 }
@@ -201,7 +380,9 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
                 </span>
                 <span className="text-sm text-gray-700">
                   Início monitoramento:{" "}
-                  <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
+                  <span className="font-semibold">
+                    {acompanhamento?.dt_inicio_monitoramento || "—"}
+                  </span>
                 </span>
                 <span className="text-sm text-gray-700">
                   Vence em:{" "}
@@ -327,6 +508,10 @@ export default function DesempenhoDieselAcompanhamento() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+
+  // ✅ NOVO: modal de análise
+  const [analiseOpen, setAnaliseOpen] = useState(false);
+  const [analiseSelected, setAnaliseSelected] = useState(null);
 
   function applyCommonFilters(query) {
     const f = filtros;
@@ -518,7 +703,6 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* ✅ AJUSTE: rota correta do lançamento */}
           <button
             onClick={() => navigate("/desempenho-lancamento")}
             className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
@@ -625,6 +809,7 @@ export default function DesempenhoDieselAcompanhamento() {
               <th className="py-2 px-3 text-left">Lançado em</th>
               <th className="py-2 px-3 text-left">Motorista</th>
               <th className="py-2 px-3 text-left">KM/L</th>
+              <th className="py-2 px-3 text-left">KM/L Meta</th>
               <th className="py-2 px-3 text-left">Motivo</th>
               <th className="py-2 px-3 text-left">Status</th>
               <th className="py-2 px-3 text-left">Dias</th>
@@ -636,13 +821,13 @@ export default function DesempenhoDieselAcompanhamento() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" className="text-center p-4 text-gray-500">
+                <td colSpan="9" className="text-center p-4 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : listaOrdenada.length === 0 ? (
               <tr>
-                <td colSpan="8" className="text-center p-4 text-gray-500">
+                <td colSpan="9" className="text-center p-4 text-gray-500">
                   Nenhum acompanhamento encontrado.
                 </td>
               </tr>
@@ -650,6 +835,7 @@ export default function DesempenhoDieselAcompanhamento() {
               listaOrdenada.map((x) => {
                 const m = metricas[String(x.motorista_chapa)] || null;
 
+                // dias: conta a partir do início real (dt_inicio_monitoramento). Se não houver, conta desde dt_inicio/created
                 const inicioRef = x.dt_inicio_monitoramento || x.dt_inicio || x.created_at || null;
                 const diasAcomp = inicioRef ? daysBetween(inicioRef, new Date()) : 0;
                 const diasPlano = Number(x.dias_monitoramento || 0) || 0;
@@ -658,7 +844,15 @@ export default function DesempenhoDieselAcompanhamento() {
                 const kmlMeta = x.kml_meta ?? null;
 
                 const status = String(x.status || "").toUpperCase();
-                const podeCheckpoint = status === "A_SER_ACOMPANHADO" || status === "EM_ANALISE";
+
+                // ✅ regras de botões
+                const podeCheckpoint = status === "A_SER_ACOMPANHADO"; // só quando A_SER_ACOMPANHADO
+                const podeAnalise = status === "EM_ANALISE"; // quando EM_ANALISE
+                const podeEncerrar =
+                  !!inicioRef &&
+                  diasPlano > 0 &&
+                  diasAcomp >= diasPlano &&
+                  status !== "ENCERRADO"; // quando concluiu os dias
 
                 return (
                   <tr key={x.id} className="border-t hover:bg-gray-50">
@@ -674,6 +868,14 @@ export default function DesempenhoDieselAcompanhamento() {
                     <td className="py-2 px-3 text-gray-700">
                       <MetricBadge kmlAtual={kmlAtual} kmlMeta={kmlMeta} />
                       {m?.data ? <div className="text-xs text-gray-500 mt-1">Último dia: {m.data}</div> : null}
+                    </td>
+
+                    <td className="py-2 px-3 text-gray-700">
+                      {kmlMeta != null ? (
+                        <span className="font-semibold">≥ {Number(kmlMeta).toFixed(2)}</span>
+                      ) : (
+                        <span className="text-gray-500">—</span>
+                      )}
                     </td>
 
                     <td className="py-2 px-3 text-gray-700">{x.motivo || "-"}</td>
@@ -702,8 +904,8 @@ export default function DesempenhoDieselAcompanhamento() {
 
                     <td className="py-2 px-3">
                       <div className="flex flex-wrap gap-2">
+                        {/* ✅ A_SER_ACOMPANHADO -> Lançar acompanhamento */}
                         {podeCheckpoint ? (
-                          /* ✅ AJUSTE: rota correta do checkpoint */
                           <button
                             onClick={() => navigate(`/desempenho-diesel-checkpoint/${x.id}`)}
                             className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
@@ -712,12 +914,26 @@ export default function DesempenhoDieselAcompanhamento() {
                           </button>
                         ) : null}
 
-                        {status === "AGUARDANDO_ANALISE" ? (
+                        {/* ✅ EM_ANALISE -> Análise (resumo mastigado) */}
+                        {podeAnalise ? (
                           <button
-                            onClick={() => navigate(`/desempenho-diesel/analise/${x.id}`)}
-                            className="bg-orange-600 text-white px-3 py-1 rounded-md hover:bg-orange-700 text-sm"
+                            onClick={() => {
+                              setAnaliseSelected(x);
+                              setAnaliseOpen(true);
+                            }}
+                            className="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-sm"
                           >
-                            Analisar
+                            Análise
+                          </button>
+                        ) : null}
+
+                        {/* ✅ Concluiu dias -> Encerrar */}
+                        {podeEncerrar ? (
+                          <button
+                            onClick={() => navigate(`/desempenho-diesel/encerramento/${x.id}`)}
+                            className="bg-green-700 text-white px-3 py-1 rounded-md hover:bg-green-800 text-sm"
+                          >
+                            Encerrar
                           </button>
                         ) : null}
 
@@ -741,6 +957,13 @@ export default function DesempenhoDieselAcompanhamento() {
       </div>
 
       <HistoricoModal open={modalOpen} onClose={() => setModalOpen(false)} acompanhamento={selected} />
+
+      {/* ✅ NOVO: Modal análise */}
+      <AnaliseResumoModal
+        open={analiseOpen}
+        onClose={() => setAnaliseOpen(false)}
+        acompanhamento={analiseSelected}
+      />
     </div>
   );
 }
