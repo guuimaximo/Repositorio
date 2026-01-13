@@ -70,6 +70,65 @@ async function uploadManyToStorage({ files, bucket, folder }) {
   return out;
 }
 
+/* ===========================
+   Evidências com miniatura (PDF/Imagem)
+=========================== */
+
+function isPdfFileLike(f) {
+  const name = String(f?.name || "").toLowerCase();
+  const type = String(f?.type || "").toLowerCase();
+  return type.includes("pdf") || name.endsWith(".pdf");
+}
+
+function isImageFileLike(f) {
+  const type = String(f?.type || "").toLowerCase();
+  return type.startsWith("image/");
+}
+
+function FileThumb({ item }) {
+  const f = item?.file;
+  const [src, setSrc] = useState(null);
+
+  useEffect(() => {
+    if (!f) return;
+
+    if (isImageFileLike(f)) {
+      const url = URL.createObjectURL(f);
+      setSrc(url);
+      return () => URL.revokeObjectURL(url);
+    }
+
+    setSrc(null);
+  }, [f]);
+
+  // PDF
+  if (f && isPdfFileLike(f)) {
+    return (
+      <div className="h-12 w-12 flex items-center justify-center rounded-md border bg-gray-50 text-xs font-semibold text-gray-700">
+        PDF
+      </div>
+    );
+  }
+
+  // Imagem
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={item?.name || "imagem"}
+        className="h-12 w-12 rounded-md border object-cover"
+      />
+    );
+  }
+
+  // Outros
+  return (
+    <div className="h-12 w-12 flex items-center justify-center rounded-md border bg-gray-50 text-xs font-semibold text-gray-700">
+      ARQ
+    </div>
+  );
+}
+
 function EvidenceList({ list, onRemove }) {
   const arr = Array.isArray(list) ? list : [];
   if (arr.length === 0) return null;
@@ -79,14 +138,19 @@ function EvidenceList({ list, onRemove }) {
       {arr.map((f, idx) => (
         <div
           key={`${f.name}-${idx}`}
-          className="flex items-center justify-between px-3 py-2 border-b last:border-b-0"
+          className="flex items-center justify-between gap-3 px-3 py-2 border-b last:border-b-0"
         >
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-gray-800 truncate">{f.name}</div>
-            <div className="text-xs text-gray-500">
-              {(f.type || "arquivo")} • {(f.size / 1024 / 1024).toFixed(2)} MB
+          <div className="flex items-center gap-3 min-w-0">
+            <FileThumb item={f} />
+
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-800 truncate">{f.name}</div>
+              <div className="text-xs text-gray-500">
+                {(f.type || "arquivo")} • {(f.size / 1024 / 1024).toFixed(2)} MB
+              </div>
             </div>
           </div>
+
           <button
             type="button"
             className="text-xs text-red-600 hover:underline"
@@ -165,7 +229,7 @@ function minutesToHoursStr(mins) {
   return `${h}h ${String(m).padStart(2, "0")}m`;
 }
 
-// ✅ NOVO: nome amigável do link
+// nome amigável do link
 function filenameFromUrl(url) {
   try {
     const u = new URL(url);
@@ -178,6 +242,15 @@ function filenameFromUrl(url) {
   }
 }
 
+function isPdfUrl(url) {
+  return String(url || "").toLowerCase().includes(".pdf");
+}
+
+function isImageUrl(url) {
+  const u = String(url || "").toLowerCase();
+  return u.includes(".png") || u.includes(".jpg") || u.includes(".jpeg") || u.includes(".webp") || u.includes(".gif");
+}
+
 function PublicUrlList({ title, urls }) {
   const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
   if (arr.length === 0) return null;
@@ -185,9 +258,23 @@ function PublicUrlList({ title, urls }) {
   return (
     <div className="mt-3">
       <div className="text-xs text-gray-500 mb-1">{title}</div>
+
       <div className="border rounded-md bg-white">
         {arr.map((u, idx) => (
-          <div key={`${u}-${idx}`} className="px-3 py-2 border-b last:border-b-0">
+          <div key={`${u}-${idx}`} className="flex items-center gap-3 px-3 py-2 border-b last:border-b-0">
+            {/* miniatura (pdf/imagem) */}
+            {isPdfUrl(u) ? (
+              <div className="h-10 w-10 flex items-center justify-center rounded-md border bg-gray-50 text-[10px] font-semibold text-gray-700">
+                PDF
+              </div>
+            ) : isImageUrl(u) ? (
+              <img src={u} alt="evidência" className="h-10 w-10 rounded-md border object-cover" />
+            ) : (
+              <div className="h-10 w-10 flex items-center justify-center rounded-md border bg-gray-50 text-[10px] font-semibold text-gray-700">
+                ARQ
+              </div>
+            )}
+
             <a
               href={u}
               target="_blank"
@@ -222,14 +309,18 @@ export default function DesempenhoDieselCheckpoint() {
   const [observacoes, setObservacoes] = useState("");
   const [evidencias, setEvidencias] = useState([]);
 
-  // ✅ Detalhes do acompanhamento (data/hora/km)
+  // ✅ Detalhes do acompanhamento (data/hora/km) + KM/L manual
   const [detalhes, setDetalhes] = useState({
     data_acompanhamento: "",
     hora_inicial: "",
     hora_final: "",
     km_inicial: "",
     km_final: "",
+    kml_acomp_manual: "", // ✅ NOVO: KM/L do acompanhamento (manual)
   });
+
+  // ✅ NOVO: fallback observação do lançamento via evento
+  const [obsLancamentoFallback, setObsLancamentoFallback] = useState("");
 
   // KM/L durante o teste (período)
   const [periodo, setPeriodo] = useState({
@@ -270,12 +361,12 @@ export default function DesempenhoDieselCheckpoint() {
               "metadata",
               "kml_meta",
 
-              // ✅ NOVO: origem do lançamento
+              // origem do lançamento
               "kml_inicial",
               "observacao_inicial",
               "evidencias_urls",
 
-              // campos do detalhe
+              // campos do detalhe (persistidos)
               "data_acompanhamento",
               "hora_inicial",
               "hora_final",
@@ -289,13 +380,37 @@ export default function DesempenhoDieselCheckpoint() {
         if (error) throw error;
         setAcomp(data || null);
 
-        setDetalhes({
+        setDetalhes((prev) => ({
+          ...prev,
           data_acompanhamento: data?.data_acompanhamento || "",
           hora_inicial: data?.hora_inicial || "",
           hora_final: data?.hora_final || "",
           km_inicial: data?.km_inicial != null ? String(data.km_inicial) : "",
           km_final: data?.km_final != null ? String(data.km_final) : "",
-        });
+          // ✅ NOVO: se já tiver salvo em metadata, carrega (fallback)
+          kml_acomp_manual:
+            data?.metadata?.kml_acompanhamento_manual != null
+              ? String(data.metadata.kml_acompanhamento_manual)
+              : "",
+        }));
+
+        // ✅ NOVO: fallback de observação do lançamento (caso observacao_inicial esteja vazia)
+        if (!String(data?.observacao_inicial || "").trim()) {
+          const { data: evL, error: evErr } = await supabase
+            .from("diesel_acompanhamento_eventos")
+            .select("observacoes")
+            .eq("acompanhamento_id", id)
+            .eq("tipo", "LANCAMENTO")
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (!evErr) {
+            const obs = String(evL?.[0]?.observacoes || "").trim();
+            setObsLancamentoFallback(obs);
+          }
+        } else {
+          setObsLancamentoFallback("");
+        }
 
         const itens = await supabase
           .from("diesel_checklist_itens")
@@ -469,6 +584,11 @@ export default function DesempenhoDieselCheckpoint() {
       const dtInicioMon = isPrimeiro ? hoje : acomp.dt_inicio_monitoramento;
       const dtFimPlan = isPrimeiro ? addDaysISO(hoje, diasMonitoramento) : acomp.dt_fim_planejado;
 
+      const kmlManual =
+        String(detalhes.kml_acomp_manual || "").trim() !== ""
+          ? Number(detalhes.kml_acomp_manual)
+          : null;
+
       const payloadEvento = {
         acompanhamento_id: acomp.id,
         tipo: "CHECKPOINT",
@@ -489,7 +609,12 @@ export default function DesempenhoDieselCheckpoint() {
             km_final: detalhes.km_final !== "" ? Number(detalhes.km_final) : null,
             horas_acompanhadas_min: resumoDetalhes.minutos,
             km_acompanhado: resumoDetalhes.kmAcomp,
-            kml_durante_teste: periodo.kml_periodo,
+
+            // ✅ agora é manual
+            kml_acompanhamento_manual: kmlManual,
+
+            // mantém o período automático (útil para análise)
+            kml_durante_teste_periodo: periodo.kml_periodo,
           },
         },
       };
@@ -531,8 +656,10 @@ export default function DesempenhoDieselCheckpoint() {
         km_inicial: detalhes.km_inicial !== "" ? Number(detalhes.km_inicial) : null,
         km_final: detalhes.km_final !== "" ? Number(detalhes.km_final) : null,
 
+        // ✅ salvar o KM/L manual no metadata (sem migration)
         metadata: {
           ...(acomp.metadata || {}),
+          kml_acompanhamento_manual: kmlManual,
           ultimo_checklist_resumo: checklistResumo,
           ultimo_checkpoint_em: new Date().toISOString(),
         },
@@ -576,13 +703,19 @@ export default function DesempenhoDieselCheckpoint() {
   }
 
   const meta = acomp?.kml_meta;
-  const kmlInicialLancado = acomp?.kml_inicial; // ✅ NOVO
-  const obsInicialLancada = acomp?.observacao_inicial; // ✅ NOVO
-  const evidLancamento = Array.isArray(acomp?.evidencias_urls) ? acomp.evidencias_urls : []; // ✅ NOVO
+  const kmlInicialLancado = acomp?.kml_inicial;
+  const obsInicialLancada = String(acomp?.observacao_inicial || "").trim();
+  const obsLancamentoFinal = obsInicialLancada || String(obsLancamentoFallback || "").trim();
+
+  const evidLancamento = Array.isArray(acomp?.evidencias_urls) ? acomp.evidencias_urls : [];
 
   const prefixo = acomp?.metadata?.prefixo || "—";
   const linha = acomp?.metadata?.linha || "—";
   const cluster = acomp?.metadata?.cluster || "—";
+
+  // ✅ NOVO: período analisado do lançamento (metadata)
+  const lancPeriodoInicio = acomp?.metadata?.lancamento_periodo_inicio || null;
+  const lancPeriodoFim = acomp?.metadata?.lancamento_periodo_fim || null;
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -618,11 +751,19 @@ export default function DesempenhoDieselCheckpoint() {
             <div className="font-semibold text-gray-800">{acomp.motorista_nome || "—"}</div>
             <div className="text-xs text-gray-500">Chapa {acomp.motorista_chapa || "—"}</div>
 
-            {/* ✅ NOVO: KM/L inicial do lançamento */}
             <div className="mt-2 text-xs text-gray-500">KM/L inicial (lançamento)</div>
             <div className="text-sm font-semibold text-gray-800">
               {kmlInicialLancado != null ? Number(kmlInicialLancado).toFixed(2) : "—"}
             </div>
+
+            {/* ✅ NOVO: período analisado do lançamento */}
+            {lancPeriodoInicio && lancPeriodoFim ? (
+              <div className="mt-1 text-xs text-gray-500">
+                Período analisado:{" "}
+                <span className="font-semibold text-gray-700">{lancPeriodoInicio}</span> até{" "}
+                <span className="font-semibold text-gray-700">{lancPeriodoFim}</span>
+              </div>
+            ) : null}
           </div>
 
           <div>
@@ -661,17 +802,17 @@ export default function DesempenhoDieselCheckpoint() {
           ) : null}
         </div>
 
-        {/* ✅ NOVO: Observação inicial do lançamento (quando existir) */}
-        {String(obsInicialLancada || "").trim() ? (
+        {/* Observação do lançamento (com fallback) */}
+        {String(obsLancamentoFinal || "").trim() ? (
           <div className="mt-3 rounded-md border bg-gray-50 p-3">
             <div className="text-xs text-gray-500 mb-1">Observação inicial (lançamento)</div>
             <div className="text-sm text-gray-800 whitespace-pre-wrap">
-              {String(obsInicialLancada || "").trim()}
+              {String(obsLancamentoFinal || "").trim()}
             </div>
           </div>
         ) : null}
 
-        {/* ✅ NOVO: Evidências do lançamento */}
+        {/* Evidências do lançamento (miniatura pdf/imagem) */}
         <PublicUrlList title="Evidências do lançamento" urls={evidLancamento} />
       </div>
 
@@ -792,6 +933,22 @@ export default function DesempenhoDieselCheckpoint() {
           </div>
         </div>
 
+        {/* ✅ NOVO: KM/L manual */}
+        <div className="mt-3">
+          <div className="text-xs text-gray-500 mb-1">KM/L do acompanhamento (manual)</div>
+          <input
+            type="number"
+            step="0.01"
+            className="w-full rounded-md border px-3 py-2"
+            value={detalhes.kml_acomp_manual}
+            onChange={(e) => setDetalhes((p) => ({ ...p, kml_acomp_manual: e.target.value }))}
+            placeholder="Ex.: 2.58"
+          />
+          <div className="text-xs text-gray-500 mt-1">
+            * Este valor é informado manualmente (não depende da tabela de métricas).
+          </div>
+        </div>
+
         <div className="mt-4 border rounded-lg p-3 bg-gray-50">
           <div className="text-sm font-semibold text-gray-800 mb-2">Resumo</div>
 
@@ -809,18 +966,28 @@ export default function DesempenhoDieselCheckpoint() {
             </div>
 
             <div className="border rounded-md p-3 bg-white">
-              <div className="text-xs text-gray-500">KM/L durante o teste</div>
+              <div className="text-xs text-gray-500">KM/L do acompanhamento (manual)</div>
               <div className="text-lg font-bold text-gray-800">
-                {periodo.kml_periodo != null ? Number(periodo.kml_periodo).toFixed(2) : "—"}
+                {String(detalhes.kml_acomp_manual || "").trim()
+                  ? Number(detalhes.kml_acomp_manual).toFixed(2)
+                  : "—"}
               </div>
-              {periodo.data_inicio && periodo.data_fim ? (
-                <div className="text-xs text-gray-500 mt-1">
-                  Período: <span className="font-semibold">{periodo.data_inicio}</span> até{" "}
-                  <span className="font-semibold">{periodo.data_fim}</span>
-                </div>
-              ) : null}
             </div>
           </div>
+
+          {/* Mantém o período automático (útil internamente) */}
+          {periodo.data_inicio && periodo.data_fim ? (
+            <div className="mt-3 text-xs text-gray-500">
+              Período do teste (automático):{" "}
+              <span className="font-semibold">{periodo.data_inicio}</span> até{" "}
+              <span className="font-semibold">{periodo.data_fim}</span>{" "}
+              {periodo.kml_periodo != null ? (
+                <>
+                  — KM/L período: <span className="font-semibold">{Number(periodo.kml_periodo).toFixed(2)}</span>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -860,6 +1027,7 @@ export default function DesempenhoDieselCheckpoint() {
               hora_final: "",
               km_inicial: "",
               km_final: "",
+              kml_acomp_manual: "",
             });
             setObservacoes("");
             setEvidencias([]);
