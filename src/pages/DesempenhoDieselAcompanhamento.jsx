@@ -271,34 +271,30 @@ export default function DesempenhoDieselAcompanhamento() {
   const [loading, setLoading] = useState(false);
 
   const [itens, setItens] = useState([]);
-  const [metricas, setMetricas] = useState({}); // chapa -> {kml,data,km,litros}
+  const [metricas, setMetricas] = useState({});
   const [erro, setErro] = useState("");
 
-  // Contadores (head)
   const [totalCount, setTotalCount] = useState(0);
   const [aserCount, setAserCount] = useState(0);
   const [emAnaliseCount, setEmAnaliseCount] = useState(0);
   const [aguardandoCount, setAguardandoCount] = useState(0);
 
-  // Filtros (padrão CentralTratativas)
   const [filtros, setFiltros] = useState({
     busca: "",
     dataInicio: "",
     dataFim: "",
-    status: "", // "" = todos
-    ordenacao: "MAIS_RECENTE", // MAIS_RECENTE | MAIS_DIAS | PIOR_KML
+    status: "",
+    ordenacao: "MAIS_RECENTE",
   });
 
-  // Modal histórico
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // --- Helpers para aplicar mesmos filtros nas consultas de count/lista ---
   function applyCommonFilters(query) {
     const f = filtros;
 
     if (f.busca) {
-      const q = String(f.busca).replaceAll(",", " "); // evita quebrar o .or
+      const q = String(f.busca).replaceAll(",", " ");
       query = query.or(
         `motorista_nome.ilike.%${q}%,motorista_chapa.ilike.%${q}%,motivo.ilike.%${q}%`
       );
@@ -306,7 +302,6 @@ export default function DesempenhoDieselAcompanhamento() {
 
     if (f.status) query = query.eq("status", f.status);
 
-    // Data: filtra pelo created_at (lançamento)
     if (f.dataInicio) query = query.gte("created_at", f.dataInicio);
 
     if (f.dataFim) {
@@ -318,7 +313,6 @@ export default function DesempenhoDieselAcompanhamento() {
     return query;
   }
 
-  // --- Carregar lista (visual) ---
   async function carregarLista() {
     let query = supabase
       .from("v_diesel_acompanhamentos_resumo")
@@ -350,8 +344,6 @@ export default function DesempenhoDieselAcompanhamento() {
       .limit(100000);
 
     query = applyCommonFilters(query);
-
-    // Ordenação default server-side para reduzir esforço local
     query = query.order("created_at", { ascending: false });
 
     const { data, error } = await query;
@@ -363,7 +355,6 @@ export default function DesempenhoDieselAcompanhamento() {
     setItens(data || []);
   }
 
-  // --- Carregar métricas (KM/L atual) ---
   async function carregarMetricas() {
     const { data, error } = await supabase
       .from("v_diesel_metricas_motorista_ultima")
@@ -371,7 +362,6 @@ export default function DesempenhoDieselAcompanhamento() {
 
     if (error) {
       console.error("Erro ao carregar métricas:", error);
-      // não trava a tela
       setMetricas({});
       return;
     }
@@ -384,16 +374,13 @@ export default function DesempenhoDieselAcompanhamento() {
     setMetricas(map);
   }
 
-  // --- Carregar contadores "head" (contagem precisa no banco) ---
   async function carregarContadores() {
-    // Total
     let qTotal = supabase
       .from("v_diesel_acompanhamentos_resumo")
       .select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
     const { count: total } = await qTotal;
 
-    // A_SER_ACOMPANHADO
     let qAser = supabase
       .from("v_diesel_acompanhamentos_resumo")
       .select("id", { count: "exact", head: true })
@@ -401,7 +388,6 @@ export default function DesempenhoDieselAcompanhamento() {
     qAser = applyCommonFilters(qAser);
     const { count: aser } = await qAser;
 
-    // EM_ANALISE
     let qEm = supabase
       .from("v_diesel_acompanhamentos_resumo")
       .select("id", { count: "exact", head: true })
@@ -409,7 +395,6 @@ export default function DesempenhoDieselAcompanhamento() {
     qEm = applyCommonFilters(qEm);
     const { count: em } = await qEm;
 
-    // AGUARDANDO_ANALISE
     let qAg = supabase
       .from("v_diesel_acompanhamentos_resumo")
       .select("id", { count: "exact", head: true })
@@ -476,7 +461,6 @@ export default function DesempenhoDieselAcompanhamento() {
       return list;
     }
 
-    // MAIS_RECENTE
     list.sort((a, b) => {
       const ta = new Date(a.ultimo_evento_em || a.created_at || 0).getTime();
       const tb = new Date(b.ultimo_evento_em || b.created_at || 0).getTime();
@@ -496,8 +480,9 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* ✅ AJUSTE: rota correta do lançamento */}
           <button
-            onClick={() => navigate("/desempenho-diesel/lancamento")}
+            onClick={() => navigate("/desempenho-lancamento")}
             className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
           >
             Lançar acompanhamento
@@ -519,7 +504,6 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       ) : null}
 
-      {/* 🔍 Filtros (padrão CentralTratativas) */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
 
@@ -589,7 +573,6 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      {/* 🧾 Resumo (head counts) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="A ser acompanhado" valor={aserCount} cor="bg-yellow-100 text-yellow-700" />
@@ -597,7 +580,6 @@ export default function DesempenhoDieselAcompanhamento() {
         <CardResumo titulo="Aguardando análise" valor={aguardandoCount} cor="bg-orange-100 text-orange-700" />
       </div>
 
-      {/* 📋 Lista */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
@@ -683,8 +665,9 @@ export default function DesempenhoDieselAcompanhamento() {
                     <td className="py-2 px-3">
                       <div className="flex flex-wrap gap-2">
                         {podeCheckpoint ? (
+                          /* ✅ AJUSTE: rota correta do checkpoint */
                           <button
-                            onClick={() => navigate(`/desempenho-diesel/checkpoint/${x.id}`)}
+                            onClick={() => navigate(`/desempenho-diesel-checkpoint/${x.id}`)}
                             className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                           >
                             Lançar acompanhamento
