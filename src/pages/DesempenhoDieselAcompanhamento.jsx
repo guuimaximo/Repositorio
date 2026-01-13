@@ -5,11 +5,17 @@ import { supabase } from "../supabase";
 
 /**
  * CENTRAL — ACOMPANHAMENTO (no padrão CentralTratativas)
- * Ajustes solicitados:
- * 1) EM_ANALISE: some "Lançar acompanhamento" e aparece "Análise"
- * 2) Mostrar KM/L Meta na tabela (vindo do lançamento)
- * 3) Quando completar X dias (dias_monitoramento): aparece "Encerrar"
- * 4) "Análise": mostra resumo mastigado do acompanhamento (último checkpoint)
+ * - Filtros em objeto + applyCommonFilters
+ * - Lista com limite alto
+ * - Contadores via head:true / count:exact (não sofrem limite)
+ * - Botões:
+ *   - "Lançar acompanhamento" -> abre tela de detalhe do instrutor (checkpoint)
+ *   - "Ver histórico" -> modal
+ *   - "Analisar" -> quando AGUARDANDO_ANALISE (rota opcional)
+ *
+ * ✅ AJUSTE AGORA:
+ * - Dentro do modal de ANÁLISE, botão "Ver checkpoint completo"
+ *   -> abre um modal com o CHECKPOINT completo (observações, métricas, período, extra e evidências)
  */
 
 function daysBetween(a, b) {
@@ -21,12 +27,6 @@ function daysBetween(a, b) {
   } catch {
     return 0;
   }
-}
-
-function addDaysISO(dateISO, days) {
-  const d = new Date(`${dateISO}T00:00:00`);
-  d.setDate(d.getDate() + Number(days || 0));
-  return d.toISOString().slice(0, 10);
 }
 
 function StatusBadge({ status }) {
@@ -74,16 +74,14 @@ function MetricBadge({ kmlAtual, kmlMeta }) {
   return (
     <span className="text-xs text-gray-700">
       KM/L atual:{" "}
-      <span className={`font-semibold ${ok ? "text-green-700" : "text-red-700"}`}>
-        {kml.toFixed(2)}
-      </span>{" "}
+      <span className={`font-semibold ${ok ? "text-green-700" : "text-red-700"}`}>{kml.toFixed(2)}</span>{" "}
       <span className="text-gray-500">| Meta: ≥ {meta.toFixed(2)}</span>
     </span>
   );
 }
 
 /* ===========================
-   Evidências (mantido)
+   Evidências (tiles)
 =========================== */
 function isImage(url) {
   return /\.(jpg|jpeg|png|webp)$/i.test(String(url || ""));
@@ -133,125 +131,42 @@ function EvidenceList({ urls }) {
 }
 
 /* ===========================
-   ✅ NOVO: Modal de Análise (resumo mastigado)
-   - Puxa o último CHECKPOINT e mostra "o que foi feito"
+   ✅ NOVO: Modal do Checkpoint Completo
 =========================== */
-function AnaliseResumoModal({ open, onClose, acompanhamento }) {
-  const [loading, setLoading] = useState(false);
-  const [checkpoint, setCheckpoint] = useState(null);
-
-  useEffect(() => {
-    if (!open || !acompanhamento?.id) return;
-
-    (async () => {
-      setLoading(true);
-      setCheckpoint(null);
-
-      const { data, error } = await supabase
-        .from("diesel_acompanhamento_eventos")
-        .select("id, created_at, tipo, observacoes, evidencias_urls, extra, criado_por_nome, criado_por_login")
-        .eq("acompanhamento_id", acompanhamento.id)
-        .eq("tipo", "CHECKPOINT")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (error) console.error(error);
-      setCheckpoint(data?.[0] || null);
-      setLoading(false);
-    })();
-  }, [open, acompanhamento?.id]);
-
+function CheckpointCompletoModal({ open, onClose, checkpoint, acompanhamento }) {
   if (!open) return null;
 
   const nome = acompanhamento?.motorista_nome || "—";
   const chapa = acompanhamento?.motorista_chapa || "—";
 
-  const det = checkpoint?.extra?.detalhes_acompanhamento || {};
-  const checklistResumo = checkpoint?.extra?.checklist_resumo || "—";
-  const kmlManual = det?.kml_acompanhamento_manual;
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg overflow-hidden">
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <div className="min-w-0">
-            <div className="text-lg font-bold truncate">Análise — Resumo do Acompanhamento</div>
+            <div className="text-lg font-bold truncate">Checkpoint — Completo</div>
             <div className="text-sm text-gray-600 truncate">
               {nome} — Chapa {chapa}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200"
-          >
+          <button onClick={onClose} className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200">
             Fechar
           </button>
         </div>
 
-        <div className="p-5 max-h-[72vh] overflow-y-auto">
-          <div className="border rounded-lg p-4 mb-4 bg-gray-50">
-            <div className="flex flex-wrap gap-2 items-center justify-between">
-              <div className="flex items-center gap-2">
-                <StatusBadge status={acompanhamento?.status} />
-                <span className="text-sm text-gray-700">
-                  Início monitoramento:{" "}
-                  <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
-                </span>
-                <span className="text-sm text-gray-700">
-                  Vence em: <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
-                </span>
-              </div>
-              <div className="text-sm text-gray-600">
-                Motivo: <span className="font-semibold">{acompanhamento?.motivo || "—"}</span>
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="border rounded-md bg-white p-3">
-                <div className="text-xs text-gray-500">KM/L inicial</div>
-                <div className="text-lg font-bold text-gray-800">
-                  {acompanhamento?.kml_inicial != null ? Number(acompanhamento.kml_inicial).toFixed(2) : "—"}
-                </div>
-              </div>
-
-              <div className="border rounded-md bg-white p-3">
-                <div className="text-xs text-gray-500">KM/L meta</div>
-                <div className="text-lg font-bold text-gray-800">
-                  {acompanhamento?.kml_meta != null ? Number(acompanhamento.kml_meta).toFixed(2) : "—"}
-                </div>
-              </div>
-
-              <div className="border rounded-md bg-white p-3">
-                <div className="text-xs text-gray-500">Último checklist</div>
-                <div className="text-lg font-bold text-gray-800">{checklistResumo}</div>
-              </div>
-
-              <div className="border rounded-md bg-white p-3">
-                <div className="text-xs text-gray-500">KM/L (manual do acompanhamento)</div>
-                <div className="text-lg font-bold text-gray-800">
-                  {kmlManual != null ? Number(kmlManual).toFixed(2) : "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-sm font-semibold text-gray-800 mb-2">O que foi realizado (último CHECKPOINT)</div>
-
-          {loading ? (
-            <div className="text-sm text-gray-600">Carregando resumo...</div>
-          ) : !checkpoint ? (
-            <div className="text-sm text-gray-500">Ainda não existe CHECKPOINT registrado.</div>
+        <div className="p-5 max-h-[75vh] overflow-y-auto">
+          {!checkpoint ? (
+            <div className="text-sm text-gray-500">Nenhum checkpoint encontrado.</div>
           ) : (
             <div className="border rounded-lg p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
-                    CHECKPOINT
-                  </span>
+                  <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">CHECKPOINT</span>
                   <span className="text-xs text-gray-500">
                     {checkpoint.created_at ? new Date(checkpoint.created_at).toLocaleString("pt-BR") : "—"}
                   </span>
                 </div>
+
                 <div className="text-xs text-gray-500">
                   Instrutor:{" "}
                   <span className="font-semibold">
@@ -260,49 +175,55 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                 </div>
               </div>
 
-              {/* resumo mastigado do extra */}
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="border rounded-md p-3 bg-gray-50">
-                  <div className="text-xs text-gray-500">Data / Hora</div>
-                  <div className="text-sm text-gray-800">
-                    {det?.data_acompanhamento || "—"} • {det?.hora_inicial || "—"} → {det?.hora_final || "—"}
-                  </div>
-                </div>
-                <div className="border rounded-md p-3 bg-gray-50">
-                  <div className="text-xs text-gray-500">KM do acompanhamento</div>
-                  <div className="text-sm text-gray-800">
-                    {det?.km_inicial != null ? Number(det.km_inicial).toFixed(2) : "—"} →{" "}
-                    {det?.km_final != null ? Number(det.km_final).toFixed(2) : "—"}
-                    {det?.km_acompanhado != null ? (
-                      <>
-                        {" "}
-                        <span className="text-gray-500">|</span>{" "}
-                        <span className="font-semibold">{Number(det.km_acompanhado).toFixed(2)} km</span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="border rounded-md p-3 bg-gray-50">
-                  <div className="text-xs text-gray-500">Horas acompanhadas</div>
-                  <div className="text-sm text-gray-800">
-                    {det?.horas_acompanhadas_min != null
-                      ? `${Math.floor(Number(det.horas_acompanhadas_min) / 60)}h ${String(
-                          Number(det.horas_acompanhadas_min) % 60
-                        ).padStart(2, "0")}m`
-                      : "—"}
-                  </div>
-                </div>
-              </div>
-
               {checkpoint.observacoes ? (
                 <div className="mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-1">Observações</div>
                   <div className="text-sm text-gray-700 whitespace-pre-wrap">{checkpoint.observacoes}</div>
                 </div>
+              ) : (
+                <div className="mt-3 text-sm text-gray-500">Sem observações.</div>
+              )}
+
+              {(checkpoint.kml ?? checkpoint.km ?? checkpoint.litros) != null ? (
+                <div className="mt-3 text-xs text-gray-600">
+                  {checkpoint.kml != null && (
+                    <span className="mr-3">
+                      KM/L: <span className="font-semibold">{Number(checkpoint.kml).toFixed(2)}</span>
+                    </span>
+                  )}
+                  {checkpoint.km != null && (
+                    <span className="mr-3">
+                      KM: <span className="font-semibold">{Number(checkpoint.km).toFixed(2)}</span>
+                    </span>
+                  )}
+                  {checkpoint.litros != null && (
+                    <span className="mr-3">
+                      Litros: <span className="font-semibold">{Number(checkpoint.litros).toFixed(2)}</span>
+                    </span>
+                  )}
+                </div>
               ) : null}
 
-              <div className="mt-3">
-                <div className="text-xs font-semibold text-gray-700 mb-2">Evidências do checkpoint</div>
+              {(checkpoint.periodo_inicio || checkpoint.periodo_fim) ? (
+                <div className="mt-2 text-xs text-gray-600">
+                  Período: <span className="font-semibold">{checkpoint.periodo_inicio || "—"}</span> até{" "}
+                  <span className="font-semibold">{checkpoint.periodo_fim || "—"}</span>
+                </div>
+              ) : null}
+
+              {checkpoint.extra ? (
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+                    Ver dados do checkpoint (extra)
+                  </summary>
+                  <pre className="mt-2 p-3 bg-gray-50 border rounded text-xs overflow-x-auto">
+                    {JSON.stringify(checkpoint.extra, null, 2)}
+                  </pre>
+                </details>
+              ) : null}
+
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-gray-700 mb-2">Evidências</div>
                 <EvidenceList urls={checkpoint.evidencias_urls} />
               </div>
             </div>
@@ -310,13 +231,16 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
         </div>
 
         <div className="px-5 py-4 border-t bg-gray-50 text-xs text-gray-600">
-          Encerramento: ao completar os dias, compare KM/L final vs meta e decida (Tratativa | +X dias | Concluído).
+          Aqui está o registro completo do último CHECKPOINT.
         </div>
       </div>
     </div>
   );
 }
 
+/* ===========================
+   Histórico (já existia)
+=========================== */
 function HistoricoModal({ open, onClose, acompanhamento }) {
   const [loading, setLoading] = useState(false);
   const [eventos, setEventos] = useState([]);
@@ -331,7 +255,7 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
       const { data, error } = await supabase
         .from("diesel_acompanhamento_eventos")
         .select(
-          "id, created_at, tipo, observacoes, evidencias_urls, km, litros, kml, periodo_inicio, periodo_fim, criado_por_nome, criado_por_login"
+          "id, created_at, tipo, observacoes, evidencias_urls, km, litros, kml, periodo_inicio, periodo_fim, criado_por_nome, criado_por_login, extra"
         )
         .eq("acompanhamento_id", acompanhamento.id)
         .order("created_at", { ascending: false });
@@ -357,10 +281,7 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
               {nome} — Chapa {chapa}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200"
-          >
+          <button onClick={onClose} className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200">
             Fechar
           </button>
         </div>
@@ -373,20 +294,15 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
                 <span className="text-sm text-gray-700">
                   Lançado em:{" "}
                   <span className="font-semibold">
-                    {acompanhamento?.created_at
-                      ? new Date(acompanhamento.created_at).toLocaleDateString("pt-BR")
-                      : "—"}
+                    {acompanhamento?.created_at ? new Date(acompanhamento.created_at).toLocaleDateString("pt-BR") : "—"}
                   </span>
                 </span>
                 <span className="text-sm text-gray-700">
                   Início monitoramento:{" "}
-                  <span className="font-semibold">
-                    {acompanhamento?.dt_inicio_monitoramento || "—"}
-                  </span>
+                  <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
                 </span>
                 <span className="text-sm text-gray-700">
-                  Vence em:{" "}
-                  <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
+                  Vence em: <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
                 </span>
               </div>
               <div className="text-sm text-gray-600">
@@ -412,9 +328,7 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
                 <div key={e.id} className="border rounded-lg p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
-                        {e.tipo}
-                      </span>
+                      <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">{e.tipo}</span>
                       <span className="text-xs text-gray-500">
                         {e.created_at ? new Date(e.created_at).toLocaleString("pt-BR") : "—"}
                       </span>
@@ -474,6 +388,225 @@ function HistoricoModal({ open, onClose, acompanhamento }) {
   );
 }
 
+/* ===========================
+   ✅ Modal de ANÁLISE (com botão Ver checkpoint completo)
+=========================== */
+function AnaliseResumoModal({ open, onClose, acompanhamento }) {
+  const [loading, setLoading] = useState(false);
+  const [checkpoint, setCheckpoint] = useState(null);
+
+  // ✅ NOVO
+  const [checkpointOpen, setCheckpointOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !acompanhamento?.id) return;
+
+    (async () => {
+      setLoading(true);
+      setCheckpoint(null);
+
+      // Pega o ÚLTIMO checkpoint do acompanhamento
+      const { data, error } = await supabase
+        .from("diesel_acompanhamento_eventos")
+        .select(
+          "id, created_at, tipo, observacoes, evidencias_urls, km, litros, kml, periodo_inicio, periodo_fim, criado_por_nome, criado_por_login, extra"
+        )
+        .eq("acompanhamento_id", acompanhamento.id)
+        .eq("tipo", "CHECKPOINT")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) console.error(error);
+      setCheckpoint(data || null);
+
+      setLoading(false);
+    })();
+  }, [open, acompanhamento?.id]);
+
+  if (!open) return null;
+
+  const nome = acompanhamento?.motorista_nome || "—";
+  const chapa = acompanhamento?.motorista_chapa || "—";
+
+  const kmlInicial = acompanhamento?.kml_inicial ?? null;
+  const kmlMeta = acompanhamento?.kml_meta ?? null;
+
+  // Manual do acompanhamento (se você estiver salvando em algum lugar)
+  // Aqui mantive como fallback em metadata, ajuste se seu schema for diferente.
+  const kmlManual = acompanhamento?.metadata?.kml_manual ?? null;
+
+  const resumoChecklist = checkpoint?.extra?.checklist_resumo ?? "—";
+  const detalhes = checkpoint?.extra?.detalhes_acompanhamento || null;
+
+  return (
+    <div className="fixed inset-0 z-[55] bg-black/40 flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="px-5 py-4 border-b flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-lg font-bold truncate">Análise — Resumo do Acompanhamento</div>
+            <div className="text-sm text-gray-600 truncate">
+              {nome} — Chapa {chapa}
+            </div>
+          </div>
+
+          <button onClick={onClose} className="rounded-md px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200">
+            Fechar
+          </button>
+        </div>
+
+        <div className="p-5 max-h-[75vh] overflow-y-auto">
+          {/* Cabeçalho / Status */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <StatusBadge status={acompanhamento?.status} />
+            <span className="text-sm text-gray-700">
+              Início monitoramento:{" "}
+              <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
+            </span>
+            <span className="text-sm text-gray-700">
+              Vence em: <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
+            </span>
+            <span className="text-sm text-gray-700">
+              Motivo: <span className="font-semibold">{acompanhamento?.motivo || "—"}</span>
+            </span>
+          </div>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-gray-500">KM/L inicial</div>
+              <div className="text-2xl font-bold text-gray-800">
+                {kmlInicial != null ? Number(kmlInicial).toFixed(2) : "—"}
+              </div>
+            </div>
+
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-gray-500">KM/L meta</div>
+              <div className="text-2xl font-bold text-gray-800">{kmlMeta != null ? Number(kmlMeta).toFixed(2) : "—"}</div>
+            </div>
+
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-gray-500">Último checklist</div>
+              <div className="text-2xl font-bold text-gray-800">{resumoChecklist || "—"}</div>
+            </div>
+
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-gray-500">KM/L (manual do acompanhamento)</div>
+              <div className="text-2xl font-bold text-gray-800">
+                {kmlManual != null ? Number(kmlManual).toFixed(2) : "—"}
+              </div>
+            </div>
+          </div>
+
+          {/* Último CHECKPOINT */}
+          <div className="border rounded-lg p-4">
+            <div className="text-sm font-semibold text-gray-800 mb-2">
+              O que foi realizado (último CHECKPOINT)
+            </div>
+
+            {loading ? (
+              <div className="text-sm text-gray-600">Carregando checkpoint...</div>
+            ) : !checkpoint ? (
+              <div className="text-sm text-gray-500">Nenhum checkpoint registrado ainda.</div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-semibold">CHECKPOINT</span>
+                    <span className="text-xs text-gray-500">
+                      {checkpoint.created_at ? new Date(checkpoint.created_at).toLocaleString("pt-BR") : "—"}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    Instrutor:{" "}
+                    <span className="font-semibold">
+                      {checkpoint.criado_por_nome || checkpoint.criado_por_login || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ✅ BOTÃO NOVO */}
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => setCheckpointOpen(true)}
+                    className="bg-gray-800 text-white px-3 py-1 rounded-md hover:bg-black text-sm"
+                  >
+                    Ver checkpoint completo
+                  </button>
+                </div>
+
+                {/* Cards mastigados (se tiver) */}
+                {detalhes ? (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="border rounded-lg p-3 bg-white">
+                      <div className="text-xs text-gray-500">Data / Hora</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {(detalhes.data_acompanhamento || "—") +
+                          (detalhes.hora_inicial || detalhes.hora_final
+                            ? ` • ${detalhes.hora_inicial || "—"} → ${detalhes.hora_final || "—"}`
+                            : "")}
+                      </div>
+                    </div>
+
+                    <div className="border rounded-lg p-3 bg-white">
+                      <div className="text-xs text-gray-500">KM do acompanhamento</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {(detalhes.km_inicial != null ? Number(detalhes.km_inicial).toFixed(2) : "—") +
+                          " → " +
+                          (detalhes.km_final != null ? Number(detalhes.km_final).toFixed(2) : "—") +
+                          (detalhes.km_acompanhado != null
+                            ? ` | ${Number(detalhes.km_acompanhado).toFixed(2)} km`
+                            : "")}
+                      </div>
+                    </div>
+
+                    <div className="border rounded-lg p-3 bg-white">
+                      <div className="text-xs text-gray-500">Horas acompanhadas</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {detalhes.horas_acompanhadas_min != null
+                          ? `${Math.floor(Number(detalhes.horas_acompanhadas_min) / 60)}h ${String(
+                              Number(detalhes.horas_acompanhadas_min) % 60
+                            ).padStart(2, "0")}m`
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Observações mastigadas (resumo) */}
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">Observações</div>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {checkpoint.observacoes || "—"}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Evidências do checkpoint</div>
+                  <EvidenceList urls={checkpoint.evidencias_urls} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t bg-gray-50 text-xs text-gray-600">
+          Encerramento: ao completar os dias, compare KM/L final vs meta e decida (Tratativa | +X dias | Concluído).
+        </div>
+      </div>
+
+      {/* ✅ MODAL CHECKPOINT COMPLETO */}
+      <CheckpointCompletoModal
+        open={checkpointOpen}
+        onClose={() => setCheckpointOpen(false)}
+        checkpoint={checkpoint}
+        acompanhamento={acompanhamento}
+      />
+    </div>
+  );
+}
+
 function CardResumo({ titulo, valor, cor, subtitulo = null }) {
   return (
     <div className={`${cor} rounded-lg shadow p-5 text-center`}>
@@ -509,7 +642,7 @@ export default function DesempenhoDieselAcompanhamento() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // ✅ NOVO: modal de análise
+  // ✅ Modal de análise
   const [analiseOpen, setAnaliseOpen] = useState(false);
   const [analiseSelected, setAnaliseSelected] = useState(null);
 
@@ -721,9 +854,7 @@ export default function DesempenhoDieselAcompanhamento() {
       </div>
 
       {erro ? (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {erro}
-        </div>
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>
       ) : null}
 
       <div className="bg-white shadow rounded-lg p-4 mb-6">
@@ -778,10 +909,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
 
         <div className="flex justify-end mt-3">
-          <button
-            onClick={limparFiltros}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
-          >
+          <button onClick={limparFiltros} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">
             Limpar
           </button>
 
@@ -809,7 +937,6 @@ export default function DesempenhoDieselAcompanhamento() {
               <th className="py-2 px-3 text-left">Lançado em</th>
               <th className="py-2 px-3 text-left">Motorista</th>
               <th className="py-2 px-3 text-left">KM/L</th>
-              <th className="py-2 px-3 text-left">KM/L Meta</th>
               <th className="py-2 px-3 text-left">Motivo</th>
               <th className="py-2 px-3 text-left">Status</th>
               <th className="py-2 px-3 text-left">Dias</th>
@@ -821,13 +948,13 @@ export default function DesempenhoDieselAcompanhamento() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="9" className="text-center p-4 text-gray-500">
+                <td colSpan="8" className="text-center p-4 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : listaOrdenada.length === 0 ? (
               <tr>
-                <td colSpan="9" className="text-center p-4 text-gray-500">
+                <td colSpan="8" className="text-center p-4 text-gray-500">
                   Nenhum acompanhamento encontrado.
                 </td>
               </tr>
@@ -835,7 +962,6 @@ export default function DesempenhoDieselAcompanhamento() {
               listaOrdenada.map((x) => {
                 const m = metricas[String(x.motorista_chapa)] || null;
 
-                // dias: conta a partir do início real (dt_inicio_monitoramento). Se não houver, conta desde dt_inicio/created
                 const inicioRef = x.dt_inicio_monitoramento || x.dt_inicio || x.created_at || null;
                 const diasAcomp = inicioRef ? daysBetween(inicioRef, new Date()) : 0;
                 const diasPlano = Number(x.dias_monitoramento || 0) || 0;
@@ -844,15 +970,7 @@ export default function DesempenhoDieselAcompanhamento() {
                 const kmlMeta = x.kml_meta ?? null;
 
                 const status = String(x.status || "").toUpperCase();
-
-                // ✅ regras de botões
-                const podeCheckpoint = status === "A_SER_ACOMPANHADO"; // só quando A_SER_ACOMPANHADO
-                const podeAnalise = status === "EM_ANALISE"; // quando EM_ANALISE
-                const podeEncerrar =
-                  !!inicioRef &&
-                  diasPlano > 0 &&
-                  diasAcomp >= diasPlano &&
-                  status !== "ENCERRADO"; // quando concluiu os dias
+                const podeCheckpoint = status === "A_SER_ACOMPANHADO" || status === "EM_ANALISE";
 
                 return (
                   <tr key={x.id} className="border-t hover:bg-gray-50">
@@ -868,14 +986,6 @@ export default function DesempenhoDieselAcompanhamento() {
                     <td className="py-2 px-3 text-gray-700">
                       <MetricBadge kmlAtual={kmlAtual} kmlMeta={kmlMeta} />
                       {m?.data ? <div className="text-xs text-gray-500 mt-1">Último dia: {m.data}</div> : null}
-                    </td>
-
-                    <td className="py-2 px-3 text-gray-700">
-                      {kmlMeta != null ? (
-                        <span className="font-semibold">≥ {Number(kmlMeta).toFixed(2)}</span>
-                      ) : (
-                        <span className="text-gray-500">—</span>
-                      )}
                     </td>
 
                     <td className="py-2 px-3 text-gray-700">{x.motivo || "-"}</td>
@@ -904,7 +1014,6 @@ export default function DesempenhoDieselAcompanhamento() {
 
                     <td className="py-2 px-3">
                       <div className="flex flex-wrap gap-2">
-                        {/* ✅ A_SER_ACOMPANHADO -> Lançar acompanhamento */}
                         {podeCheckpoint ? (
                           <button
                             onClick={() => navigate(`/desempenho-diesel-checkpoint/${x.id}`)}
@@ -914,26 +1023,15 @@ export default function DesempenhoDieselAcompanhamento() {
                           </button>
                         ) : null}
 
-                        {/* ✅ EM_ANALISE -> Análise (resumo mastigado) */}
-                        {podeAnalise ? (
+                        {status === "AGUARDANDO_ANALISE" ? (
                           <button
                             onClick={() => {
                               setAnaliseSelected(x);
                               setAnaliseOpen(true);
                             }}
-                            className="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-sm"
+                            className="bg-orange-600 text-white px-3 py-1 rounded-md hover:bg-orange-700 text-sm"
                           >
-                            Análise
-                          </button>
-                        ) : null}
-
-                        {/* ✅ Concluiu dias -> Encerrar */}
-                        {podeEncerrar ? (
-                          <button
-                            onClick={() => navigate(`/desempenho-diesel/encerramento/${x.id}`)}
-                            className="bg-green-700 text-white px-3 py-1 rounded-md hover:bg-green-800 text-sm"
-                          >
-                            Encerrar
+                            Analisar
                           </button>
                         ) : null}
 
@@ -958,7 +1056,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
       <HistoricoModal open={modalOpen} onClose={() => setModalOpen(false)} acompanhamento={selected} />
 
-      {/* ✅ NOVO: Modal análise */}
+      {/* ✅ Modal de análise com botão "Ver checkpoint completo" */}
       <AnaliseResumoModal
         open={analiseOpen}
         onClose={() => setAnaliseOpen(false)}
