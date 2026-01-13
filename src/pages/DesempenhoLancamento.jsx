@@ -80,7 +80,7 @@ export default function DesempenhoLancamento() {
 
   const [prefixo, setPrefixo] = useState("");
   const [linha, setLinha] = useState("");
-  const [cluster, setCluster] = useState(""); // agora automático pelo prefixo
+  const [cluster, setCluster] = useState(""); // automático do prefixo
 
   // Lançamento (fila)
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
@@ -109,12 +109,11 @@ export default function DesempenhoLancamento() {
         if (eLinhas) throw eLinhas;
         setLinhasOpt(linhasData || []);
 
-        // PREFIXOS: ajuste os campos conforme sua tabela
-        // Aqui assumo que existe uma coluna "prefixo" OU "codigo", e a nova coluna "cluster"
+        // PREFIXOS: coluna do prefixo é "codigo" + coluna "cluster"
         const { data: prefData, error: ePref } = await supabase
           .from("prefixos")
-          .select("id, prefixo, codigo, descricao, cluster")
-          .order("prefixo", { ascending: true });
+          .select("id, codigo, descricao, cluster")
+          .order("codigo", { ascending: true });
 
         if (ePref) throw ePref;
         setPrefixosOpt(prefData || []);
@@ -126,8 +125,9 @@ export default function DesempenhoLancamento() {
     })();
   }, []);
 
+  // ✅ agora o valor do prefixo vem APENAS de "codigo"
   function getPrefixValue(row) {
-    return String(row?.prefixo || row?.codigo || "").trim();
+    return String(row?.codigo || "").trim();
   }
 
   function getPrefixLabel(row) {
@@ -140,7 +140,9 @@ export default function DesempenhoLancamento() {
     setPrefixo(v);
 
     // cluster automático pelo prefixo selecionado
-    const found = (prefixosOpt || []).find((r) => getPrefixValue(r) === String(v || "").trim());
+    const found = (prefixosOpt || []).find(
+      (r) => getPrefixValue(r) === String(v || "").trim()
+    );
     const cl = String(found?.cluster || "").trim();
     setCluster(cl);
   }
@@ -326,7 +328,9 @@ export default function DesempenhoLancamento() {
               onChange={(e) => onChangePrefixo(e.target.value)}
               disabled={refsLoading}
             >
-              <option value="">{refsLoading ? "Carregando..." : "Selecione o prefixo"}</option>
+              <option value="">
+                {refsLoading ? "Carregando..." : "Selecione o prefixo"}
+              </option>
               {prefixosOpt.map((p) => {
                 const val = getPrefixValue(p);
                 if (!val) return null;
@@ -337,7 +341,9 @@ export default function DesempenhoLancamento() {
                 );
               })}
             </select>
-            <p className="mt-1 text-xs text-gray-500">O cluster virá automaticamente do prefixo.</p>
+            <p className="mt-1 text-xs text-gray-500">
+              O cluster virá automaticamente do prefixo.
+            </p>
           </div>
 
           {/* Linha (select do banco) */}
@@ -349,7 +355,9 @@ export default function DesempenhoLancamento() {
               onChange={(e) => setLinha(e.target.value)}
               disabled={refsLoading}
             >
-              <option value="">{refsLoading ? "Carregando..." : "Selecione a linha"}</option>
+              <option value="">
+                {refsLoading ? "Carregando..." : "Selecione a linha"}
+              </option>
               {linhasOpt.map((l) => (
                 <option key={l.id || l.codigo} value={String(l.codigo || "").trim()}>
                   {String(l.codigo || "").trim()} — {String(l.descricao || "").trim()}
@@ -371,7 +379,11 @@ export default function DesempenhoLancamento() {
 
           <div className="md:col-span-2">
             <label className="block text-sm text-gray-600 mb-1">Tempo de monitoramento</label>
-            <input className="w-full rounded-md border px-3 py-2 bg-gray-50" value="10 dias" readOnly />
+            <input
+              className="w-full rounded-md border px-3 py-2 bg-gray-50"
+              value="10 dias"
+              readOnly
+            />
           </div>
 
           <div>
