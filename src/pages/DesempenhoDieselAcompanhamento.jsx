@@ -11,11 +11,11 @@ import { supabase } from "../supabase";
  * - Botões:
  *   - "Lançar acompanhamento" -> abre tela de detalhe do instrutor (checkpoint)
  *   - "Ver histórico" -> modal
- *   - "Analisar" -> quando AGUARDANDO_ANALISE (rota opcional)
+ *   - "Analisar" -> quando AGUARDANDO_ANALISE (modal de análise)
  *
  * ✅ AJUSTE AGORA:
- * - Dentro do modal de ANÁLISE, botão "Ver checkpoint completo"
- *   -> abre um modal com o CHECKPOINT completo (observações, métricas, período, extra e evidências)
+ * - EM_ANALISE: NÃO pode mostrar "Lançar acompanhamento". Deve mostrar botão "Análise".
+ * - Modal de ANÁLISE já possui botão "Ver checkpoint completo" (mantido).
  */
 
 function daysBetween(a, b) {
@@ -395,7 +395,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
   const [loading, setLoading] = useState(false);
   const [checkpoint, setCheckpoint] = useState(null);
 
-  // ✅ NOVO
   const [checkpointOpen, setCheckpointOpen] = useState(false);
 
   useEffect(() => {
@@ -405,7 +404,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
       setLoading(true);
       setCheckpoint(null);
 
-      // Pega o ÚLTIMO checkpoint do acompanhamento
       const { data, error } = await supabase
         .from("diesel_acompanhamento_eventos")
         .select(
@@ -432,8 +430,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
   const kmlInicial = acompanhamento?.kml_inicial ?? null;
   const kmlMeta = acompanhamento?.kml_meta ?? null;
 
-  // Manual do acompanhamento (se você estiver salvando em algum lugar)
-  // Aqui mantive como fallback em metadata, ajuste se seu schema for diferente.
   const kmlManual = acompanhamento?.metadata?.kml_manual ?? null;
 
   const resumoChecklist = checkpoint?.extra?.checklist_resumo ?? "—";
@@ -456,7 +452,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
         </div>
 
         <div className="p-5 max-h-[75vh] overflow-y-auto">
-          {/* Cabeçalho / Status */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusBadge status={acompanhamento?.status} />
             <span className="text-sm text-gray-700">
@@ -471,7 +466,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
             </span>
           </div>
 
-          {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
             <div className="border rounded-lg p-4">
               <div className="text-xs text-gray-500">KM/L inicial</div>
@@ -482,7 +476,9 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
 
             <div className="border rounded-lg p-4">
               <div className="text-xs text-gray-500">KM/L meta</div>
-              <div className="text-2xl font-bold text-gray-800">{kmlMeta != null ? Number(kmlMeta).toFixed(2) : "—"}</div>
+              <div className="text-2xl font-bold text-gray-800">
+                {kmlMeta != null ? Number(kmlMeta).toFixed(2) : "—"}
+              </div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -498,11 +494,8 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
             </div>
           </div>
 
-          {/* Último CHECKPOINT */}
           <div className="border rounded-lg p-4">
-            <div className="text-sm font-semibold text-gray-800 mb-2">
-              O que foi realizado (último CHECKPOINT)
-            </div>
+            <div className="text-sm font-semibold text-gray-800 mb-2">O que foi realizado (último CHECKPOINT)</div>
 
             {loading ? (
               <div className="text-sm text-gray-600">Carregando checkpoint...</div>
@@ -526,7 +519,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                   </div>
                 </div>
 
-                {/* ✅ BOTÃO NOVO */}
                 <div className="mt-2 flex justify-end">
                   <button
                     onClick={() => setCheckpointOpen(true)}
@@ -536,7 +528,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                   </button>
                 </div>
 
-                {/* Cards mastigados (se tiver) */}
                 {detalhes ? (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="border rounded-lg p-3 bg-white">
@@ -574,12 +565,9 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                   </div>
                 ) : null}
 
-                {/* Observações mastigadas (resumo) */}
                 <div className="mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-1">Observações</div>
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
-                    {checkpoint.observacoes || "—"}
-                  </div>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap">{checkpoint.observacoes || "—"}</div>
                 </div>
 
                 <div className="mt-3">
@@ -596,7 +584,6 @@ function AnaliseResumoModal({ open, onClose, acompanhamento }) {
         </div>
       </div>
 
-      {/* ✅ MODAL CHECKPOINT COMPLETO */}
       <CheckpointCompletoModal
         open={checkpointOpen}
         onClose={() => setCheckpointOpen(false)}
@@ -642,7 +629,6 @@ export default function DesempenhoDieselAcompanhamento() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // ✅ Modal de análise
   const [analiseOpen, setAnaliseOpen] = useState(false);
   const [analiseSelected, setAnaliseSelected] = useState(null);
 
@@ -651,9 +637,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
     if (f.busca) {
       const q = String(f.busca).replaceAll(",", " ");
-      query = query.or(
-        `motorista_nome.ilike.%${q}%,motorista_chapa.ilike.%${q}%,motivo.ilike.%${q}%`
-      );
+      query = query.or(`motorista_nome.ilike.%${q}%,motorista_chapa.ilike.%${q}%,motivo.ilike.%${q}%`);
     }
 
     if (f.status) query = query.eq("status", f.status);
@@ -712,9 +696,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }
 
   async function carregarMetricas() {
-    const { data, error } = await supabase
-      .from("v_diesel_metricas_motorista_ultima")
-      .select("chapa, nome, data, km, litros, kml, fonte");
+    const { data, error } = await supabase.from("v_diesel_metricas_motorista_ultima").select("chapa, nome, data, km, litros, kml, fonte");
 
     if (error) {
       console.error("Erro ao carregar métricas:", error);
@@ -731,9 +713,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }
 
   async function carregarContadores() {
-    let qTotal = supabase
-      .from("v_diesel_acompanhamentos_resumo")
-      .select("id", { count: "exact", head: true });
+    let qTotal = supabase.from("v_diesel_acompanhamentos_resumo").select("id", { count: "exact", head: true });
     qTotal = applyCommonFilters(qTotal);
     const { count: total } = await qTotal;
 
@@ -744,10 +724,7 @@ export default function DesempenhoDieselAcompanhamento() {
     qAser = applyCommonFilters(qAser);
     const { count: aser } = await qAser;
 
-    let qEm = supabase
-      .from("v_diesel_acompanhamentos_resumo")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "EM_ANALISE");
+    let qEm = supabase.from("v_diesel_acompanhamentos_resumo").select("id", { count: "exact", head: true }).eq("status", "EM_ANALISE");
     qEm = applyCommonFilters(qEm);
     const { count: em } = await qEm;
 
@@ -836,10 +813,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate("/desempenho-lancamento")}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
+          <button onClick={() => navigate("/desempenho-lancamento")} className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
             Lançar acompanhamento
           </button>
 
@@ -853,9 +827,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      {erro ? (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>
-      ) : null}
+      {erro ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div> : null}
 
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
@@ -970,7 +942,11 @@ export default function DesempenhoDieselAcompanhamento() {
                 const kmlMeta = x.kml_meta ?? null;
 
                 const status = String(x.status || "").toUpperCase();
-                const podeCheckpoint = status === "A_SER_ACOMPANHADO" || status === "EM_ANALISE";
+
+                // ✅ AJUSTE: EM_ANALISE NÃO pode mais cair em "Lançar acompanhamento"
+                const podeCheckpoint = status === "A_SER_ACOMPANHADO";
+                const podeAnalise = status === "EM_ANALISE";
+                const podeAnalisar = status === "AGUARDANDO_ANALISE";
 
                 return (
                   <tr key={x.id} className="border-t hover:bg-gray-50">
@@ -1023,7 +999,19 @@ export default function DesempenhoDieselAcompanhamento() {
                           </button>
                         ) : null}
 
-                        {status === "AGUARDANDO_ANALISE" ? (
+                        {podeAnalise ? (
+                          <button
+                            onClick={() => {
+                              setAnaliseSelected(x);
+                              setAnaliseOpen(true);
+                            }}
+                            className="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-sm"
+                          >
+                            Análise
+                          </button>
+                        ) : null}
+
+                        {podeAnalisar ? (
                           <button
                             onClick={() => {
                               setAnaliseSelected(x);
@@ -1056,12 +1044,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
       <HistoricoModal open={modalOpen} onClose={() => setModalOpen(false)} acompanhamento={selected} />
 
-      {/* ✅ Modal de análise com botão "Ver checkpoint completo" */}
-      <AnaliseResumoModal
-        open={analiseOpen}
-        onClose={() => setAnaliseOpen(false)}
-        acompanhamento={analiseSelected}
-      />
+      <AnaliseResumoModal open={analiseOpen} onClose={() => setAnaliseOpen(false)} acompanhamento={analiseSelected} />
     </div>
   );
 }
