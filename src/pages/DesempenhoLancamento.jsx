@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
-import CampoPrefixo from "../components/CampoPrefixo"; // ✅ ADICIONADO
+import CampoPrefixo from "../components/CampoPrefixo";
 import { useAuth } from "../context/AuthContext";
 
 const MOTIVOS = [
@@ -71,26 +71,27 @@ async function uploadManyToStorage({ files, bucket, folder }) {
 export default function DesempenhoLancamento() {
   const { user } = useAuth ? useAuth() : { user: null };
 
-  // refs (linhas)
   const [linhasOpt, setLinhasOpt] = useState([]);
   const [refsLoading, setRefsLoading] = useState(false);
 
-  // Dados do lançamento
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
-
   const [prefixo, setPrefixo] = useState("");
   const [linha, setLinha] = useState("");
-  const [cluster, setCluster] = useState(""); // ✅ automático via CampoPrefixo
+  const [cluster, setCluster] = useState("");
 
-  // Lançamento (fila)
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [motivoOutro, setMotivoOutro] = useState("");
-  const dias = 10; // fixo no fluxo novo
+  const dias = 10;
+
   const [kmlInicial, setKmlInicial] = useState("");
 
-  // ✅ NOVO: observação inicial
-  const [observacaoInicial, setObservacaoInicial] = useState("");
+  // ✅ NOVO: KM/L meta
+  const [kmlMeta, setKmlMeta] = useState("");
 
+  const [periodoInicio, setPeriodoInicio] = useState("");
+  const [periodoFim, setPeriodoFim] = useState("");
+
+  const [observacaoInicial, setObservacaoInicial] = useState("");
   const [evidAcomp, setEvidAcomp] = useState([]);
 
   const [saving, setSaving] = useState(false);
@@ -99,7 +100,6 @@ export default function DesempenhoLancamento() {
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
-  // ========= Carregar LINHAS =========
   useEffect(() => {
     (async () => {
       setRefsLoading(true);
@@ -140,10 +140,15 @@ export default function DesempenhoLancamento() {
 
     const motivoOk = String(motivoFinal || "").trim().length > 0;
     const kmlOk = String(kmlInicial || "").trim().length > 0;
-    const evidOk = (evidAcomp || []).length > 0;
 
-    return motivoOk && kmlOk && evidOk;
-  }, [motorista, prefixo, linha, cluster, motivoFinal, kmlInicial, evidAcomp]);
+    // ✅ meta obrigatória
+    const metaOk = String(kmlMeta || "").trim().length > 0;
+
+    const evidOk = (evidAcomp || []).length > 0;
+    const periodoOk = String(periodoInicio || "").trim() && String(periodoFim || "").trim();
+
+    return motivoOk && kmlOk && metaOk && evidOk && periodoOk;
+  }, [motorista, prefixo, linha, cluster, motivoFinal, kmlInicial, kmlMeta, evidAcomp, periodoInicio, periodoFim]);
 
   function limpar() {
     setMotorista({ chapa: "", nome: "" });
@@ -153,10 +158,10 @@ export default function DesempenhoLancamento() {
     setMotivo(MOTIVOS[0]);
     setMotivoOutro("");
     setKmlInicial("");
-
-    // ✅ NOVO
+    setKmlMeta("");
+    setPeriodoInicio("");
+    setPeriodoFim("");
     setObservacaoInicial("");
-
     setEvidAcomp([]);
     setErrMsg("");
     setOkMsg("");
@@ -174,7 +179,6 @@ export default function DesempenhoLancamento() {
       const lancadorNome = user?.nome || null;
       const lancadorIdNum = user?.id ?? null;
 
-      // Upload evidências do lançamento
       const folder = `diesel/acompanhamentos/${motorista.chapa || "sem_chapa"}/lancamento_${Date.now()}`;
       const uploaded = await uploadManyToStorage({
         files: evidAcomp,
@@ -184,10 +188,8 @@ export default function DesempenhoLancamento() {
 
       const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
 
-      // ✅ NOVO
       const obsInit = String(observacaoInicial || "").trim() || null;
 
-      // INSERT: fila semanal -> A_SER_ACOMPANHADO
       const payloadAcomp = {
         motorista_chapa: String(motorista?.chapa || "").trim(),
         motorista_nome: String(motorista?.nome || "").trim() || null,
@@ -195,19 +197,19 @@ export default function DesempenhoLancamento() {
         status: "A_SER_ACOMPANHADO",
         dias_monitoramento: Number(dias),
 
-        // fila
         dt_inicio: new Date().toISOString().slice(0, 10),
         dt_inicio_monitoramento: null,
         dt_fim_planejado: null,
         dt_fim_real: null,
 
         kml_inicial: Number(kmlInicial),
-        kml_meta: null,
+
+        // ✅ NOVO: grava meta aqui
+        kml_meta: Number(kmlMeta),
+
         kml_final: null,
 
-        // ✅ NOVO: persistência
         observacao_inicial: obsInit,
-
         evidencias_urls: evidenciasUrls,
 
         instrutor_login: null,
@@ -223,6 +225,9 @@ export default function DesempenhoLancamento() {
           lancado_por_login: lancadorLogin,
           lancado_por_nome: lancadorNome,
           lancado_por_usuario_id: lancadorIdNum,
+
+          lancamento_periodo_inicio: String(periodoInicio || "").trim(),
+          lancamento_periodo_fim: String(periodoFim || "").trim(),
         },
       };
 
@@ -234,20 +239,17 @@ export default function DesempenhoLancamento() {
 
       if (eA) throw eA;
 
-      // Evento LANCAMENTO
       const payloadEvento = {
         acompanhamento_id: acomp.id,
         tipo: "LANCAMENTO",
-
-        // ✅ ATUALIZADO: agora leva observação + motivo (sem mexer no resto)
         observacoes: obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal,
-
         evidencias_urls: evidenciasUrls,
-        km: null,
-        litros: null,
+
+        // guarda kml inicial e meta no evento
         kml: Number(kmlInicial),
-        periodo_inicio: null,
-        periodo_fim: null,
+        periodo_inicio: String(periodoInicio || "").trim() || null,
+        periodo_fim: String(periodoFim || "").trim() || null,
+
         criado_por_login: lancadorLogin,
         criado_por_nome: lancadorNome,
         criado_por_id: isUuid(user?.id) ? user.id : null,
@@ -255,6 +257,9 @@ export default function DesempenhoLancamento() {
           prefixo: String(prefixo || "").trim(),
           linha: String(linha || "").trim(),
           cluster: String(cluster || "").trim(),
+
+          kml_meta: Number(kmlMeta),
+          evidencias_kml_inicial: true,
         },
       };
 
@@ -264,7 +269,7 @@ export default function DesempenhoLancamento() {
 
       if (eE) throw eE;
 
-      setOkMsg("Lançamento realizado com sucesso. O caso está em 'A ser acompanhado'.");
+      setOkMsg("Lançamento realizado com sucesso.");
       limpar();
     } catch (err) {
       console.error(err);
@@ -279,8 +284,7 @@ export default function DesempenhoLancamento() {
       <div className="mb-4">
         <h1 className="text-2xl font-bold">Desempenho Diesel — Lançamento</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Aqui você apenas lança a fila da semana. O monitoramento de 10 dias começa no primeiro
-          acompanhamento do instrutor.
+          Aqui você lança a fila. O monitoramento de 10 dias começa no primeiro acompanhamento do instrutor.
         </p>
       </div>
 
@@ -304,7 +308,6 @@ export default function DesempenhoLancamento() {
             <CampoMotorista value={motorista} onChange={setMotorista} label="Motorista" />
           </div>
 
-          {/* ✅ Prefixo via componente */}
           <div className="md:col-span-2">
             <CampoPrefixo
               value={prefixo}
@@ -315,7 +318,6 @@ export default function DesempenhoLancamento() {
             />
           </div>
 
-          {/* Linha (select do banco) */}
           <div>
             <label className="block text-sm text-gray-600 mb-1">Linha</label>
             <select
@@ -333,7 +335,6 @@ export default function DesempenhoLancamento() {
             </select>
           </div>
 
-          {/* Cluster automático */}
           <div>
             <label className="block text-sm text-gray-600 mb-1">Cluster (automático)</label>
             <input
@@ -360,6 +361,40 @@ export default function DesempenhoLancamento() {
               onChange={(e) => setKmlInicial(e.target.value)}
               disabled={saving}
             />
+          </div>
+
+          {/* ✅ NOVO: meta */}
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">KM/L meta (obrigatório)</label>
+            <input
+              type="number"
+              step="0.01"
+              className="w-full rounded-md border px-3 py-2"
+              placeholder="Ex.: 2.65"
+              value={kmlMeta}
+              onChange={(e) => setKmlMeta(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-600 mb-1">Período analisado do KM/L (obrigatório)</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input
+                type="date"
+                className="w-full rounded-md border px-3 py-2"
+                value={periodoInicio}
+                onChange={(e) => setPeriodoInicio(e.target.value)}
+                disabled={saving}
+              />
+              <input
+                type="date"
+                className="w-full rounded-md border px-3 py-2"
+                value={periodoFim}
+                onChange={(e) => setPeriodoFim(e.target.value)}
+                disabled={saving}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -394,15 +429,11 @@ export default function DesempenhoLancamento() {
         )}
       </div>
 
-      {/* ✅ NOVO: Observação inicial (antes das evidências) */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold mb-2">Observação inicial</h2>
-        <p className="text-sm text-gray-600 mb-2">
-          Descreva o contexto do lançamento. Essa observação aparecerá no Checkpoint do Instrutor.
-        </p>
         <textarea
           className="w-full min-h-[110px] rounded-md border px-3 py-2"
-          placeholder="Ex.: motorista abaixo da meta há 3 dias; orientado sobre aceleração e troca de marcha..."
+          placeholder="Contexto do lançamento..."
           value={observacaoInicial}
           onChange={(e) => setObservacaoInicial(e.target.value)}
           disabled={saving}
@@ -410,11 +441,8 @@ export default function DesempenhoLancamento() {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-        <h2 className="text-lg font-semibold mb-3">Evidências do lançamento</h2>
+        <h2 className="text-lg font-semibold mb-3">Evidências do KM/L (lançamento)</h2>
 
-        <label className="block text-sm text-gray-600 mb-1">
-          Evidências — múltiplos arquivos + PDF (obrigatório)
-        </label>
         <input
           type="file"
           multiple
