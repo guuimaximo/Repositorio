@@ -165,6 +165,44 @@ function minutesToHoursStr(mins) {
   return `${h}h ${String(m).padStart(2, "0")}m`;
 }
 
+// ✅ NOVO: nome amigável do link
+function filenameFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const p = u.pathname || "";
+    const last = p.split("/").pop() || url;
+    return decodeURIComponent(last).slice(0, 80);
+  } catch {
+    const parts = String(url || "").split("/");
+    return parts[parts.length - 1] || String(url || "");
+  }
+}
+
+function PublicUrlList({ title, urls }) {
+  const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  if (arr.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <div className="text-xs text-gray-500 mb-1">{title}</div>
+      <div className="border rounded-md bg-white">
+        {arr.map((u, idx) => (
+          <div key={`${u}-${idx}`} className="px-3 py-2 border-b last:border-b-0">
+            <a
+              href={u}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-blue-700 hover:underline break-all"
+            >
+              {filenameFromUrl(u)}
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DesempenhoDieselCheckpoint() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -180,11 +218,11 @@ export default function DesempenhoDieselCheckpoint() {
   const [itensChecklist, setItensChecklist] = useState([]);
   const [respostasChecklist, setRespostasChecklist] = useState({});
 
-  // Observações e evidências (já existiam)
+  // Observações e evidências (checkpoint)
   const [observacoes, setObservacoes] = useState("");
   const [evidencias, setEvidencias] = useState([]);
 
-  // ✅ NOVO: Detalhes do acompanhamento (data/hora/km)
+  // ✅ Detalhes do acompanhamento (data/hora/km)
   const [detalhes, setDetalhes] = useState({
     data_acompanhamento: "",
     hora_inicial: "",
@@ -193,7 +231,7 @@ export default function DesempenhoDieselCheckpoint() {
     km_final: "",
   });
 
-  // (mantém seu cálculo de período KM/L durante o teste)
+  // KM/L durante o teste (período)
   const [periodo, setPeriodo] = useState({
     km_total: null,
     litros_total: null,
@@ -232,7 +270,12 @@ export default function DesempenhoDieselCheckpoint() {
               "metadata",
               "kml_meta",
 
-              // ✅ NOVO: campos do detalhe
+              // ✅ NOVO: origem do lançamento
+              "kml_inicial",
+              "observacao_inicial",
+              "evidencias_urls",
+
+              // campos do detalhe
               "data_acompanhamento",
               "hora_inicial",
               "hora_final",
@@ -246,7 +289,6 @@ export default function DesempenhoDieselCheckpoint() {
         if (error) throw error;
         setAcomp(data || null);
 
-        // ✅ NOVO: carregar detalhes do acompanhamento já salvos
         setDetalhes({
           data_acompanhamento: data?.data_acompanhamento || "",
           hora_inicial: data?.hora_inicial || "",
@@ -378,14 +420,12 @@ export default function DesempenhoDieselCheckpoint() {
 
   const itensPorGrupo = useMemo(() => groupItems(itensChecklist), [itensChecklist]);
 
-  // ✅ NOVO: resumo automático do acompanhamento (horas/km)
   const resumoDetalhes = useMemo(() => {
     const iniMin = parseTimeToMinutes(detalhes.hora_inicial);
     const fimMin = parseTimeToMinutes(detalhes.hora_final);
 
     let minutos = null;
     if (iniMin != null && fimMin != null) {
-      // se virou o dia (ex.: 23:00 -> 01:00), soma 24h
       minutos = fimMin >= iniMin ? fimMin - iniMin : fimMin + 24 * 60 - iniMin;
     }
 
@@ -441,8 +481,6 @@ export default function DesempenhoDieselCheckpoint() {
           checklist_oknok: true,
           checklist_resumo: checklistResumo,
           checklist_faltando: faltandoResponder,
-
-          // ✅ NOVO: snapshot do detalhe + resumo
           detalhes_acompanhamento: {
             data_acompanhamento: detalhes.data_acompanhamento || null,
             hora_inicial: detalhes.hora_inicial || null,
@@ -478,7 +516,6 @@ export default function DesempenhoDieselCheckpoint() {
       const { error: eChk } = await supabase.from("diesel_checklist_respostas").insert(payloadChecklist);
       if (eChk) throw eChk;
 
-      // ✅ NOVO: persistir os campos do detalhe no acompanhamento
       const payloadUpdate = {
         status: "EM_ANALISE",
         instrutor_login: instrutorLogin,
@@ -539,6 +576,10 @@ export default function DesempenhoDieselCheckpoint() {
   }
 
   const meta = acomp?.kml_meta;
+  const kmlInicialLancado = acomp?.kml_inicial; // ✅ NOVO
+  const obsInicialLancada = acomp?.observacao_inicial; // ✅ NOVO
+  const evidLancamento = Array.isArray(acomp?.evidencias_urls) ? acomp.evidencias_urls : []; // ✅ NOVO
+
   const prefixo = acomp?.metadata?.prefixo || "—";
   const linha = acomp?.metadata?.linha || "—";
   const cluster = acomp?.metadata?.cluster || "—";
@@ -576,6 +617,12 @@ export default function DesempenhoDieselCheckpoint() {
             <div className="text-xs text-gray-500">Motorista</div>
             <div className="font-semibold text-gray-800">{acomp.motorista_nome || "—"}</div>
             <div className="text-xs text-gray-500">Chapa {acomp.motorista_chapa || "—"}</div>
+
+            {/* ✅ NOVO: KM/L inicial do lançamento */}
+            <div className="mt-2 text-xs text-gray-500">KM/L inicial (lançamento)</div>
+            <div className="text-sm font-semibold text-gray-800">
+              {kmlInicialLancado != null ? Number(kmlInicialLancado).toFixed(2) : "—"}
+            </div>
           </div>
 
           <div>
@@ -613,6 +660,19 @@ export default function DesempenhoDieselCheckpoint() {
             </span>
           ) : null}
         </div>
+
+        {/* ✅ NOVO: Observação inicial do lançamento (quando existir) */}
+        {String(obsInicialLancada || "").trim() ? (
+          <div className="mt-3 rounded-md border bg-gray-50 p-3">
+            <div className="text-xs text-gray-500 mb-1">Observação inicial (lançamento)</div>
+            <div className="text-sm text-gray-800 whitespace-pre-wrap">
+              {String(obsInicialLancada || "").trim()}
+            </div>
+          </div>
+        ) : null}
+
+        {/* ✅ NOVO: Evidências do lançamento */}
+        <PublicUrlList title="Evidências do lançamento" urls={evidLancamento} />
       </div>
 
       {/* Checklist (OK/NOK) */}
@@ -670,7 +730,7 @@ export default function DesempenhoDieselCheckpoint() {
         )}
       </div>
 
-      {/* ✅ NOVO: Detalhes do acompanhamento (ANTES das Observações) */}
+      {/* Detalhes do acompanhamento */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold text-gray-800">Detalhes do acompanhamento</h2>
 
@@ -732,7 +792,6 @@ export default function DesempenhoDieselCheckpoint() {
           </div>
         </div>
 
-        {/* Resumo automático */}
         <div className="mt-4 border rounded-lg p-3 bg-gray-50">
           <div className="text-sm font-semibold text-gray-800 mb-2">Resumo</div>
 
