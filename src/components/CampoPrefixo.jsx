@@ -1,109 +1,105 @@
 // src/components/CampoPrefixo.jsx
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabase";
+// (Corrigido para usar a coluna 'codigo')
 
-/**
- * CampoPrefixo
- * - Carrega prefixos da tabela `prefixos`
- * - Usa `codigo` como valor
- * - Ao selecionar, dispara:
- *    - onChange(codigo)
- *    - onChangeCluster(cluster)  ✅ (se fornecido)
- */
-export default function CampoPrefixo({
-  value,
-  onChange,
-  onChangeCluster,
-  disabled = false,
-  label = "Prefixo",
-}) {
-  const [loading, setLoading] = useState(false);
-  const [opts, setOpts] = useState([]);
-  const [err, setErr] = useState("");
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../supabase'
 
+export default function CampoPrefixo({ value, onChange, label = 'Prefixo' }) {
+  const [todos, setTodos] = useState([])
+  const [q, setQ] = useState('') 
+  const [open, setOpen] = useState(false)
+  const [errorLoading, setErrorLoading] = useState(null); 
+
+  // 1. Carrega todos os prefixos
   useEffect(() => {
-    let mounted = true;
-
+    setErrorLoading(null); 
     (async () => {
-      setLoading(true);
-      setErr("");
-      try {
-        const { data, error } = await supabase
-          .from("prefixos")
-          .select("id, codigo, descricao, cluster")
-          .order("codigo", { ascending: true });
+      // --- CORREÇÃO AQUI: Usa 'codigo' ---
+      const { data, error } = await supabase
+        .from('prefixos') 
+        .select('id, codigo') // Alterado de 'codigo_prefixo' para 'codigo'
+        .order('codigo', { ascending: true }); // Alterado de 'codigo_prefixo' para 'codigo'
+      // --- FIM CORREÇÃO ---
 
-        if (error) throw error;
-        if (!mounted) return;
-        setOpts(data || []);
-      } catch (e) {
-        console.error(e);
-        if (!mounted) return;
-        setErr(e?.message || "Erro ao carregar prefixos.");
-        setOpts([]);
-      } finally {
-        if (mounted) setLoading(false);
+      if (error) {
+        console.error("Erro ao buscar prefixos:", error);
+        setErrorLoading("Falha ao carregar prefixos. Verifique o console.");
+        setTodos([]); 
+      } else {
+        setTodos(data || []);
       }
-    })();
+    })()
+  }, [])
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const mapByCodigo = useMemo(() => {
-    const m = new Map();
-    (opts || []).forEach((r) => {
-      const codigo = String(r?.codigo || "").trim();
-      if (codigo) m.set(codigo, r);
-    });
-    return m;
-  }, [opts]);
-
-  function handleChange(v) {
-    const codigo = String(v || "").trim();
-
-    // 1) atualiza o prefixo no pai
-    onChange?.(codigo);
-
-    // 2) atualiza cluster no pai (se existir)
-    if (onChangeCluster) {
-      const row = mapByCodigo.get(codigo);
-      const cl = String(row?.cluster || "").trim();
-      onChangeCluster(cl);
+  // 2. Abre o dropdown
+  useEffect(() => {
+    if (!String(q || '')) {
+      setOpen(false);
+      return;
     }
+    setOpen(filtrados.length > 0); 
+  }, [q]) 
+
+  // 3. Filtra os prefixos
+  const filtrados = useMemo(() => {
+    const s = String(q || '').trim().toLowerCase(); 
+    if (!s) return [];
+    if (!Array.isArray(todos)) return []; 
+
+    return todos
+      .filter(
+        (p) =>
+          // --- CORREÇÃO AQUI: Usa 'codigo' ---
+          String(p.codigo || '').toLowerCase().startsWith(s) // Alterado de 'codigo_prefixo' para 'codigo'
+          // --- FIM CORREÇÃO ---
+      )
+      .slice(0, 8)
+  }, [q, todos])
+
+  // 4. Aplica a seleção
+  function aplicar(p) {
+    // --- CORREÇÃO AQUI: Usa 'codigo' ---
+    onChange?.(p.codigo); // Alterado de 'codigo_prefixo' para 'codigo'
+    setQ(p.codigo);       // Alterado de 'codigo_prefixo' para 'codigo'
+    // --- FIM CORREÇÃO ---
+    setOpen(false);
   }
 
+  // 5. Sincroniza o input
+  useEffect(() => {
+    setQ(String(value || '')); 
+  }, [value])
+
   return (
-    <div>
+    <div className="relative">
       <label className="block text-sm text-gray-600 mb-1">{label}</label>
-
-      <select
-        className="w-full rounded-md border px-3 py-2 bg-white"
-        value={String(value || "")}
-        onChange={(e) => handleChange(e.target.value)}
-        disabled={disabled || loading}
-      >
-        <option value="">
-          {loading ? "Carregando..." : "Selecione o prefixo"}
-        </option>
-
-        {(opts || []).map((p) => {
-          const codigo = String(p?.codigo || "").trim();
-          if (!codigo) return null;
-
-          const desc = String(p?.descricao || "").trim();
-          const labelOpt = desc ? `${codigo} — ${desc}` : codigo;
-
-          return (
-            <option key={p.id || codigo} value={codigo}>
-              {labelOpt}
-            </option>
-          );
-        })}
-      </select>
-
-      {err ? <div className="mt-1 text-xs text-red-600">{err}</div> : null}
+      <input
+        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder={errorLoading ? "Erro ao carregar" : "Digite o prefixo…"}
+        value={q}
+        onChange={(e) => setQ(e.target.value)} 
+        onFocus={() => { if (q && filtrados.length > 0) setOpen(true) }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} 
+        required
+        disabled={!!errorLoading} 
+      />
+       {errorLoading && <div className="text-red-600 text-xs mt-1">{errorLoading}</div>}
+      {open && filtrados.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
+          {filtrados.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={() => aplicar(p)} 
+              className="block w-full text-left px-3 py-2 hover:bg-gray-100"
+            >
+              {/* --- CORREÇÃO AQUI: Usa 'codigo' --- */}
+              <div className="text-sm font-medium">{p.codigo}</div> 
+              {/* --- FIM CORREÇÃO --- */}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
-  );
+  )
 }
