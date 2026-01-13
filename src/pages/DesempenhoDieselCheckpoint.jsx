@@ -101,10 +101,7 @@ function EvidenceList({ list, onRemove }) {
 }
 
 /* ===========================
-   ✅ NOVO: Checklist OK/NOK dinâmico (Supabase)
-   - Tabela: diesel_checklist_itens
-   - Respostas: diesel_checklist_respostas
-   - true = OK / false = NOK
+   Checklist OK/NOK dinâmico
 =========================== */
 
 function groupItems(items) {
@@ -123,8 +120,6 @@ function groupItems(items) {
 }
 
 function OkNokToggle({ value, onChange }) {
-  const v = value === true ? "OK" : value === false ? "NOK" : "—";
-
   return (
     <div className="flex items-center gap-2">
       <button
@@ -146,8 +141,6 @@ function OkNokToggle({ value, onChange }) {
       >
         NOK
       </button>
-
-      <span className="text-xs text-gray-500">{v}</span>
     </div>
   );
 }
@@ -164,9 +157,7 @@ export default function DesempenhoDieselCheckpoint() {
 
   const [acomp, setAcomp] = useState(null);
 
-  // ✅ NOVO: itens do checklist (catálogo)
   const [itensChecklist, setItensChecklist] = useState([]);
-  // ✅ NOVO: respostas boolean por codigo (true OK / false NOK)
   const [respostasChecklist, setRespostasChecklist] = useState({});
 
   const [observacoes, setObservacoes] = useState("");
@@ -181,7 +172,6 @@ export default function DesempenhoDieselCheckpoint() {
       try {
         if (!id) throw new Error("ID inválido.");
 
-        // 1) acompanhamento
         const { data, error } = await supabase
           .from("diesel_acompanhamentos")
           .select(
@@ -192,7 +182,6 @@ export default function DesempenhoDieselCheckpoint() {
         if (error) throw error;
         setAcomp(data || null);
 
-        // 2) catálogo do checklist (itens ativos)
         const itens = await supabase
           .from("diesel_checklist_itens")
           .select("id, grupo, ordem, codigo, descricao, ajuda, ativo")
@@ -202,9 +191,6 @@ export default function DesempenhoDieselCheckpoint() {
 
         if (itens.error) throw itens.error;
         setItensChecklist(itens.data || []);
-
-        // inicia respostas como NOK por padrão? (opção)
-        // Aqui eu deixo "não marcado" (undefined) e você decide no OK/NOK.
         setRespostasChecklist({});
       } catch (e) {
         console.error(e);
@@ -245,10 +231,12 @@ export default function DesempenhoDieselCheckpoint() {
     if (!acomp?.id) return false;
     if (!String(observacoes || "").trim()) return false;
     if ((evidencias || []).length === 0) return false;
-    // ✅ obrigatório: checklist completo (sem itens em branco)
     if ((itensChecklist || []).length > 0 && faltandoResponder > 0) return false;
     return true;
   }, [acomp?.id, observacoes, evidencias, itensChecklist, faltandoResponder]);
+
+  // ✅ CORREÇÃO CRÍTICA: este useMemo precisa ficar ANTES de qualquer return condicional
+  const itensPorGrupo = useMemo(() => groupItems(itensChecklist), [itensChecklist]);
 
   async function salvarCheckpoint() {
     if (!pronto || saving) return;
@@ -260,12 +248,10 @@ export default function DesempenhoDieselCheckpoint() {
     try {
       if (!acomp?.id) throw new Error("Acompanhamento inválido.");
 
-      // instrutor (logado)
       const instrutorLogin = user?.login || user?.email || null;
       const instrutorNome = user?.nome || null;
       const instrutorId = isUuid(user?.id) ? user.id : null;
 
-      // upload evidências
       const folder = `diesel/acompanhamentos/${acomp.motorista_chapa || "sem_chapa"}/checkpoint_${Date.now()}`;
       const uploaded = await uploadManyToStorage({
         files: evidencias,
@@ -274,7 +260,6 @@ export default function DesempenhoDieselCheckpoint() {
       });
       const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
 
-      // datas (primeiro checkpoint inicia monitoramento)
       const hoje = toISODate();
       const diasMonitoramento = Number(acomp.dias_monitoramento || 10) || 10;
 
@@ -282,17 +267,11 @@ export default function DesempenhoDieselCheckpoint() {
       const dtInicioMon = isPrimeiro ? hoje : acomp.dt_inicio_monitoramento;
       const dtFimPlan = isPrimeiro ? addDaysISO(hoje, diasMonitoramento) : acomp.dt_fim_planejado;
 
-      // 1) evento CHECKPOINT (mantém seu histórico)
       const payloadEvento = {
         acompanhamento_id: acomp.id,
         tipo: "CHECKPOINT",
         observacoes: `Checklist (OK/NOK): ${checklistResumo}\n\n${String(observacoes || "").trim()}`,
         evidencias_urls: evidenciasUrls,
-        km: null,
-        litros: null,
-        kml: null,
-        periodo_inicio: null,
-        periodo_fim: null,
         criado_por_login: instrutorLogin,
         criado_por_nome: instrutorNome,
         criado_por_id: instrutorId,
@@ -308,11 +287,8 @@ export default function DesempenhoDieselCheckpoint() {
         .insert(payloadEvento)
         .select("id")
         .single();
-
       if (eEvt) throw eEvt;
 
-      // 2) ✅ NOVO: salva o checklist em tabela própria (histórico)
-      // true = OK / false = NOK
       const payloadChecklist = {
         acompanhamento_id: acomp.id,
         evento_id: evtData?.id || null,
@@ -322,18 +298,14 @@ export default function DesempenhoDieselCheckpoint() {
         versao: 1,
         respostas: respostasChecklist || {},
         observacoes: String(observacoes || "").trim(),
-        // resumo é calculado pelo trigger (se você rodou o SQL que enviei),
-        // mas pode enviar também sem problema:
         resumo: checklistResumo,
       };
 
       const { error: eChk } = await supabase
         .from("diesel_checklist_respostas")
         .insert(payloadChecklist);
-
       if (eChk) throw eChk;
 
-      // 3) update acompanhamento: inicia monitoramento e muda status
       const payloadUpdate = {
         status: "EM_ANALISE",
         instrutor_login: instrutorLogin,
@@ -352,12 +324,10 @@ export default function DesempenhoDieselCheckpoint() {
         .from("diesel_acompanhamentos")
         .update(payloadUpdate)
         .eq("id", acomp.id);
-
       if (eUp) throw eUp;
 
       setOkMsg(isPrimeiro ? "Checkpoint salvo. Monitoramento iniciado." : "Checkpoint salvo.");
-
-      setTimeout(() => navigate("/desempenho-diesel#acompanhamento"), 300);
+      setTimeout(() => navigate("/desempenho-diesel-acompanhamento"), 300);
     } catch (e) {
       console.error(e);
       setErrMsg(e?.message || "Erro ao salvar checkpoint.");
@@ -382,7 +352,7 @@ export default function DesempenhoDieselCheckpoint() {
         </div>
         <button
           className="mt-4 rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
-          onClick={() => navigate("/desempenho-diesel#acompanhamento")}
+          onClick={() => navigate("/desempenho-diesel-acompanhamento")}
         >
           Voltar
         </button>
@@ -395,8 +365,6 @@ export default function DesempenhoDieselCheckpoint() {
   const linha = acomp?.metadata?.linha || "—";
   const cluster = acomp?.metadata?.cluster || "—";
 
-  const itensPorGrupo = useMemo(() => groupItems(itensChecklist), [itensChecklist]);
-
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -408,7 +376,7 @@ export default function DesempenhoDieselCheckpoint() {
         </div>
         <button
           className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
-          onClick={() => navigate("/desempenho-diesel#acompanhamento")}
+          onClick={() => navigate("/desempenho-diesel-acompanhamento")}
           disabled={saving}
         >
           Voltar
@@ -427,7 +395,6 @@ export default function DesempenhoDieselCheckpoint() {
         </div>
       )}
 
-      {/* Resumo do caso (mantém como você já tinha) */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -473,7 +440,6 @@ export default function DesempenhoDieselCheckpoint() {
         </div>
       </div>
 
-      {/* ✅ NOVO: Checklist OK/NOK */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">Checklist (OK/NOK)</h2>
@@ -499,7 +465,7 @@ export default function DesempenhoDieselCheckpoint() {
 
                 <div className="space-y-3">
                   {itensPorGrupo[grupo].map((it) => {
-                    const val = respostasChecklist?.[it.codigo]; // true/false/undefined
+                    const val = respostasChecklist?.[it.codigo];
                     return (
                       <div
                         key={it.codigo}
@@ -528,7 +494,6 @@ export default function DesempenhoDieselCheckpoint() {
         )}
       </div>
 
-      {/* Observações */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold text-gray-800 mb-2">Observações (obrigatório)</h2>
         <textarea
@@ -539,7 +504,6 @@ export default function DesempenhoDieselCheckpoint() {
         />
       </div>
 
-      {/* Evidências */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h2 className="text-lg font-semibold text-gray-800 mb-2">Evidências (obrigatório)</h2>
         <input
@@ -552,7 +516,6 @@ export default function DesempenhoDieselCheckpoint() {
         <EvidenceList list={evidencias} onRemove={removeFile} />
       </div>
 
-      {/* Ações */}
       <div className="flex items-center justify-end gap-3">
         <button
           className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
