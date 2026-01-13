@@ -35,6 +35,9 @@ import DesempenhoDieselAcompanhamento from "./pages/DesempenhoDieselAcompanhamen
 import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 
+// ✅ NOVO: Checkpoint do instrutor
+import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -59,6 +62,12 @@ export default function App() {
           <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
+
+          {/* ✅ NOVO: rota do checkpoint */}
+          <Route
+            path="/desempenho-diesel-checkpoint/:id"
+            element={<DesempenhoDieselCheckpoint />}
+          />
 
           {/* (opcional) mantém /desempenho-diesel vivo, redirecionando pro Resumo */}
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
