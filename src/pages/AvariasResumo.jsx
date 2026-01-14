@@ -21,11 +21,6 @@ function safeLower(v) {
   return String(v || "").trim().toLowerCase();
 }
 
-// Mesmos helpers do Cobranças (para não divergir)
-function pickDataAvariaRaw(c) {
-  return c?.dataAvaria || c?.data_avaria || c?.created_at || null;
-}
-
 function normalizeOrigem(row) {
   const raw = row?.origem || row?.origem_cobranca || "";
   const s = safeLower(raw);
@@ -43,7 +38,7 @@ function normalizeStatusCobranca(row) {
   return row.status_cobranca;
 }
 
-function toMonthKey(dateRaw) {
+function toMonthKeyFromDataAvaria(dateRaw) {
   if (!dateRaw) return null;
   const d = new Date(dateRaw);
   if (Number.isNaN(d.getTime())) return null;
@@ -93,19 +88,32 @@ export default function AvariasResumo() {
   const [origemFiltro, setOrigemFiltro] = useState(""); // "", "Interno", "Externo"
 
   // =========
-  // Carregar base (IGUAL ao Cobranças)
+  // Carregar base (igual Cobranças) e usando dataAvaria
   // =========
   const carregar = async () => {
     setLoading(true);
     setErrMsg("");
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("avarias")
       .select(
-        "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, data_avaria, created_at"
+        "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, created_at"
       )
       .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
+
+    // filtros por dataAvaria no BACKEND (direto e correto)
+    if (dataInicio) query = query.gte("dataAvaria", dataInicio);
+    if (dataFim) query = query.lte("dataAvaria", `${dataFim}T23:59:59`);
+
+    // filtro por origem (mesma ideia do Cobranças)
+    if (origemFiltro) {
+      query = query.or(
+        `origem.ilike.${origemFiltro},origem_cobranca.ilike.${origemFiltro}`
+      );
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("AvariasResumo: erro ao carregar:", error);
@@ -119,51 +127,32 @@ export default function AvariasResumo() {
     setLoading(false);
   };
 
+  // carrega na primeira vez
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // =========
-  // Filtros no front (robusto)
-  // =========
-  const filteredRows = useMemo(() => {
-    let base = [...rows];
-
-    if (origemFiltro) {
-      base = base.filter((r) => normalizeOrigem(r) === origemFiltro);
-    }
-
-    if (dataInicio || dataFim) {
-      const ini = dataInicio ? new Date(`${dataInicio}T00:00:00`) : null;
-      const fim = dataFim ? new Date(`${dataFim}T23:59:59`) : null;
-
-      base = base.filter((r) => {
-        const dr = pickDataAvariaRaw(r);
-        if (!dr) return false;
-        const d = new Date(dr);
-        if (Number.isNaN(d.getTime())) return false;
-        if (ini && d < ini) return false;
-        if (fim && d > fim) return false;
-        return true;
-      });
-    }
-
-    return base;
-  }, [rows, origemFiltro, dataInicio, dataFim]);
+  // recarrega quando filtros mudarem (como Cobranças)
+  useEffect(() => {
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataInicio, dataFim, origemFiltro]);
 
   // =========
-  // KPIs (inclui Sem origem)
+  // KPIs
   // =========
   const kpis = useMemo(() => {
-    const base = filteredRows;
+    const base = rows;
 
     const interno = base.filter((r) => normalizeOrigem(r) === "Interno");
     const externo = base.filter((r) => normalizeOrigem(r) === "Externo");
-    const semOrigem = base.filter((r) => !normalizeOrigem(r)); // origem/origem_cobranca vazios
+    const semOrigem = base.filter((r) => !normalizeOrigem(r));
 
-    const sumOrcado = (arr) => arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
-    const sumCobrado = (arr) => arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
+    const sumOrcado = (arr) =>
+      arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
+    const sumCobrado = (arr) =>
+      arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
 
     const pendentes = base.filter((r) => normalizeStatusCobranca(r) === "Pendente");
     const cobradas = base.filter((r) => normalizeStatusCobranca(r) === "Cobrada");
@@ -195,16 +184,16 @@ export default function AvariasResumo() {
       cancQtde: canceladas.length,
       cancOrcado: sumOrcado(canceladas),
     };
-  }, [filteredRows]);
+  }, [rows]);
 
   // =========
-  // Gráfico por mês
+  // Gráfico por mês (usando SOMENTE dataAvaria)
   // =========
   const chartData = useMemo(() => {
     const map = new Map();
 
-    for (const r of filteredRows) {
-      const key = toMonthKey(pickDataAvariaRaw(r));
+    for (const r of rows) {
+      const key = toMonthKeyFromDataAvaria(r.dataAvaria);
       if (!key) continue;
 
       if (!map.has(key)) map.set(key, { mes: key, qtde: 0, orcado: 0, cobrado: 0 });
@@ -218,16 +207,16 @@ export default function AvariasResumo() {
     return Array.from(map.values())
       .sort((a, b) => (a.mes > b.mes ? 1 : -1))
       .map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
-  }, [filteredRows]);
+  }, [rows]);
 
-  const hasData = filteredRows.length > 0;
+  const hasData = rows.length > 0;
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex flex-col gap-1 mb-5">
         <h1 className="text-2xl font-semibold text-gray-800">Resumo de Avarias</h1>
         <p className="text-sm text-gray-500">
-          Base: avarias com status = Aprovado (mesma lógica da Central de Cobranças).
+          Base: avarias com status = Aprovado. Data oficial: dataAvaria.
         </p>
       </div>
 
@@ -291,7 +280,7 @@ export default function AvariasResumo() {
         </button>
 
         <div className="ml-auto text-xs text-gray-500">
-          {loading ? "Carregando..." : `${filteredRows.length} registro(s) no período`}
+          {loading ? "Carregando..." : `${rows.length} registro(s) no período`}
         </div>
       </div>
 
@@ -352,7 +341,9 @@ export default function AvariasResumo() {
         </div>
 
         {!loading && !hasData ? (
-          <div className="text-sm text-gray-500 py-10 text-center">Sem dados para exibir com os filtros atuais.</div>
+          <div className="text-sm text-gray-500 py-10 text-center">
+            Sem dados para exibir com os filtros atuais.
+          </div>
         ) : (
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer>
