@@ -1,7 +1,7 @@
 // src/components/desempenho/AnaliseResumoModal.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabase";
-import { EvidenceList } from "./Evidencias";
+import EvidenceList from "./EvidenceList";
 import CheckpointCompletoModal from "./CheckpointCompletoModal";
 
 function StatusBadge({ status }) {
@@ -11,11 +11,9 @@ function StatusBadge({ status }) {
   if (s === "OK") return <span className={`${base} bg-green-100 text-green-800`}>OK</span>;
   if (s === "PIOROU_TRATATIVA") return <span className={`${base} bg-red-100 text-red-800`}>Piorou</span>;
   if (s === "ENCERRADO") return <span className={`${base} bg-gray-100 text-gray-800`}>Encerrado</span>;
-  if (s === "AGUARDANDO_ANALISE")
-    return <span className={`${base} bg-orange-100 text-orange-800`}>Aguardando análise</span>;
+  if (s === "AGUARDANDO_ANALISE") return <span className={`${base} bg-orange-100 text-orange-800`}>Aguardando análise</span>;
   if (s === "EM_ANALISE") return <span className={`${base} bg-blue-100 text-blue-800`}>Em análise</span>;
-  if (s === "A_SER_ACOMPANHADO")
-    return <span className={`${base} bg-yellow-100 text-yellow-800`}>A ser acompanhado</span>;
+  if (s === "A_SER_ACOMPANHADO") return <span className={`${base} bg-yellow-100 text-yellow-800`}>A ser acompanhado</span>;
 
   return <span className={`${base} bg-gray-100 text-gray-800`}>{s || "—"}</span>;
 }
@@ -23,8 +21,6 @@ function StatusBadge({ status }) {
 export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
   const [loading, setLoading] = useState(false);
   const [checkpoint, setCheckpoint] = useState(null);
-
-  // abre o modal do checkpoint completo
   const [checkpointOpen, setCheckpointOpen] = useState(false);
 
   useEffect(() => {
@@ -34,7 +30,6 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
       setLoading(true);
       setCheckpoint(null);
 
-      // último checkpoint do acompanhamento
       const { data, error } = await supabase
         .from("diesel_acompanhamento_eventos")
         .select(
@@ -81,12 +76,10 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
         </div>
 
         <div className="p-5 max-h-[75vh] overflow-y-auto">
-          {/* Cabeçalho */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusBadge status={acompanhamento?.status} />
             <span className="text-sm text-gray-700">
-              Início monitoramento:{" "}
-              <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
+              Início monitoramento: <span className="font-semibold">{acompanhamento?.dt_inicio_monitoramento || "—"}</span>
             </span>
             <span className="text-sm text-gray-700">
               Vence em: <span className="font-semibold">{acompanhamento?.dt_fim_planejado || "—"}</span>
@@ -96,20 +89,15 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
             </span>
           </div>
 
-          {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
             <div className="border rounded-lg p-4">
               <div className="text-xs text-gray-500">KM/L inicial</div>
-              <div className="text-2xl font-bold text-gray-800">
-                {kmlInicial != null ? Number(kmlInicial).toFixed(2) : "—"}
-              </div>
+              <div className="text-2xl font-bold text-gray-800">{kmlInicial != null ? Number(kmlInicial).toFixed(2) : "—"}</div>
             </div>
 
             <div className="border rounded-lg p-4">
               <div className="text-xs text-gray-500">KM/L meta</div>
-              <div className="text-2xl font-bold text-gray-800">
-                {kmlMeta != null ? Number(kmlMeta).toFixed(2) : "—"}
-              </div>
+              <div className="text-2xl font-bold text-gray-800">{kmlMeta != null ? Number(kmlMeta).toFixed(2) : "—"}</div>
             </div>
 
             <div className="border rounded-lg p-4">
@@ -119,13 +107,10 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
 
             <div className="border rounded-lg p-4">
               <div className="text-xs text-gray-500">KM/L (manual do acompanhamento)</div>
-              <div className="text-2xl font-bold text-gray-800">
-                {kmlManual != null ? Number(kmlManual).toFixed(2) : "—"}
-              </div>
+              <div className="text-2xl font-bold text-gray-800">{kmlManual != null ? Number(kmlManual).toFixed(2) : "—"}</div>
             </div>
           </div>
 
-          {/* Último CHECKPOINT */}
           <div className="border rounded-lg p-4">
             <div className="text-sm font-semibold text-gray-800 mb-2">O que foi realizado (último CHECKPOINT)</div>
 
@@ -144,14 +129,10 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                   </div>
 
                   <div className="text-xs text-gray-500">
-                    Instrutor:{" "}
-                    <span className="font-semibold">
-                      {checkpoint.criado_por_nome || checkpoint.criado_por_login || "—"}
-                    </span>
+                    Instrutor: <span className="font-semibold">{checkpoint.criado_por_nome || checkpoint.criado_por_login || "—"}</span>
                   </div>
                 </div>
 
-                {/* ✅ Botão dentro da análise */}
                 <div className="mt-2 flex justify-end">
                   <button
                     onClick={() => setCheckpointOpen(true)}
@@ -161,7 +142,6 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                   </button>
                 </div>
 
-                {/* Cards mastigados (se tiver no extra) */}
                 {detalhes ? (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="border rounded-lg p-3 bg-white">
@@ -180,9 +160,7 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
                         {(detalhes.km_inicial != null ? Number(detalhes.km_inicial).toFixed(2) : "—") +
                           " → " +
                           (detalhes.km_final != null ? Number(detalhes.km_final).toFixed(2) : "—") +
-                          (detalhes.km_acompanhado != null
-                            ? ` | ${Number(detalhes.km_acompanhado).toFixed(2)} km`
-                            : "")}
+                          (detalhes.km_acompanhado != null ? ` | ${Number(detalhes.km_acompanhado).toFixed(2)} km` : "")}
                       </div>
                     </div>
 
@@ -218,7 +196,6 @@ export default function AnaliseResumoModal({ open, onClose, acompanhamento }) {
         </div>
       </div>
 
-      {/* Modal de checklist completo */}
       <CheckpointCompletoModal
         open={checkpointOpen}
         onClose={() => setCheckpointOpen(false)}
