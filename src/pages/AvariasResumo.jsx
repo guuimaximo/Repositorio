@@ -21,13 +21,18 @@ function safeLower(v) {
   return String(v || "").trim().toLowerCase();
 }
 
+function isAprovado(status) {
+  const s = safeLower(status);
+  return s === "aprovado" || s === "aprovada" || s === "aprovado(a)";
+}
+
 function normalizeOrigem(row) {
-  // aceita origem / origem_cobranca e normaliza "interno" / "externo"
+  // aceita origem / origem_cobranca e normaliza "Interno" / "Externo"
   const raw = row?.origem ?? row?.origem_cobranca ?? "";
   const s = safeLower(raw);
   if (s === "interno" || s === "interna") return "Interno";
   if (s === "externo" || s === "externa") return "Externo";
-  return raw ? String(raw) : "Não informado";
+  return raw ? String(raw) : ""; // <- aqui devolve string vazia quando não tem origem
 }
 
 function normalizeStatusCobranca(row) {
@@ -39,7 +44,7 @@ function normalizeStatusCobranca(row) {
 }
 
 function pickBestDate(row) {
-  // dá prioridade para data da avaria; senão usa created_at
+  // prioridade: data da avaria; senão created_at
   return row?.dataAvaria || row?.data_avaria || row?.created_at || null;
 }
 
@@ -53,7 +58,6 @@ function toMonthKey(dateRaw) {
 }
 
 function monthLabel(ym) {
-  // ym: YYYY-MM
   const [y, m] = String(ym || "").split("-");
   if (!y || !m) return ym;
   const map = {
@@ -98,9 +102,6 @@ export default function AvariasResumo() {
   const carregar = async () => {
     setLoading(true);
 
-    // Importante: não confie em um único campo de data no WHERE,
-    // porque sua base pode estar populada em data_avaria OU dataAvaria.
-    // Então filtramos no front por pickBestDate().
     const { data, error } = await supabase
       .from("avarias")
       .select(
@@ -114,8 +115,8 @@ export default function AvariasResumo() {
       return;
     }
 
-    // filtro base: manter só aprovadas (mas robusto)
-    const aprovadas = (data || []).filter((r) => safeLower(r.status) === "aprovado");
+    // filtro base: manter só aprovadas (robusto)
+    const aprovadas = (data || []).filter((r) => isAprovado(r.status));
 
     setRows(aprovadas);
     setLoading(false);
@@ -127,7 +128,7 @@ export default function AvariasResumo() {
   }, []);
 
   // =========
-  // Aplicar filtros (data e origem) SEM zerar por coluna errada
+  // Aplicar filtros (data e origem)
   // =========
   const filteredRows = useMemo(() => {
     let base = [...rows];
@@ -155,16 +156,19 @@ export default function AvariasResumo() {
   }, [rows, origemFiltro, dataInicio, dataFim]);
 
   // =========
-  // KPIs (profissional: Interno x Externo + Cobranças)
+  // KPIs (inclui "Sem origem")
   // =========
   const kpis = useMemo(() => {
     const base = filteredRows;
 
     const interno = base.filter((r) => normalizeOrigem(r) === "Interno");
     const externo = base.filter((r) => normalizeOrigem(r) === "Externo");
+    const semOrigem = base.filter((r) => !normalizeOrigem(r)); // <- vazio/nulo
 
-    const sumOrcado = (arr) => arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
-    const sumCobrado = (arr) => arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
+    const sumOrcado = (arr) =>
+      arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
+    const sumCobrado = (arr) =>
+      arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
 
     const pendentes = base.filter((r) => normalizeStatusCobranca(r) === "Pendente");
     const cobradas = base.filter((r) => normalizeStatusCobranca(r) === "Cobrada");
@@ -182,6 +186,10 @@ export default function AvariasResumo() {
       externoQtde: externo.length,
       externoOrcado: sumOrcado(externo),
       externoCobrado: sumCobrado(externo),
+
+      semOrigemQtde: semOrigem.length,
+      semOrigemOrcado: sumOrcado(semOrigem),
+      semOrigemCobrado: sumCobrado(semOrigem),
 
       pendQtde: pendentes.length,
       pendOrcado: sumOrcado(pendentes),
@@ -205,12 +213,7 @@ export default function AvariasResumo() {
       if (!key) continue;
 
       if (!map.has(key)) {
-        map.set(key, {
-          mes: key,
-          qtde: 0,
-          orcado: 0,
-          cobrado: 0,
-        });
+        map.set(key, { mes: key, qtde: 0, orcado: 0, cobrado: 0 });
       }
 
       const item = map.get(key);
@@ -230,11 +233,11 @@ export default function AvariasResumo() {
       <div className="flex flex-col gap-1 mb-5">
         <h1 className="text-2xl font-semibold text-gray-800">Resumo de Avarias</h1>
         <p className="text-sm text-gray-500">
-          Visão consolidada de avarias aprovadas, com comparativo Interno x Externo e status de cobrança.
+          Visão consolidada de avarias aprovadas, com comparativo Interno x Externo, sem origem e status de cobrança.
         </p>
       </div>
 
-      {/* Filtros (profissional e objetivo) */}
+      {/* Filtros */}
       <div className="bg-white border rounded-xl shadow-sm p-4 mb-6 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col">
           <label className="text-xs text-gray-500 mb-1">Origem</label>
@@ -293,21 +296,43 @@ export default function AvariasResumo() {
       </div>
 
       {/* KPIs principais */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <KPI
           title="Total (Aprovadas)"
           value={loading ? "-" : kpis.totalQtde}
-          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.totalOrcado)} | Cobrado: ${moneyBRL(kpis.totalCobrado)}`}
+          sub={
+            loading
+              ? ""
+              : `Orçado: ${moneyBRL(kpis.totalOrcado)} | Cobrado: ${moneyBRL(kpis.totalCobrado)}`
+          }
         />
         <KPI
           title="Interno"
           value={loading ? "-" : kpis.internoQtde}
-          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.internoOrcado)} | Cobrado: ${moneyBRL(kpis.internoCobrado)}`}
+          sub={
+            loading
+              ? ""
+              : `Orçado: ${moneyBRL(kpis.internoOrcado)} | Cobrado: ${moneyBRL(kpis.internoCobrado)}`
+          }
         />
         <KPI
           title="Externo"
           value={loading ? "-" : kpis.externoQtde}
-          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.externoOrcado)} | Cobrado: ${moneyBRL(kpis.externoCobrado)}`}
+          sub={
+            loading
+              ? ""
+              : `Orçado: ${moneyBRL(kpis.externoOrcado)} | Cobrado: ${moneyBRL(kpis.externoCobrado)}`
+          }
+        />
+        <KPI
+          title="Sem origem"
+          value={loading ? "-" : kpis.semOrigemQtde}
+          sub={
+            loading
+              ? ""
+              : `Orçado: ${moneyBRL(kpis.semOrigemOrcado)} | Cobrado: ${moneyBRL(kpis.semOrigemCobrado)}`
+          }
+          tone="bg-gray-50"
         />
       </div>
 
