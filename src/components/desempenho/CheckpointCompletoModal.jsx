@@ -1,6 +1,6 @@
 // src/components/desempenho/CheckpointCompletoModal.jsx
 import React from "react";
-import { EvidenceList } from "./Evidencias";
+import EvidenceList from "./EvidenceList";
 
 export default function CheckpointCompletoModal({ open, onClose, checkpoint, acompanhamento }) {
   if (!open) return null;
@@ -45,13 +45,11 @@ export default function CheckpointCompletoModal({ open, onClose, checkpoint, aco
                 </div>
               </div>
 
-              {/* Observações */}
               <div className="mt-3">
                 <div className="text-xs font-semibold text-gray-700 mb-1">Observações</div>
                 <div className="text-sm text-gray-700 whitespace-pre-wrap">{checkpoint.observacoes || "—"}</div>
               </div>
 
-              {/* Métricas */}
               {(checkpoint.kml ?? checkpoint.km ?? checkpoint.litros) != null ? (
                 <div className="mt-3 text-xs text-gray-600">
                   {checkpoint.kml != null && (
@@ -72,7 +70,6 @@ export default function CheckpointCompletoModal({ open, onClose, checkpoint, aco
                 </div>
               ) : null}
 
-              {/* Período */}
               {(checkpoint.periodo_inicio || checkpoint.periodo_fim) ? (
                 <div className="mt-2 text-xs text-gray-600">
                   Período: <span className="font-semibold">{checkpoint.periodo_inicio || "—"}</span> até{" "}
@@ -80,7 +77,6 @@ export default function CheckpointCompletoModal({ open, onClose, checkpoint, aco
                 </div>
               ) : null}
 
-              {/* Extra (JSON) */}
               {checkpoint.extra ? (
                 <details className="mt-4">
                   <summary className="cursor-pointer text-sm font-semibold text-gray-700">
@@ -92,7 +88,6 @@ export default function CheckpointCompletoModal({ open, onClose, checkpoint, aco
                 </details>
               ) : null}
 
-              {/* Evidências */}
               <div className="mt-4">
                 <div className="text-xs font-semibold text-gray-700 mb-2">Evidências</div>
                 <EvidenceList urls={checkpoint.evidencias_urls} />
@@ -102,7 +97,7 @@ export default function CheckpointCompletoModal({ open, onClose, checkpoint, aco
         </div>
 
         <div className="px-5 py-4 border-t bg-gray-50 text-xs text-gray-600">
-          Exibe o registro completo do último CHECKPOINT (inclui checklist, métricas, período, extra e evidências).
+          Registro completo do último CHECKPOINT.
         </div>
       </div>
     </div>
