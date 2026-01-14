@@ -21,11 +21,15 @@ function safeLower(v) {
   return String(v || "").trim().toLowerCase();
 }
 
+// Mesmos helpers do Cobranças (para não divergir)
+function pickDataAvariaRaw(c) {
+  return c?.dataAvaria || c?.data_avaria || c?.created_at || null;
+}
+
 function normalizeOrigem(row) {
-  // mesma lógica do Cobranças: usa origem e fallback origem_cobranca
   const raw = row?.origem || row?.origem_cobranca || "";
   const s = safeLower(raw);
-  if (!s) return ""; // importante: vazio = sem origem
+  if (!s) return ""; // sem origem
   if (s === "interno" || s === "interna") return "Interno";
   if (s === "externo" || s === "externa") return "Externo";
   return String(raw);
@@ -37,11 +41,6 @@ function normalizeStatusCobranca(row) {
   if (s === "cobrada") return "Cobrada";
   if (s === "cancelada") return "Cancelada";
   return row.status_cobranca;
-}
-
-function pickBestDate(row) {
-  // igual ao Resumo atual: tenta dataAvaria, depois data_avaria, depois created_at
-  return row?.dataAvaria || row?.data_avaria || row?.created_at || null;
 }
 
 function toMonthKey(dateRaw) {
@@ -86,6 +85,7 @@ function KPI({ title, value, sub, tone = "bg-white" }) {
 export default function AvariasResumo() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
+  const [errMsg, setErrMsg] = useState("");
 
   // filtros
   const [dataInicio, setDataInicio] = useState("");
@@ -93,22 +93,24 @@ export default function AvariasResumo() {
   const [origemFiltro, setOrigemFiltro] = useState(""); // "", "Interno", "Externo"
 
   // =========
-  // Carregar base (MESMA BASE do Cobranças)
+  // Carregar base (IGUAL ao Cobranças)
   // =========
   const carregar = async () => {
     setLoading(true);
+    setErrMsg("");
 
     const { data, error } = await supabase
       .from("avarias")
       .select(
         "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, data_avaria, created_at"
       )
-      .eq("status", "Aprovado") // <- MESMO critério do Cobranças
+      .eq("status", "Aprovado")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("AvariasResumo: erro ao carregar avarias:", error.message);
+      console.error("AvariasResumo: erro ao carregar:", error);
       setRows([]);
+      setErrMsg(error.message || "Erro ao carregar dados.");
       setLoading(false);
       return;
     }
@@ -123,7 +125,7 @@ export default function AvariasResumo() {
   }, []);
 
   // =========
-  // Aplicar filtros (data e origem) no FRONT (robusto)
+  // Filtros no front (robusto)
   // =========
   const filteredRows = useMemo(() => {
     let base = [...rows];
@@ -137,7 +139,7 @@ export default function AvariasResumo() {
       const fim = dataFim ? new Date(`${dataFim}T23:59:59`) : null;
 
       base = base.filter((r) => {
-        const dr = pickBestDate(r);
+        const dr = pickDataAvariaRaw(r);
         if (!dr) return false;
         const d = new Date(dr);
         if (Number.isNaN(d.getTime())) return false;
@@ -151,19 +153,17 @@ export default function AvariasResumo() {
   }, [rows, origemFiltro, dataInicio, dataFim]);
 
   // =========
-  // KPIs (inclui "Sem origem")
+  // KPIs (inclui Sem origem)
   // =========
   const kpis = useMemo(() => {
     const base = filteredRows;
 
     const interno = base.filter((r) => normalizeOrigem(r) === "Interno");
     const externo = base.filter((r) => normalizeOrigem(r) === "Externo");
-    const semOrigem = base.filter((r) => !normalizeOrigem(r)); // <- vazio/nulo
+    const semOrigem = base.filter((r) => !normalizeOrigem(r)); // origem/origem_cobranca vazios
 
-    const sumOrcado = (arr) =>
-      arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
-    const sumCobrado = (arr) =>
-      arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
+    const sumOrcado = (arr) => arr.reduce((s, r) => s + Number(r.valor_total_orcamento || 0), 0);
+    const sumCobrado = (arr) => arr.reduce((s, r) => s + Number(r.valor_cobrado || 0), 0);
 
     const pendentes = base.filter((r) => normalizeStatusCobranca(r) === "Pendente");
     const cobradas = base.filter((r) => normalizeStatusCobranca(r) === "Cobrada");
@@ -204,12 +204,10 @@ export default function AvariasResumo() {
     const map = new Map();
 
     for (const r of filteredRows) {
-      const key = toMonthKey(pickBestDate(r));
+      const key = toMonthKey(pickDataAvariaRaw(r));
       if (!key) continue;
 
-      if (!map.has(key)) {
-        map.set(key, { mes: key, qtde: 0, orcado: 0, cobrado: 0 });
-      }
+      if (!map.has(key)) map.set(key, { mes: key, qtde: 0, orcado: 0, cobrado: 0 });
 
       const item = map.get(key);
       item.qtde += 1;
@@ -217,8 +215,9 @@ export default function AvariasResumo() {
       item.cobrado += Number(r.valor_cobrado || 0);
     }
 
-    const arr = Array.from(map.values()).sort((a, b) => (a.mes > b.mes ? 1 : -1));
-    return arr.map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
+    return Array.from(map.values())
+      .sort((a, b) => (a.mes > b.mes ? 1 : -1))
+      .map((x) => ({ ...x, mesLabel: monthLabel(x.mes) }));
   }, [filteredRows]);
 
   const hasData = filteredRows.length > 0;
@@ -228,9 +227,15 @@ export default function AvariasResumo() {
       <div className="flex flex-col gap-1 mb-5">
         <h1 className="text-2xl font-semibold text-gray-800">Resumo de Avarias</h1>
         <p className="text-sm text-gray-500">
-          Visão consolidada de avarias aprovadas, com comparativo Interno x Externo, sem origem e status de cobrança.
+          Base: avarias com status = Aprovado (mesma lógica da Central de Cobranças).
         </p>
       </div>
+
+      {!!errMsg && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+          Erro ao carregar: {errMsg}
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white border rounded-xl shadow-sm p-4 mb-6 flex flex-wrap gap-3 items-end">
@@ -295,38 +300,22 @@ export default function AvariasResumo() {
         <KPI
           title="Total (Aprovadas)"
           value={loading ? "-" : kpis.totalQtde}
-          sub={
-            loading
-              ? ""
-              : `Orçado: ${moneyBRL(kpis.totalOrcado)} | Cobrado: ${moneyBRL(kpis.totalCobrado)}`
-          }
+          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.totalOrcado)} | Cobrado: ${moneyBRL(kpis.totalCobrado)}`}
         />
         <KPI
           title="Interno"
           value={loading ? "-" : kpis.internoQtde}
-          sub={
-            loading
-              ? ""
-              : `Orçado: ${moneyBRL(kpis.internoOrcado)} | Cobrado: ${moneyBRL(kpis.internoCobrado)}`
-          }
+          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.internoOrcado)} | Cobrado: ${moneyBRL(kpis.internoCobrado)}`}
         />
         <KPI
           title="Externo"
           value={loading ? "-" : kpis.externoQtde}
-          sub={
-            loading
-              ? ""
-              : `Orçado: ${moneyBRL(kpis.externoOrcado)} | Cobrado: ${moneyBRL(kpis.externoCobrado)}`
-          }
+          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.externoOrcado)} | Cobrado: ${moneyBRL(kpis.externoCobrado)}`}
         />
         <KPI
           title="Sem origem"
           value={loading ? "-" : kpis.semOrigemQtde}
-          sub={
-            loading
-              ? ""
-              : `Orçado: ${moneyBRL(kpis.semOrigemOrcado)} | Cobrado: ${moneyBRL(kpis.semOrigemCobrado)}`
-          }
+          sub={loading ? "" : `Orçado: ${moneyBRL(kpis.semOrigemOrcado)} | Cobrado: ${moneyBRL(kpis.semOrigemCobrado)}`}
           tone="bg-gray-50"
         />
       </div>
@@ -363,9 +352,7 @@ export default function AvariasResumo() {
         </div>
 
         {!loading && !hasData ? (
-          <div className="text-sm text-gray-500 py-10 text-center">
-            Sem dados para exibir com os filtros atuais.
-          </div>
+          <div className="text-sm text-gray-500 py-10 text-center">Sem dados para exibir com os filtros atuais.</div>
         ) : (
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer>
