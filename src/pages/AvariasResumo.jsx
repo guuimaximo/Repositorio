@@ -21,18 +21,14 @@ function safeLower(v) {
   return String(v || "").trim().toLowerCase();
 }
 
-function isAprovado(status) {
-  const s = safeLower(status);
-  return s === "aprovado" || s === "aprovada" || s === "aprovado(a)";
-}
-
 function normalizeOrigem(row) {
-  // aceita origem / origem_cobranca e normaliza "Interno" / "Externo"
-  const raw = row?.origem ?? row?.origem_cobranca ?? "";
+  // mesma lógica do Cobranças: usa origem e fallback origem_cobranca
+  const raw = row?.origem || row?.origem_cobranca || "";
   const s = safeLower(raw);
+  if (!s) return ""; // importante: vazio = sem origem
   if (s === "interno" || s === "interna") return "Interno";
   if (s === "externo" || s === "externa") return "Externo";
-  return raw ? String(raw) : ""; // <- aqui devolve string vazia quando não tem origem
+  return String(raw);
 }
 
 function normalizeStatusCobranca(row) {
@@ -44,7 +40,7 @@ function normalizeStatusCobranca(row) {
 }
 
 function pickBestDate(row) {
-  // prioridade: data da avaria; senão created_at
+  // igual ao Resumo atual: tenta dataAvaria, depois data_avaria, depois created_at
   return row?.dataAvaria || row?.data_avaria || row?.created_at || null;
 }
 
@@ -97,7 +93,7 @@ export default function AvariasResumo() {
   const [origemFiltro, setOrigemFiltro] = useState(""); // "", "Interno", "Externo"
 
   // =========
-  // Carregar base (robusto)
+  // Carregar base (MESMA BASE do Cobranças)
   // =========
   const carregar = async () => {
     setLoading(true);
@@ -106,7 +102,9 @@ export default function AvariasResumo() {
       .from("avarias")
       .select(
         "id, status, status_cobranca, valor_total_orcamento, valor_cobrado, origem, origem_cobranca, dataAvaria, data_avaria, created_at"
-      );
+      )
+      .eq("status", "Aprovado") // <- MESMO critério do Cobranças
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("AvariasResumo: erro ao carregar avarias:", error.message);
@@ -115,10 +113,7 @@ export default function AvariasResumo() {
       return;
     }
 
-    // filtro base: manter só aprovadas (robusto)
-    const aprovadas = (data || []).filter((r) => isAprovado(r.status));
-
-    setRows(aprovadas);
+    setRows(data || []);
     setLoading(false);
   };
 
@@ -128,7 +123,7 @@ export default function AvariasResumo() {
   }, []);
 
   // =========
-  // Aplicar filtros (data e origem)
+  // Aplicar filtros (data e origem) no FRONT (robusto)
   // =========
   const filteredRows = useMemo(() => {
     let base = [...rows];
