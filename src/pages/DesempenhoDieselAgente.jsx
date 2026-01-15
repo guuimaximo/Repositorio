@@ -47,21 +47,21 @@ export default function DesempenhoDieselAgente() {
 
     try {
       const r = await fetch(`${API_BASE}/relatorios/gerar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ tipo: "diesel_gerencial" }),
+});
 
-      const data = await r.json().catch(() => null);
+const data = await r.json().catch(() => null);
 
-      if (!r.ok) {
-        const detail =
-          data?.detail || data?.error || "Falha ao gerar relatório";
-        throw new Error(
-          typeof detail === "string" ? detail : JSON.stringify(detail)
-        );
-      }
+if (!r.ok) {
+  const msg = data?.detail || data?.error || "Falha ao gerar relatório";
+  const stderr = data?.stderr || "";
+  const stdout = data?.stdout || data?.stdout_tail || "";
+  throw new Error(`${msg}\n\nSTDERR:\n${stderr}\n\nSTDOUT:\n${stdout}`);
+}
+setResp(data);
 
-      setResp(data);
     } catch (e) {
       setErro(e?.message || String(e));
     } finally {
