@@ -19,9 +19,7 @@ function Badge({ children, tone = "gray" }) {
   }[tone];
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}
-    >
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}>
       {children}
     </span>
   );
@@ -49,24 +47,46 @@ function dirname(path) {
   return i >= 0 ? p.slice(0, i) : "";
 }
 
-function inferPathsFromArquivoPath(arquivoPath) {
-  const folder = dirname(arquivoPath);
-  if (!folder) return { htmlPath: null, pngPath: null };
-
-  return {
-    htmlPath: `${folder}/Relatorio_Gerencial.html`,
-    pngPath: `${folder}/cluster_evolution_unificado.png`,
-  };
+function isHtmlPath(p) {
+  return String(p || "").toLowerCase().endsWith(".html");
+}
+function isPdfPath(p) {
+  return String(p || "").toLowerCase().endsWith(".pdf");
 }
 
 async function signedUrl(path, expiresIn = URL_EXPIRES) {
   if (!path) return null;
-  const { data, error } = await supabase.storage
-    .from(BUCKET_RELATORIOS)
-    .createSignedUrl(path, expiresIn);
-
+  const { data, error } = await supabase.storage.from(BUCKET_RELATORIOS).createSignedUrl(path, expiresIn);
   if (error) throw error;
   return data?.signedUrl || null;
+}
+
+function publicUrl(path) {
+  if (!path) return null;
+  const { data } = supabase.storage.from(BUCKET_RELATORIOS).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+async function firstWorkingUrl(paths) {
+  // 1) tenta signedUrl (mais estável para iframe)
+  for (const p of paths) {
+    if (!p) continue;
+    try {
+      const u = await signedUrl(p);
+      if (u) return { url: u, path: p, mode: "signed" };
+    } catch {
+      // tenta próximo
+    }
+  }
+
+  // 2) fallback: publicUrl (se bucket público)
+  for (const p of paths) {
+    if (!p) continue;
+    const u = publicUrl(p);
+    if (u) return { url: u, path: p, mode: "public" };
+  }
+
+  return null;
 }
 
 export default function DesempenhoDieselAgente() {
@@ -88,10 +108,7 @@ export default function DesempenhoDieselAgente() {
 
   // filtros (UI)
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(
-    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
-    [hoje]
-  );
+  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
 
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
@@ -124,8 +141,7 @@ export default function DesempenhoDieselAgente() {
   function labelRelatorio(it) {
     const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
     const fim = it?.periodo_fim ? String(it.periodo_fim) : "";
-    const periodo =
-      ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
+    const periodo = ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
     return `Relatório Diesel — ${periodo}`;
   }
 
@@ -174,26 +190,57 @@ export default function DesempenhoDieselAgente() {
 
     try {
       const ap = it?.arquivo_path;
-      if (!ap) throw new Error("Item sem arquivo_path.");
+      if (!ap) throw new Error("Item sem arquivo_path (tabela relatorios_gerados).");
 
-      // Se arquivo_path já for html, usa ele; senão infere
-      const isHtml = String(ap).toLowerCase().endsWith(".html");
-      const { htmlPath, pngPath } = inferPathsFromArquivoPath(ap);
+      // Pasta base do report no storage
+      // Se arquivo_path aponta pra PDF/HTML, a pasta do report é o dirname dele.
+      const folder = dirname(ap);
+      if (!folder) throw new Error(`arquivo_path inválido: ${ap}`);
 
-      const finalHtmlPath = isHtml ? ap : htmlPath;
-      const finalPngPath = pngPath;
+      // Candidatos para HTML (porque o nome real no storage pode variar)
+      const candHtml = [];
 
-      // ✅ usa signed URL para renderizar como página no iframe
-      const html = await signedUrl(finalHtmlPath);
-      const png = await signedUrl(finalPngPath).catch(() => null);
+      // 1) se arquivo_path já for html, prioriza ele
+      if (isHtmlPath(ap)) candHtml.push(ap);
 
-      if (!html) throw new Error("Não foi possível gerar URL assinada do HTML.");
+      // 2) se arquivo_nome for html, tenta pasta/arquivo_nome
+      if (String(it?.arquivo_nome || "").toLowerCase().endsWith(".html")) {
+        candHtml.push(`${folder}/${it.arquivo_nome}`);
+      }
+
+      // 3) padrão do script (mais comum)
+      candHtml.push(`${folder}/Relatorio_Gerencial.html`);
+
+      // Alguns históricos antigos tinham PDF como principal: tenta “trocar” pra html
+      if (isPdfPath(ap)) {
+        candHtml.push(`${folder}/Relatorio_Gerencial_2026-01.html`); // opcional: caso você já tenha gravado assim
+      }
+
+      // PNG sempre no mesmo folder
+      const candPng = [`${folder}/cluster_evolution_unificado.png`];
+
+      const htmlRes = await firstWorkingUrl(candHtml);
+      if (!htmlRes?.url) {
+        throw new Error(
+          `HTML não encontrado no bucket. Testados: ${candHtml.join(" | ")}`
+        );
+      }
+
+      // PNG é opcional (não quebra se não existir)
+      let pngUrl = null;
+      try {
+        const pngRes = await firstWorkingUrl(candPng);
+        pngUrl = pngRes?.url || null;
+      } catch {
+        pngUrl = null;
+      }
 
       setUrls({
-        html,
-        png: png || null,
-        html_path: finalHtmlPath,
-        png_path: finalPngPath,
+        html: htmlRes.url,
+        png: pngUrl,
+        folder,
+        html_path_used: htmlRes.path,
+        html_mode: htmlRes.mode,
       });
     } catch (e) {
       setUrlsErro(String(e?.message || e));
@@ -236,12 +283,10 @@ export default function DesempenhoDieselAgente() {
 
       setResp(data);
 
-      // atualiza lista
       await carregarHistorico();
 
-      // tenta abrir o relatório recém-criado (se já gravou no Supabase)
+      // abre automaticamente o report_id
       if (data?.report_id) {
-        // busca esse id na tabela e abre
         const { data: row, error } = await supabase
           .from("relatorios_gerados")
           .select("id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg")
@@ -268,7 +313,7 @@ export default function DesempenhoDieselAgente() {
         <div>
           <h2 className="text-lg font-semibold mb-1">Agente Diesel</h2>
           <p className="text-sm text-gray-600">
-            Geração (API) e visualização (Supabase Storage renderizado no INOVE).
+            Geração (API) e visualização (Supabase Storage) dentro do INOVE.
           </p>
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -421,6 +466,13 @@ export default function DesempenhoDieselAgente() {
             </div>
           )}
 
+          {urls?.html_path_used && (
+            <div className="mt-3 text-xs text-gray-600">
+              <span className="font-semibold">Path usado:</span> {urls.html_path_used} •{" "}
+              <span className="font-semibold">Modo:</span> {urls.html_mode}
+            </div>
+          )}
+
           {!selected ? (
             <div className="mt-3 text-sm text-gray-600">Selecione um relatório no histórico para visualizar.</div>
           ) : (
@@ -431,7 +483,6 @@ export default function DesempenhoDieselAgente() {
             </div>
           )}
 
-          {/* ✅ iframe renderizando a página */}
           <div className="mt-4 border rounded-md overflow-hidden bg-white" style={{ height: 720 }}>
             {urls?.html ? (
               <iframe title="RelatorioHTML" src={urls.html} className="w-full h-full bg-white" />
@@ -478,9 +529,16 @@ export default function DesempenhoDieselAgente() {
                         <div className="text-xs text-gray-600 mt-0.5">
                           {fmtBR(it.created_at)} • <span className="font-semibold">{it.status}</span>
                         </div>
-                        {it?.arquivo_nome && (
+
+                        {!!it?.arquivo_path && (
                           <div className="mt-2 text-xs text-gray-600 break-all">
-                            <span className="font-semibold">Arquivo:</span> {it.arquivo_nome}
+                            <span className="font-semibold">Path:</span> {it.arquivo_path}
+                          </div>
+                        )}
+
+                        {!!it?.arquivo_nome && (
+                          <div className="mt-1 text-xs text-gray-600 break-all">
+                            <span className="font-semibold">Nome:</span> {it.arquivo_nome}
                           </div>
                         )}
                       </div>
