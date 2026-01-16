@@ -1,5 +1,5 @@
 // src/pages/DesempenhoDieselAgente.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 
 const API_BASE = "https://agentediesel.onrender.com";
 
@@ -13,9 +13,7 @@ function Badge({ children, tone = "gray" }) {
   }[tone];
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}
-    >
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}>
       {children}
     </span>
   );
@@ -28,46 +26,41 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function fmtBR(dt) {
+  try {
+    const d = new Date(dt);
+    return d.toLocaleString("pt-BR");
+  } catch {
+    return String(dt || "");
+  }
+}
+
 export default function DesempenhoDieselAgente() {
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState(null);
   const [erro, setErro] = useState(null);
 
-  // =========================
-  // NOVO: filtros (apenas isso)
-  // =========================
-  const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(
-    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
-    [hoje]
-  );
+  // Histórico
+  const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [historicoErro, setHistoricoErro] = useState(null);
+  const [items, setItems] = useState([]);
 
-  const [periodoInicio, setPeriodoInicio] = useState(
-    fmtDateInput(primeiroDiaMes)
-  );
+  // Visualização do relatório selecionado
+  const [selected, setSelected] = useState(null);
+  const [urls, setUrls] = useState(null);
+  const [urlsLoading, setUrlsLoading] = useState(false);
+  const [urlsErro, setUrlsErro] = useState(null);
+
+  // filtros (mantidos)
+  const hoje = useMemo(() => new Date(), []);
+  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
+
+  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [filtroMotorista, setFiltroMotorista] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
   const [filtroVeiculo, setFiltroVeiculo] = useState("");
   const [filtroCluster, setFiltroCluster] = useState("");
-
-  const files = useMemo(() => {
-    const arr = resp?.files ?? resp?.files_local ?? [];
-    return Array.isArray(arr) ? arr : [];
-  }, [resp]);
-
-  const hasHtml = useMemo(
-    () => files.some((f) => String(f).toLowerCase().endsWith(".html")),
-    [files]
-  );
-  const hasPdf = useMemo(
-    () => files.some((f) => String(f).toLowerCase().endsWith(".pdf")),
-    [files]
-  );
-  const hasPng = useMemo(
-    () => files.some((f) => String(f).toLowerCase().endsWith(".png")),
-    [files]
-  );
 
   const statusTone = useMemo(() => {
     if (loading) return "yellow";
@@ -84,31 +77,61 @@ export default function DesempenhoDieselAgente() {
   }, [loading, erro, resp]);
 
   function validarPeriodo() {
-    if (!periodoInicio || !periodoFim) return true; // deixa a API decidir
+    if (!periodoInicio || !periodoFim) return true;
     const di = new Date(`${periodoInicio}T00:00:00`);
     const df = new Date(`${periodoFim}T23:59:59`);
     return di <= df;
   }
 
-  // =========================
-  // NOVO: POST com filtros
-  // =========================
+  async function carregarHistorico() {
+    setHistoricoLoading(true);
+    setHistoricoErro(null);
+    try {
+      const r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios?tipo=diesel_gerencial&limit=80`);
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
+      setItems(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      setHistoricoErro(String(e?.message || e));
+    } finally {
+      setHistoricoLoading(false);
+    }
+  }
+
+  async function abrirRelatorio(item) {
+    setSelected(item);
+    setUrls(null);
+    setUrlsErro(null);
+    setUrlsLoading(true);
+    try {
+      const r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/${item.id}/urls?expires_in=3600`);
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.detail || data?.error || `HTTP ${r.status}`);
+      setUrls(data?.urls || null);
+    } catch (e) {
+      setUrlsErro(String(e?.message || e));
+    } finally {
+      setUrlsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarHistorico();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function gerar() {
     setLoading(true);
     setErro(null);
     setResp(null);
 
     try {
-      if (!validarPeriodo()) {
-        throw new Error("Período inválido: Data início maior que Data fim.");
-      }
+      if (!validarPeriodo()) throw new Error("Período inválido: Data início maior que Data fim.");
 
       const payload = {
         tipo: "diesel_gerencial",
         periodo_inicio: periodoInicio || null,
         periodo_fim: periodoFim || null,
-
-        // filtros opcionais (apenas envia; backend aplica)
         motorista: filtroMotorista?.trim() || null,
         linha: filtroLinha?.trim() || null,
         veiculo: filtroVeiculo?.trim() || null,
@@ -124,16 +147,19 @@ export default function DesempenhoDieselAgente() {
       const data = await r.json().catch(() => null);
 
       if (!r.ok) {
-        const detail =
-          data?.error ||
-          data?.detail ||
-          (Array.isArray(data) ? JSON.stringify(data) : null) ||
-          `HTTP ${r.status}`;
+        const detail = data?.error || data?.detail || `HTTP ${r.status}`;
         setResp(data);
         throw new Error(detail);
       }
 
       setResp(data);
+      await carregarHistorico();
+
+      // Se gerou e já tiver report_id, já abre
+      if (data?.report_id) {
+        const item = { id: data.report_id, created_at: new Date().toISOString(), status: "CONCLUIDO", tipo: "diesel_gerencial" };
+        await abrirRelatorio(item);
+      }
     } catch (e) {
       setErro(String(e?.message || e));
     } finally {
@@ -141,14 +167,20 @@ export default function DesempenhoDieselAgente() {
     }
   }
 
+  // Nome amigável do relatório para listar (do lado do INOVE)
+  function labelRelatorio(it) {
+    const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
+    const fim = it?.periodo_fim ? String(it.periodo_fim) : "";
+    const periodo = ini && fim ? `${ini} → ${fim}` : ini || fim ? (ini || fim) : "Sem período";
+    return `Relatório Diesel — ${periodo}`;
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold mb-1">Agente Diesel</h2>
-          <p className="text-sm text-gray-600">
-            Geração de relatório gerencial (HTML/PNG/PDF) via serviço externo.
-          </p>
+          <p className="text-sm text-gray-600">Geração e visualização de relatório gerencial (HTML/PNG/PDF).</p>
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <Badge tone="blue">API: {API_BASE}</Badge>
@@ -160,25 +192,19 @@ export default function DesempenhoDieselAgente() {
           onClick={gerar}
           disabled={loading}
           className={`px-4 py-2 rounded-md text-white font-semibold ${
-            loading
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-black hover:bg-gray-900"
+            loading ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-900"
           }`}
         >
           {loading ? "Gerando..." : "Gerar análise"}
         </button>
       </div>
 
-      {/* =========================
-          NOVO: bloco de filtros
-         ========================= */}
+      {/* Filtros */}
       <div className="mt-5 rounded-md border p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="text-sm font-semibold text-gray-800">Filtros</p>
-            <p className="text-xs text-gray-600 mt-0.5">
-              Preencha o que quiser. Campos em branco não filtram.
-            </p>
+            <p className="text-xs text-gray-600 mt-0.5">Campos em branco não filtram.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -201,72 +227,33 @@ export default function DesempenhoDieselAgente() {
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Data início
-            </label>
-            <input
-              type="date"
-              value={periodoInicio}
-              onChange={(e) => setPeriodoInicio(e.target.value)}
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm"
-            />
+            <label className="text-xs font-semibold text-gray-600">Data início</label>
+            <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2 text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Data fim
-            </label>
-            <input
-              type="date"
-              value={periodoFim}
-              onChange={(e) => setPeriodoFim(e.target.value)}
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm"
-            />
+            <label className="text-xs font-semibold text-gray-600">Data fim</label>
+            <input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2 text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Motorista
-            </label>
-            <input
-              value={filtroMotorista}
-              onChange={(e) => setFiltroMotorista(e.target.value)}
-              placeholder="Chapa ou nome"
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm"
-            />
+            <label className="text-xs font-semibold text-gray-600">Motorista</label>
+            <input value={filtroMotorista} onChange={(e) => setFiltroMotorista(e.target.value)} placeholder="Chapa ou nome" className="w-full mt-1 border rounded-md px-3 py-2 text-sm" />
           </div>
 
           <div>
             <label className="text-xs font-semibold text-gray-600">Linha</label>
-            <input
-              value={filtroLinha}
-              onChange={(e) => setFiltroLinha(e.target.value)}
-              placeholder="Ex: 08TR"
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm"
-            />
+            <input value={filtroLinha} onChange={(e) => setFiltroLinha(e.target.value)} placeholder="Ex: 08TR" className="w-full mt-1 border rounded-md px-3 py-2 text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Veículo
-            </label>
-            <input
-              value={filtroVeiculo}
-              onChange={(e) => setFiltroVeiculo(e.target.value)}
-              placeholder="Prefixo"
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm"
-            />
+            <label className="text-xs font-semibold text-gray-600">Veículo</label>
+            <input value={filtroVeiculo} onChange={(e) => setFiltroVeiculo(e.target.value)} placeholder="Prefixo" className="w-full mt-1 border rounded-md px-3 py-2 text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">
-              Cluster
-            </label>
-            <select
-              value={filtroCluster}
-              onChange={(e) => setFiltroCluster(e.target.value)}
-              className="w-full mt-1 border rounded-md px-3 py-2 text-sm bg-white"
-            >
+            <label className="text-xs font-semibold text-gray-600">Cluster</label>
+            <select value={filtroCluster} onChange={(e) => setFiltroCluster(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2 text-sm bg-white">
               <option value="">(Todos)</option>
               <option value="C6">C6</option>
               <option value="C8">C8</option>
@@ -278,33 +265,134 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
-      {/* Painel de resultado */}
+      {/* Painel: Visualização + Histórico */}
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Status/Resumo */}
-        <div className="rounded-md border p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-800">Status</h3>
-            <Badge tone={statusTone}>{statusText}</Badge>
+        {/* Visualização HTML */}
+        <div className="rounded-md border p-4 lg:col-span-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-800">Visualização do Relatório</h3>
+
+            <div className="flex items-center gap-2">
+              {urls?.html && (
+                <a
+                  href={urls.html}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-md bg-black text-white text-sm font-semibold hover:bg-gray-900"
+                >
+                  Abrir HTML em nova aba
+                </a>
+              )}
+              {urls?.pdf && (
+                <a
+                  href={urls.pdf}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50"
+                >
+                  Baixar PDF
+                </a>
+              )}
+              {urls?.png && (
+                <a
+                  href={urls.png}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50"
+                >
+                  Baixar PNG
+                </a>
+              )}
+            </div>
           </div>
 
-          <div className="mt-3 text-sm text-gray-700 space-y-1">
-            <div>
-              <span className="font-semibold">Mensagem:</span>{" "}
-              {resp?.message ||
-                resp?.error ||
-                (loading ? "Processando..." : "Aguardando")}
+          {urlsLoading && <div className="mt-3 text-sm text-gray-600">Carregando URLs...</div>}
+          {urlsErro && (
+            <div className="mt-3 p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm">
+              <div className="font-semibold">Falha ao carregar URLs</div>
+              <div className="mt-1">{urlsErro}</div>
             </div>
+          )}
 
-            {resp?.report_id && (
-              <div>
-                <span className="font-semibold">Report ID:</span> {resp.report_id}
+          {!selected ? (
+            <div className="mt-3 text-sm text-gray-600">Selecione um relatório no histórico para visualizar.</div>
+          ) : (
+            <div className="mt-3 text-xs text-gray-600">
+              <div><span className="font-semibold">Selecionado:</span> {labelRelatorio(selected)}</div>
+              <div><span className="font-semibold">Gerado em:</span> {fmtBR(selected.created_at)}</div>
+              <div><span className="font-semibold">Status:</span> {String(selected.status || "")}</div>
+            </div>
+          )}
+
+          {/* IFRAME com o HTML */}
+          <div className="mt-4 border rounded-md overflow-hidden" style={{ height: 720 }}>
+            {urls?.html ? (
+              <iframe title="RelatorioHTML" src={urls.html} className="w-full h-full" />
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                Nenhum HTML disponível para exibir (ou URLs ainda não carregadas).
               </div>
             )}
+          </div>
+        </div>
 
-            {resp?.output_dir && (
-              <div>
-                <span className="font-semibold">Pasta:</span> {resp.output_dir}
-              </div>
+        {/* Histórico de downloads */}
+        <div className="rounded-md border p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-gray-800">Histórico (Bucket)</h3>
+            <button
+              onClick={carregarHistorico}
+              disabled={historicoLoading}
+              className={`px-3 py-2 rounded-md border text-sm ${historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50"}`}
+            >
+              {historicoLoading ? "Atualizando..." : "Atualizar"}
+            </button>
+          </div>
+
+          {historicoErro && (
+            <div className="mt-3 p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm">
+              <div className="font-semibold">Erro ao carregar histórico</div>
+              <div className="mt-1">{historicoErro}</div>
+            </div>
+          )}
+
+          <div className="mt-3 text-sm text-gray-700">
+            {!items.length ? (
+              <div className="text-gray-500">Nenhum relatório encontrado.</div>
+            ) : (
+              <ul className="space-y-2">
+                {items.map((it) => (
+                  <li key={it.id} className={`p-3 rounded-md border ${selected?.id === it.id ? "border-black" : ""}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 truncate">{labelRelatorio(it)}</div>
+                        <div className="text-xs text-gray-600 mt-0.5">
+                          {fmtBR(it.created_at)} • <span className="font-semibold">{it.status}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => abrirRelatorio(it)}
+                        className="shrink-0 px-3 py-2 rounded-md bg-black text-white text-xs font-semibold hover:bg-gray-900"
+                      >
+                        Ver
+                      </button>
+                    </div>
+
+                    {it?.arquivo_nome && (
+                      <div className="mt-2 text-xs text-gray-600 break-all">
+                        <span className="font-semibold">Arquivo:</span> {it.arquivo_nome}
+                      </div>
+                    )}
+
+                    {it?.erro_msg && it.status === "ERRO" && (
+                      <div className="mt-2 text-xs text-red-700 break-all">
+                        <span className="font-semibold">Erro:</span> {it.erro_msg}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 
@@ -315,60 +403,25 @@ export default function DesempenhoDieselAgente() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Arquivos */}
-        <div className="rounded-md border p-4">
-          <h3 className="text-sm font-semibold text-gray-800">Arquivos gerados</h3>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <Badge tone={hasHtml ? "green" : "gray"}>HTML</Badge>
-            <Badge tone={hasPng ? "green" : "gray"}>PNG</Badge>
-            <Badge tone={hasPdf ? "green" : "gray"}>PDF</Badge>
-          </div>
-
-          <div className="mt-3 text-sm text-gray-700">
-            {!files.length ? (
-              <div className="text-gray-500">Nenhum arquivo foi listado pela API.</div>
-            ) : (
-              <ul className="list-disc pl-5 space-y-1">
-                {files.map((f) => (
-                  <li key={f} className="break-all">
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-4 text-xs text-gray-600">
-            Hoje a API lista nomes dos arquivos gerados no container. Quando você quiser, a gente retorna
-            Signed URL do Storage para abrir/baixar direto aqui.
-          </div>
-        </div>
-
-        {/* Logs */}
-        <div className="rounded-md border p-4">
-          <h3 className="text-sm font-semibold text-gray-800">Logs</h3>
-
-          <div className="mt-3">
+      {/* Debug de logs do script (quando o POST falha) */}
+      {!!resp && (resp?.stderr || resp?.stdout || resp?.stdout_tail) && (
+        <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-md border p-4">
             <div className="text-xs font-semibold text-gray-600">STDERR</div>
-            <pre className="mt-1 text-xs bg-gray-50 border rounded-md p-3 max-h-44 overflow-auto whitespace-pre-wrap">
+            <pre className="mt-1 text-xs bg-gray-50 border rounded-md p-3 max-h-56 overflow-auto whitespace-pre-wrap">
 {resp?.stderr || "(vazio)"}
             </pre>
           </div>
-
-          <div className="mt-3">
+          <div className="rounded-md border p-4">
             <div className="text-xs font-semibold text-gray-600">STDOUT</div>
-            <pre className="mt-1 text-xs bg-gray-50 border rounded-md p-3 max-h-44 overflow-auto whitespace-pre-wrap">
+            <pre className="mt-1 text-xs bg-gray-50 border rounded-md p-3 max-h-56 overflow-auto whitespace-pre-wrap">
 {resp?.stdout || resp?.stdout_tail || "(vazio)"}
             </pre>
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 p-3 rounded-md border bg-yellow-50 text-yellow-900 text-xs">
-        Os filtros acima só funcionam quando o backend do Agente Diesel aplicar esses campos no SELECT do Supabase A
-        (motorista/linha/veiculo/cluster) e/ou no Pandas. Aqui no Inove já fica pronto para enviar.
-      </div>
+      )}
     </div>
   );
 }
