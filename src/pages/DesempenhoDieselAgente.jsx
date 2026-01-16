@@ -42,7 +42,9 @@ export default function DesempenhoDieselAgente() {
     [hoje]
   );
 
-  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
+  const [periodoInicio, setPeriodoInicio] = useState(
+    fmtDateInput(primeiroDiaMes)
+  );
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [filtroMotorista, setFiltroMotorista] = useState("");
   const [filtroLinha, setFiltroLinha] = useState("");
@@ -50,7 +52,7 @@ export default function DesempenhoDieselAgente() {
   const [filtroCluster, setFiltroCluster] = useState("");
 
   const files = useMemo(() => {
-    const arr = resp?.files || resp?.files_local || [];
+    const arr = resp?.files ?? resp?.files_local ?? [];
     return Array.isArray(arr) ? arr : [];
   }, [resp]);
 
@@ -102,7 +104,6 @@ export default function DesempenhoDieselAgente() {
       }
 
       const payload = {
-        // mantendo compatível com o backend (seu agente já usa periodo_inicio/fim por env)
         tipo: "diesel_gerencial",
         periodo_inicio: periodoInicio || null,
         periodo_fim: periodoFim || null,
@@ -123,7 +124,6 @@ export default function DesempenhoDieselAgente() {
       const data = await r.json().catch(() => null);
 
       if (!r.ok) {
-        // tenta manter padrão do que você já vinha exibindo
         const detail =
           data?.error ||
           data?.detail ||
@@ -160,7 +160,9 @@ export default function DesempenhoDieselAgente() {
           onClick={gerar}
           disabled={loading}
           className={`px-4 py-2 rounded-md text-white font-semibold ${
-            loading ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-900"
+            loading
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-black hover:bg-gray-900"
           }`}
         >
           {loading ? "Gerando..." : "Gerar análise"}
@@ -199,7 +201,9 @@ export default function DesempenhoDieselAgente() {
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
-            <label className="text-xs font-semibold text-gray-600">Data início</label>
+            <label className="text-xs font-semibold text-gray-600">
+              Data início
+            </label>
             <input
               type="date"
               value={periodoInicio}
@@ -209,7 +213,9 @@ export default function DesempenhoDieselAgente() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Data fim</label>
+            <label className="text-xs font-semibold text-gray-600">
+              Data fim
+            </label>
             <input
               type="date"
               value={periodoFim}
@@ -219,7 +225,9 @@ export default function DesempenhoDieselAgente() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Motorista</label>
+            <label className="text-xs font-semibold text-gray-600">
+              Motorista
+            </label>
             <input
               value={filtroMotorista}
               onChange={(e) => setFiltroMotorista(e.target.value)}
@@ -239,7 +247,9 @@ export default function DesempenhoDieselAgente() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Veículo</label>
+            <label className="text-xs font-semibold text-gray-600">
+              Veículo
+            </label>
             <input
               value={filtroVeiculo}
               onChange={(e) => setFiltroVeiculo(e.target.value)}
@@ -249,7 +259,9 @@ export default function DesempenhoDieselAgente() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600">Cluster</label>
+            <label className="text-xs font-semibold text-gray-600">
+              Cluster
+            </label>
             <select
               value={filtroCluster}
               onChange={(e) => setFiltroCluster(e.target.value)}
@@ -278,7 +290,9 @@ export default function DesempenhoDieselAgente() {
           <div className="mt-3 text-sm text-gray-700 space-y-1">
             <div>
               <span className="font-semibold">Mensagem:</span>{" "}
-              {resp?.message || resp?.error || (loading ? "Processando..." : "Aguardando")}
+              {resp?.message ||
+                resp?.error ||
+                (loading ? "Processando..." : "Aguardando")}
             </div>
 
             {resp?.report_id && (
@@ -355,183 +369,6 @@ export default function DesempenhoDieselAgente() {
         Os filtros acima só funcionam quando o backend do Agente Diesel aplicar esses campos no SELECT do Supabase A
         (motorista/linha/veiculo/cluster) e/ou no Pandas. Aqui no Inove já fica pronto para enviar.
       </div>
-    </div>
-  );
-}  );
-  const hasPng = useMemo(
-    () => files.some((f) => String(f).toLowerCase().endsWith(".png")),
-    [files]
-  );
-
-  async function gerar() {
-    setErro(null);
-    setResp(null);
-    setLoading(true);
-
-    try {
-      const r = await fetch(`${API_BASE}/relatorios/gerar`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tipo: "diesel_gerencial" }),
-});
-
-const data = await r.json().catch(() => null);
-
-if (!r.ok) {
-  const msg = data?.detail || data?.error || "Falha ao gerar relatório";
-  const stderr = data?.stderr || "";
-  const stdout = data?.stdout || data?.stdout_tail || "";
-  throw new Error(`${msg}\n\nSTDERR:\n${stderr}\n\nSTDOUT:\n${stdout}`);
-}
-setResp(data);
-
-    } catch (e) {
-      setErro(e?.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function copiarNome(nome) {
-    try {
-      await navigator.clipboard?.writeText(nome);
-      alert(`Copiado: ${nome}`);
-    } catch {
-      alert(`Não consegui copiar automaticamente. Nome: ${nome}`);
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold mb-1">Agente Diesel</h2>
-          <p className="text-sm text-gray-600">
-            Geração de relatório gerencial (HTML/PNG/PDF) via serviço externo.
-          </p>
-
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <Badge tone="blue">API: {API_BASE}</Badge>
-            <Badge tone={loading ? "yellow" : "green"}>
-              {loading ? "PROCESSANDO" : "PRONTO"}
-            </Badge>
-            {hasHtml && <Badge tone="blue">HTML</Badge>}
-            {hasPng && <Badge tone="blue">PNG</Badge>}
-          </div>
-        </div>
-
-        <button
-          onClick={gerar}
-          disabled={loading}
-          className={`px-4 py-2 rounded-lg font-semibold shadow-sm border
-            ${
-              loading
-                ? "bg-gray-200 text-gray-500 border-gray-200 cursor-not-allowed"
-                : "bg-black text-white border-black hover:bg-gray-900"
-            }`}
-        >
-          {loading ? "Gerando..." : "Gerar análise"}
-        </button>
-      </div>
-
-      {/* ERRO */}
-      {erro && (
-        <div className="mt-6 p-4 border rounded-lg bg-red-50 border-red-200">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold text-red-700">Erro ao gerar</div>
-            <Badge tone="red">FALHOU</Badge>
-          </div>
-          <pre className="mt-2 text-xs text-red-900 whitespace-pre-wrap break-words">
-            {erro}
-          </pre>
-          <p className="mt-2 text-xs text-gray-700">
-            Normalmente o detalhe do erro aparece no <b>STDERR</b> abaixo quando
-            a API retorna logs.
-          </p>
-        </div>
-      )}
-
-      {/* SUCESSO */}
-      {resp && (
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="p-4 border rounded-lg bg-white">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-gray-800">Status</div>
-              <Badge tone="green">SUCESSO</Badge>
-            </div>
-
-            <div className="mt-2 text-sm text-gray-700 space-y-1">
-              <div>
-                <span className="text-gray-500">Mensagem:</span>{" "}
-                {resp?.message || "OK"}
-              </div>
-              <div>
-                <span className="text-gray-500">Pasta:</span>{" "}
-                <span className="font-mono">{resp?.output_dir}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Arquivos:</span>{" "}
-                <span className="font-mono">{files.length}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 border rounded-lg bg-white lg:col-span-2">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-gray-800">Arquivos gerados</div>
-              <Badge tone="gray">{files.length}</Badge>
-            </div>
-
-            {files.length === 0 ? (
-              <div className="mt-3 text-sm text-gray-600">
-                Nenhum arquivo foi listado pela API.
-              </div>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {files.map((f) => (
-                  <div
-                    key={f}
-                    className="flex items-center justify-between gap-3 p-2 border rounded"
-                  >
-                    <div className="font-mono text-sm text-gray-800 truncate">
-                      {f}
-                    </div>
-                    <button
-                      onClick={() => copiarNome(f)}
-                      className="px-3 py-1.5 text-sm font-semibold border rounded hover:bg-gray-50"
-                    >
-                      Copiar nome
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-3 border rounded bg-gray-50">
-                <div className="text-xs font-semibold text-gray-600">STDOUT</div>
-                <pre className="mt-1 text-xs text-gray-800 whitespace-pre-wrap break-words">
-                  {resp?.stdout_tail || "(vazio)"}
-                </pre>
-              </div>
-
-              <div className="p-3 border rounded bg-gray-50">
-                <div className="text-xs font-semibold text-gray-600">STDERR</div>
-                <pre className="mt-1 text-xs text-gray-800 whitespace-pre-wrap break-words">
-                  {resp?.stderr_tail || "(vazio)"}
-                </pre>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 border rounded bg-yellow-50 border-yellow-200 text-sm text-yellow-900">
-              Hoje a API retorna apenas os <b>nomes</b> dos arquivos gerados no
-              container do Render. O próximo passo (quando você quiser) é subir
-              os arquivos no <b>Supabase Storage (bucket relatorios)</b> e
-              retornar <b>signed URL</b> para abrir/baixar direto aqui.
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
