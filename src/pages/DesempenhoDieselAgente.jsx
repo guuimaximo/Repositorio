@@ -55,21 +55,13 @@ function getFolderFromPath(p) {
 async function makeUrlFromPath(path, expiresIn = 3600) {
   const clean = normalizePath(path);
 
-  // 1) tenta publicUrl (funciona mesmo se bucket não for público; só retornará URL,
-  // mas se não for público, ao abrir dará 403/400 — então caímos no signed abaixo)
-  const pub = supabase.storage.from(BUCKET).getPublicUrl(clean);
-  const publicUrl = pub?.data?.publicUrl;
-
-  // tenta verificar rápido com signed quando necessário (mais confiável)
-  // Se bucket for público, publicUrl vai funcionar e pronto.
-  // Se bucket não for público, use signedUrl.
-  // Para decidir: se publicUrl existe, a gente tenta usar; se falhar no iframe, você verá 403/400.
-  // Aqui já retornamos signed direto para evitar 400 chato em ambiente com políticas.
+  // tenta signed primeiro (mais confiável para buckets privados)
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(clean, expiresIn);
   if (!error && data?.signedUrl) return { url: data.signedUrl, mode: "signed", path: clean };
 
-  // fallback final: public
-  return { url: publicUrl, mode: "public", path: clean };
+  // fallback: public
+  const pub = supabase.storage.from(BUCKET).getPublicUrl(clean);
+  return { url: pub?.data?.publicUrl, mode: "public", path: clean };
 }
 
 export default function DesempenhoDieselAgente() {
@@ -98,10 +90,7 @@ export default function DesempenhoDieselAgente() {
   }, []);
 
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(
-    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
-    [hoje]
-  );
+  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
 
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
@@ -131,12 +120,10 @@ export default function DesempenhoDieselAgente() {
     return di <= df;
   }
 
-  // Nome amigável
   function labelRelatorio(it) {
     const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
     const fim = it?.periodo_fim ? String(it.periodo_fim) : "";
-    const periodo =
-      ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
+    const periodo = ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
     return `Relatório Diesel — ${periodo}`;
   }
 
@@ -168,7 +155,7 @@ export default function DesempenhoDieselAgente() {
     }
   }
 
-  // >>> AQUI É O PONTO PRINCIPAL: abrir HTML corretamente
+  // >>> AGORA: abrir PDF (principal) + ainda achar HTML/PNG (secundários)
   async function abrirRelatorio(it) {
     setSelected(it);
     setUrls(null);
@@ -181,28 +168,42 @@ export default function DesempenhoDieselAgente() {
 
       const folder = getFolderFromPath(arquivoPath);
 
-      // regra: se o registro já aponta pra HTML, usa ele.
-      // se apontar para pdf antigo, tenta achar o HTML padrão na mesma pasta.
+      // 1) PDF principal:
+      // - Se o registro já aponta para PDF, usa.
+      // - Se apontar para HTML antigo, tenta achar PDF padrão na mesma pasta.
+      let pdfPath = arquivoPath;
+      if (!/\.pdf$/i.test(pdfPath)) {
+        pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
+      }
+
+      // 2) HTML (opcional): se quiser manter para debug/abrir no navegador
       let htmlPath = arquivoPath;
       if (!/\.html$/i.test(htmlPath)) {
-        // tenta padrão do seu script
         htmlPath = `${folder}/Relatorio_Gerencial.html`;
       }
 
+      // 3) PNG (opcional)
       const pngPath = `${folder}/cluster_evolution_unificado.png`;
 
-      // assina URLs corretamente (path, não URL completa)
-      const htmlRes = await makeUrlFromPath(htmlPath, 3600);
-      const pngRes = await makeUrlFromPath(pngPath, 3600);
+      const [pdfRes, htmlRes, pngRes] = await Promise.all([
+        makeUrlFromPath(pdfPath, 3600),
+        makeUrlFromPath(htmlPath, 3600),
+        makeUrlFromPath(pngPath, 3600),
+      ]);
 
       if (!mountedRef.current) return;
 
       setUrls({
-        html: htmlRes.url,
-        png: pngRes.url,
+        pdf: pdfRes.url,
+        pdf_path_used: pdfRes.path,
+        pdf_mode: pdfRes.mode,
+
+        html: htmlRes?.url || null,
+        html_path_used: htmlRes?.path || null,
+        html_mode: htmlRes?.mode || null,
+
+        png: pngRes?.url || null,
         folder,
-        html_path_used: htmlRes.path,
-        html_mode: htmlRes.mode,
       });
     } catch (e) {
       if (!mountedRef.current) return;
@@ -252,7 +253,7 @@ export default function DesempenhoDieselAgente() {
       setResp(data);
       await carregarHistorico();
 
-      // abre automaticamente o recém gerado (lendo do banco, não inventando)
+      // abre automaticamente o recém gerado (lendo do banco)
       if (data?.report_id) {
         const { data: row, error } = await supabase
           .from("relatorios_gerados")
@@ -270,6 +271,8 @@ export default function DesempenhoDieselAgente() {
       setLoading(false);
     }
   }
+
+  const canRenderPdf = !!urls?.pdf;
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
@@ -395,17 +398,27 @@ export default function DesempenhoDieselAgente() {
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="rounded-md border p-4 lg:col-span-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-gray-800">Visualização do Relatório (HTML)</h3>
+            <h3 className="text-sm font-semibold text-gray-800">Visualização do Relatório (PDF)</h3>
 
             <div className="flex items-center gap-2">
+              {urls?.pdf && (
+                <a
+                  href={urls.pdf}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-md bg-black text-white text-sm font-semibold hover:bg-gray-900"
+                >
+                  Abrir PDF em nova aba
+                </a>
+              )}
               {urls?.html && (
                 <a
                   href={urls.html}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-2 rounded-md bg-black text-white text-sm font-semibold hover:bg-gray-900"
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50"
                 >
-                  Abrir HTML em nova aba
+                  Abrir HTML
                 </a>
               )}
               {urls?.png && (
@@ -430,29 +443,36 @@ export default function DesempenhoDieselAgente() {
           )}
 
           {!selected ? (
-            <div className="mt-3 text-sm text-gray-600">Selecione um relatório no histórico para visualizar.</div>
+            <div className="mt-3 text-sm text-gray-600">
+              Selecione um relatório no histórico para visualizar.
+            </div>
           ) : (
             <div className="mt-3 text-xs text-gray-600">
-              <div><span className="font-semibold">Selecionado:</span> {labelRelatorio(selected)}</div>
-              <div><span className="font-semibold">Gerado em:</span> {fmtBR(selected.created_at)}</div>
-              <div><span className="font-semibold">Status:</span> {String(selected.status || "")}</div>
-              {urls?.html_path_used && (
-                <div><span className="font-semibold">Path usado:</span> {urls.html_path_used} ({urls.html_mode})</div>
+              <div>
+                <span className="font-semibold">Selecionado:</span> {labelRelatorio(selected)}
+              </div>
+              <div>
+                <span className="font-semibold">Gerado em:</span> {fmtBR(selected.created_at)}
+              </div>
+              <div>
+                <span className="font-semibold">Status:</span> {String(selected.status || "")}
+              </div>
+              {urls?.pdf_path_used && (
+                <div>
+                  <span className="font-semibold">PDF path usado:</span> {urls.pdf_path_used} (
+                  {urls.pdf_mode})
+                </div>
               )}
             </div>
           )}
 
-          {/* IFRAME: abre a página de verdade */}
+          {/* IFRAME: renderiza PDF */}
           <div className="mt-4 border rounded-md overflow-hidden" style={{ height: 720 }}>
-            {urls?.html ? (
-              <iframe
-                title="RelatorioHTML"
-                src={urls.html}
-                className="w-full h-full"
-              />
+            {canRenderPdf ? (
+              <iframe title="RelatorioPDF" src={urls.pdf} className="w-full h-full" />
             ) : (
               <div className="h-full flex items-center justify-center text-sm text-gray-500">
-                Nenhum HTML disponível para exibir.
+                Nenhum PDF disponível para exibir.
               </div>
             )}
           </div>
