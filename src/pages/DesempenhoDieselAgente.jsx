@@ -17,9 +17,7 @@ function Badge({ children, tone = "gray" }) {
   }[tone];
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}
-    >
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${toneCls}`}>
       {children}
     </span>
   );
@@ -55,11 +53,9 @@ function getFolderFromPath(p) {
 async function makeUrlFromPath(path, expiresIn = 3600) {
   const clean = normalizePath(path);
 
-  // tenta signed primeiro (mais confiável para buckets privados)
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(clean, expiresIn);
   if (!error && data?.signedUrl) return { url: data.signedUrl, mode: "signed", path: clean };
 
-  // fallback: public
   const pub = supabase.storage.from(BUCKET).getPublicUrl(clean);
   return { url: pub?.data?.publicUrl, mode: "public", path: clean };
 }
@@ -113,11 +109,10 @@ export default function DesempenhoDieselAgente() {
     return "PRONTO";
   }, [loading, erro, resp]);
 
+  // ✅ Ajuste: validação sem timezone (YYYY-MM-DD compara correto)
   function validarPeriodo() {
     if (!periodoInicio || !periodoFim) return true;
-    const di = new Date(`${periodoInicio}T00:00:00`);
-    const df = new Date(`${periodoFim}T23:59:59`);
-    return di <= df;
+    return String(periodoInicio) <= String(periodoFim);
   }
 
   function labelRelatorio(it) {
@@ -155,7 +150,6 @@ export default function DesempenhoDieselAgente() {
     }
   }
 
-  // >>> AGORA: abrir PDF (principal) + ainda achar HTML/PNG (secundários)
   async function abrirRelatorio(it) {
     setSelected(it);
     setUrls(null);
@@ -168,21 +162,12 @@ export default function DesempenhoDieselAgente() {
 
       const folder = getFolderFromPath(arquivoPath);
 
-      // 1) PDF principal:
-      // - Se o registro já aponta para PDF, usa.
-      // - Se apontar para HTML antigo, tenta achar PDF padrão na mesma pasta.
       let pdfPath = arquivoPath;
-      if (!/\.pdf$/i.test(pdfPath)) {
-        pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
-      }
+      if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
 
-      // 2) HTML (opcional): se quiser manter para debug/abrir no navegador
       let htmlPath = arquivoPath;
-      if (!/\.html$/i.test(htmlPath)) {
-        htmlPath = `${folder}/Relatorio_Gerencial.html`;
-      }
+      if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
 
-      // 3) PNG (opcional)
       const pngPath = `${folder}/cluster_evolution_unificado.png`;
 
       const [pdfRes, htmlRes, pngRes] = await Promise.all([
@@ -197,11 +182,9 @@ export default function DesempenhoDieselAgente() {
         pdf: pdfRes.url,
         pdf_path_used: pdfRes.path,
         pdf_mode: pdfRes.mode,
-
         html: htmlRes?.url || null,
         html_path_used: htmlRes?.path || null,
         html_mode: htmlRes?.mode || null,
-
         png: pngRes?.url || null,
         folder,
       });
@@ -228,12 +211,13 @@ export default function DesempenhoDieselAgente() {
 
       const payload = {
         tipo: TIPO_RELATORIO,
-        periodo_inicio: periodoInicio || null,
-        periodo_fim: periodoFim || null,
-        motorista: filtroMotorista?.trim() || null,
-        linha: filtroLinha?.trim() || null,
-        veiculo: filtroVeiculo?.trim() || null,
-        cluster: filtroCluster?.trim() || null,
+        // ✅ garante YYYY-MM-DD ou null
+        periodo_inicio: periodoInicio ? String(periodoInicio) : null,
+        periodo_fim: periodoFim ? String(periodoFim) : null,
+        motorista: filtroMotorista?.trim() ? filtroMotorista.trim() : null,
+        linha: filtroLinha?.trim() ? filtroLinha.trim() : null,
+        veiculo: filtroVeiculo?.trim() ? filtroVeiculo.trim() : null,
+        cluster: filtroCluster?.trim() ? filtroCluster.trim() : null,
       };
 
       const r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
@@ -253,7 +237,6 @@ export default function DesempenhoDieselAgente() {
       setResp(data);
       await carregarHistorico();
 
-      // abre automaticamente o recém gerado (lendo do banco)
       if (data?.report_id) {
         const { data: row, error } = await supabase
           .from("relatorios_gerados")
@@ -279,9 +262,7 @@ export default function DesempenhoDieselAgente() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold mb-1">Agente Diesel</h2>
-          <p className="text-sm text-gray-600">
-            Geração (API) e visualização (Supabase Storage renderizado no INOVE).
-          </p>
+          <p className="text-sm text-gray-600">Geração (API) e visualização (Supabase Storage renderizado no INOVE).</p>
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <Badge tone="blue">API: {API_BASE}</Badge>
@@ -412,22 +393,12 @@ export default function DesempenhoDieselAgente() {
                 </a>
               )}
               {urls?.html && (
-                <a
-                  href={urls.html}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50"
-                >
+                <a href={urls.html} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50">
                   Abrir HTML
                 </a>
               )}
               {urls?.png && (
-                <a
-                  href={urls.png}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50"
-                >
+                <a href={urls.png} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50">
                   Baixar PNG
                 </a>
               )}
@@ -443,9 +414,7 @@ export default function DesempenhoDieselAgente() {
           )}
 
           {!selected ? (
-            <div className="mt-3 text-sm text-gray-600">
-              Selecione um relatório no histórico para visualizar.
-            </div>
+            <div className="mt-3 text-sm text-gray-600">Selecione um relatório no histórico para visualizar.</div>
           ) : (
             <div className="mt-3 text-xs text-gray-600">
               <div>
@@ -459,21 +428,17 @@ export default function DesempenhoDieselAgente() {
               </div>
               {urls?.pdf_path_used && (
                 <div>
-                  <span className="font-semibold">PDF path usado:</span> {urls.pdf_path_used} (
-                  {urls.pdf_mode})
+                  <span className="font-semibold">PDF path usado:</span> {urls.pdf_path_used} ({urls.pdf_mode})
                 </div>
               )}
             </div>
           )}
 
-          {/* IFRAME: renderiza PDF */}
           <div className="mt-4 border rounded-md overflow-hidden" style={{ height: 720 }}>
             {canRenderPdf ? (
               <iframe title="RelatorioPDF" src={urls.pdf} className="w-full h-full" />
             ) : (
-              <div className="h-full flex items-center justify-center text-sm text-gray-500">
-                Nenhum PDF disponível para exibir.
-              </div>
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">Nenhum PDF disponível para exibir.</div>
             )}
           </div>
         </div>
@@ -484,9 +449,7 @@ export default function DesempenhoDieselAgente() {
             <button
               onClick={carregarHistorico}
               disabled={historicoLoading}
-              className={`px-3 py-2 rounded-md border text-sm ${
-                historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50"
-              }`}
+              className={`px-3 py-2 rounded-md border text-sm ${historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50"}`}
             >
               {historicoLoading ? "Atualizando..." : "Atualizar"}
             </button>
@@ -505,10 +468,7 @@ export default function DesempenhoDieselAgente() {
             ) : (
               <ul className="space-y-2">
                 {items.map((it) => (
-                  <li
-                    key={it.id}
-                    className={`p-3 rounded-md border ${selected?.id === it.id ? "border-black" : ""}`}
-                  >
+                  <li key={it.id} className={`p-3 rounded-md border ${selected?.id === it.id ? "border-black" : ""}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-semibold text-gray-900 truncate">{labelRelatorio(it)}</div>
@@ -557,7 +517,6 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
-      {/* Debug quando API falha */}
       {!!resp && (resp?.stderr || resp?.stdout || resp?.stdout_tail) && (
         <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-md border p-4">
