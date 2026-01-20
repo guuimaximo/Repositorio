@@ -1,4 +1,3 @@
-// src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -31,13 +30,19 @@ import {
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
-// ✅ Rotas novas (sem hash) — precisam casar com o App.jsx
+// ✅ Rotas Diesel
 const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
   resumo: "/desempenho-diesel-resumo",
   acompanhamento: "/desempenho-diesel-acompanhamento",
   tratativas: "/desempenho-diesel-tratativas",
   agente: "/desempenho-diesel-agente",
+};
+
+// ✅ Rotas PCM
+const PCM_ROUTES = {
+  inicio: "/pcm-inicio",
+  diario: "/pcm-diario",
 };
 
 // mapa de acesso por nível
@@ -58,8 +63,8 @@ const ACCESS = {
     "/sos-central",
     "/sos-dashboard",
     "/km-rodado",
-
-    // ✅ Gestor também vê Desempenho Diesel (novas rotas)
+    PCM_ROUTES.inicio,
+    PCM_ROUTES.diario,
     ...Object.values(DIESEL_ROUTES),
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
@@ -104,7 +109,9 @@ export default function Sidebar() {
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ Desempenho Diesel (Admin + Gestor) — agora por rotas (sem hash)
+      // ✅ PCM (Admin + Gestor)
+      pcm: { path: PCM_ROUTES.inicio, label: "PCM - Manutenção", icon: <FaClipboardList /> },
+
       desempenhoDiesel: {
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
@@ -161,20 +168,14 @@ export default function Sidebar() {
       isActive ? "bg-blue-500" : "hover:bg-blue-600"
     }`;
 
-  // ✅ Admin OU Gestor vê Desempenho Diesel
   const showDesempenhoDiesel = isAdmin || isGestor;
-
+  const showPCM = isAdmin || isGestor; // ✅ Apenas Gestor e Admin
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
-
-  // ✅ Avarias: Resumo só Admin/Gestor; resto segue permissão
   const showAvarias = links.avarias.some((l) => {
     if (l.path === "/avarias-resumo") return isAdmin || isGestor;
     return canSee(user, l.path);
   });
-
   const showSOS = links.sos.some((l) => canSee(user, l.path));
-
-  // ✅ Configurações: SOMENTE Admin
   const showConfig = isAdmin;
 
   return (
@@ -196,7 +197,14 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ Desempenho Diesel (Admin + Gestor) */}
+        {/* ✅ PCM - Manutenção (Admin + Gestor) */}
+        {showPCM && (
+          <NavLink to={links.pcm.path} className={navLinkClass}>
+            {links.pcm.icon} <span className="whitespace-nowrap">{links.pcm.label}</span>
+          </NavLink>
+        )}
+
+        {/* ✅ Desempenho Diesel */}
         {showDesempenhoDiesel && (
           <>
             <button
@@ -224,6 +232,7 @@ export default function Sidebar() {
           </>
         )}
 
+        {/* ✅ Tratativas */}
         {showTratativas && (
           <>
             <button
@@ -250,6 +259,7 @@ export default function Sidebar() {
           </>
         )}
 
+        {/* ✅ Avarias */}
         {showAvarias && (
           <>
             <button
@@ -266,9 +276,7 @@ export default function Sidebar() {
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.avarias.map((link) => {
                   if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
-
-                  return canSee(user, link.path) ||
-                    (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
+                  return canSee(user, link.path) || (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
@@ -279,6 +287,7 @@ export default function Sidebar() {
           </>
         )}
 
+        {/* ✅ Intervenções */}
         {showSOS && (
           <>
             <button
@@ -305,7 +314,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Configurações (somente Admin) */}
+        {/* ✅ Configurações */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
