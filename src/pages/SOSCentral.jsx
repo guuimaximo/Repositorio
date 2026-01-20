@@ -25,15 +25,15 @@ const OCORRENCIAS_CARDS = [
   "SEGUIU VIAGEM",
 ];
 
-// Ajuste aqui o campo principal de data para filtro/ordenação:
-const DATE_FIELD = "data_fechamento"; // troque para "data_fechamento" quando estiver preenchido
+// ✅ AGORA: campo principal de data para filtro/ordenação/exibição
+const DATE_FIELD = "data_sos";
 
 function pickBestDate(row) {
   return (
     row?.[DATE_FIELD] ||
+    row?.data_sos ||
     row?.data_fechamento ||
     row?.data_encerramento ||
-    row?.data_sos ||
     row?.created_at ||
     null
   );
@@ -88,7 +88,6 @@ function monthRange(yyyyMm) {
 }
 
 /* ======================= */
-
 
 /* --- Modal de Login --- */
 function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
@@ -217,9 +216,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           />
         )
       ) : (
-        <p className="bg-gray-50 p-2 border rounded">
-          {formData[field] || "—"}
-        </p>
+        <p className="bg-gray-50 p-2 border rounded">{formData[field] || "—"}</p>
       )}
     </div>
   );
@@ -326,10 +323,10 @@ export default function SOSCentral() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
-  const [mesRef, setMesRef] = useState(""); // NOVO: filtro por mês (YYYY-MM)
+  const [mesRef, setMesRef] = useState(""); // filtro por mês (YYYY-MM)
 
   // ordenação server-side
-  const [sortBy, setSortBy] = useState(DATE_FIELD); // ALTERADO: ordenar pela data real
+  const [sortBy, setSortBy] = useState(DATE_FIELD);
   const [sortAsc, setSortAsc] = useState(false);
 
   // página atual (offset)
@@ -341,14 +338,14 @@ export default function SOSCentral() {
       .select("*")
       .eq("status", "Fechado");
 
-    // NOVO: filtro por mês
+    // filtro por mês (em cima de data_sos)
     if (mesRef) {
       const { start, end } = monthRange(mesRef);
       if (start) query = query.gte(DATE_FIELD, start);
       if (end) query = query.lte(DATE_FIELD, end);
     }
 
-    // Mantém os filtros por intervalo
+    // filtros por intervalo (em cima de data_sos)
     if (dataInicio) query = query.gte(DATE_FIELD, dataInicio);
     if (dataFim) query = query.lte(DATE_FIELD, dataFim);
 
@@ -366,7 +363,7 @@ export default function SOSCentral() {
         .eq("status", "Fechado")
         .ilike("ocorrencia", key);
 
-      // mesmos filtros
+      // mesmos filtros (em cima de data_sos)
       if (mesRef) {
         const { start, end } = monthRange(mesRef);
         if (start) q = q.gte(DATE_FIELD, start);
@@ -457,11 +454,7 @@ export default function SOSCentral() {
 
   function SortIcon({ field }) {
     if (sortBy !== field) return <FaSort className="inline ml-2 opacity-70" />;
-    return sortAsc ? (
-      <FaSortUp className="inline ml-2" />
-    ) : (
-      <FaSortDown className="inline ml-2" />
-    );
+    return sortAsc ? <FaSortUp className="inline ml-2" /> : <FaSortDown className="inline ml-2" />;
   }
 
   return (
@@ -470,7 +463,7 @@ export default function SOSCentral() {
         Central de Intervenções (Fechadas)
       </h1>
 
-      {/* 🔢 Cards de Resumo (AGORA: total real do banco conforme filtros) */}
+      {/* 🔢 Cards de Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {OCORRENCIAS_CARDS.map((key) => (
           <CardResumo key={key} titulo={key} valor={counts[key] || 0} cor={cores[key]} />
@@ -488,7 +481,6 @@ export default function SOSCentral() {
           className="border rounded-md px-3 py-2 flex-1"
         />
 
-        {/* NOVO: filtro por mês (YYYY-MM) */}
         <input
           type="month"
           value={mesRef}
@@ -497,7 +489,6 @@ export default function SOSCentral() {
           title="Filtrar por mês"
         />
 
-        {/* Mantém também o filtro por intervalo */}
         <input
           type="date"
           value={dataInicio}
@@ -531,7 +522,7 @@ export default function SOSCentral() {
                 <SortIcon field="numero_sos" />
               </ThSortable>
 
-              {/* ALTERADO: ordenar/exibir pela data real usada (DATE_FIELD) */}
+              {/* ✅ Data agora vem de data_sos */}
               <ThSortable label="Data" onClick={() => toggleSort(DATE_FIELD)}>
                 <SortIcon field={DATE_FIELD} />
               </ThSortable>
@@ -570,7 +561,7 @@ export default function SOSCentral() {
                 <tr key={s.id} className="border-t hover:bg-gray-50 transition">
                   <td className="py-3 px-4">{s.numero_sos}</td>
 
-                  {/* ALTERADO: data com fallback */}
+                  {/* ✅ exibição agora prioriza data_sos */}
                   <td className="py-3 px-4">{formatDateBR(pickBestDate(s))}</td>
 
                   <td className="py-3 px-4">{s.veiculo}</td>
