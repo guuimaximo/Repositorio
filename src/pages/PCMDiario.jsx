@@ -12,6 +12,7 @@ import {
   FaEdit,
   FaTimes,
   FaSave,
+  FaCheckCircle,
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 
@@ -90,12 +91,13 @@ function EditarVeiculoModal({
   open,
   onClose,
   veiculo,
-  onSalvar,        // (payloadUpdate, acao, deCat, paraCat, diff) => Promise<void>
-  onLiberar,       // () => Promise<void>
+  prefixos,
+  onSalvar, // (payloadUpdate, acao, deCat, paraCat, diff) => Promise<void>
 }) {
   const [saving, setSaving] = useState(false);
 
   const [draft, setDraft] = useState({
+    frota: "",
     setor: "",
     ordem_servico: "",
     descricao: "",
@@ -106,6 +108,7 @@ function EditarVeiculoModal({
   useEffect(() => {
     if (!open || !veiculo) return;
     setDraft({
+      frota: veiculo.frota || "",
       setor: veiculo.setor || "MANUTENÇÃO",
       ordem_servico: String(veiculo.ordem_servico || ""),
       descricao: veiculo.descricao || "",
@@ -118,10 +121,10 @@ function EditarVeiculoModal({
     const atual = veiculo?.categoria;
 
     // Regra:
-    // PENDENTES -> GNS ou NOITE ou Liberar
-    // NOITE -> GNS ou Liberar
+    // PENDENTES -> GNS ou NOITE
+    // NOITE -> GNS
     // GNS -> PENDENTES ou NOITE
-    // VENDA (se usar) -> manter livre pelo modal
+    // VENDA -> livre
     if (atual === "PENDENTES") return ["PENDENTES", "GNS", "NOITE"];
     if (atual === "NOITE") return ["NOITE", "GNS"];
     if (atual === "GNS") return ["GNS", "PENDENTES", "NOITE"];
@@ -136,13 +139,14 @@ function EditarVeiculoModal({
   async function handleSalvar() {
     const os = String(draft.ordem_servico || "").trim();
 
+    if (!draft.frota) return alert("Frota é obrigatória.");
     if (!os) return alert("Ordem de Serviço é obrigatória.");
     if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
     if (!draft.setor) return alert("Setor é obrigatório.");
     if (!draft.observacao) return alert("Selecione uma Observação.");
 
-    // Monta update
     const payloadUpdate = {
+      frota: draft.frota,
       setor: draft.setor,
       ordem_servico: os,
       descricao: draft.descricao,
@@ -151,6 +155,7 @@ function EditarVeiculoModal({
     };
 
     const diff = buildDiff(veiculo, payloadUpdate, [
+      "frota",
       "setor",
       "ordem_servico",
       "descricao",
@@ -158,7 +163,6 @@ function EditarVeiculoModal({
       "categoria",
     ]);
 
-    // Se não mudou nada, não faz update
     if (!Object.keys(diff).length) {
       return alert("Nenhuma alteração para salvar.");
     }
@@ -167,21 +171,9 @@ function EditarVeiculoModal({
     try {
       const deCat = veiculo.categoria || null;
       const paraCat = payloadUpdate.categoria || null;
-
-      const acao = (deCat !== paraCat) ? "MOVER_CATEGORIA" : "EDITAR";
+      const acao = deCat !== paraCat ? "MOVER_CATEGORIA" : "EDITAR";
 
       await onSalvar(payloadUpdate, acao, deCat, paraCat, diff);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleLiberar() {
-    if (!confirm("Confirmar liberação do veículo?")) return;
-    setSaving(true);
-    try {
-      await onLiberar();
       onClose();
     } finally {
       setSaving(false);
@@ -207,6 +199,23 @@ function EditarVeiculoModal({
         </div>
 
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* FROTA EDITÁVEL */}
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Frota</label>
+            <select
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              value={draft.frota}
+              onChange={(e) => setDraft({ ...draft, frota: e.target.value })}
+            >
+              <option value="">Selecione...</option>
+              {(prefixos || []).map((p) => (
+                <option key={p.codigo} value={p.codigo}>
+                  {p.codigo}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex flex-col">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Setor</label>
             <select
@@ -223,29 +232,18 @@ function EditarVeiculoModal({
           </div>
 
           <div className="flex flex-col">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Ordem de Serviço (somente números)</label>
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">
+              Ordem de Serviço (somente números)
+            </label>
             <input
               className="border rounded-lg px-3 py-2 text-sm font-bold"
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
               value={draft.ordem_servico}
-              onChange={(e) =>
-                setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })
-              }
+              onChange={(e) => setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })}
               placeholder="Ex: 123456"
               required
-            />
-          </div>
-
-          <div className="flex flex-col md:col-span-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Descrição</label>
-            <input
-              className="border rounded-lg px-3 py-2 text-sm font-bold"
-              type="text"
-              value={draft.descricao}
-              onChange={(e) => setDraft({ ...draft, descricao: e.target.value })}
-              placeholder="Defeito relatado..."
             />
           </div>
 
@@ -265,7 +263,18 @@ function EditarVeiculoModal({
             </select>
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col md:col-span-2">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Descrição</label>
+            <input
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              type="text"
+              value={draft.descricao}
+              onChange={(e) => setDraft({ ...draft, descricao: e.target.value })}
+              placeholder="Defeito relatado..."
+            />
+          </div>
+
+          <div className="flex flex-col md:col-span-2">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Categoria</label>
             <select
               className="border rounded-lg px-3 py-2 text-sm font-bold"
@@ -278,6 +287,7 @@ function EditarVeiculoModal({
                 </option>
               ))}
             </select>
+
             <div className="text-[10px] text-gray-500 font-semibold mt-1">
               Regras aplicadas conforme categoria atual.
             </div>
@@ -286,29 +296,20 @@ function EditarVeiculoModal({
 
         <div className="px-5 py-4 border-t bg-gray-50 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
           <button
-            onClick={handleLiberar}
+            onClick={onClose}
             disabled={saving}
-            className="px-4 py-2 rounded-lg font-black text-sm bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100 disabled:opacity-60"
           >
-            LIBERAR
+            Cancelar
           </button>
 
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              disabled={saving}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100 disabled:opacity-60"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSalvar}
-              disabled={saving}
-              className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
-            >
-              <FaSave /> Salvar alterações
-            </button>
-          </div>
+          <button
+            onClick={handleSalvar}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
+          >
+            <FaSave /> Salvar alterações
+          </button>
         </div>
       </div>
     </div>
@@ -390,7 +391,6 @@ export default function PCMDiario() {
     para_categoria,
     alteracoes,
   }) {
-    // Se a tabela não existir ainda, isso vai dar erro — mas você vai criar pelo SQL acima.
     const { error } = await supabase.from("veiculos_pcm_historico").insert([
       {
         veiculo_pcm_id,
@@ -406,7 +406,6 @@ export default function PCMDiario() {
 
     if (error) {
       console.warn("Falha ao gravar histórico (ver RLS/tabela):", error);
-      // Não travo operação por causa do histórico, mas você pode travar se quiser.
     }
   }
 
@@ -419,7 +418,7 @@ export default function PCMDiario() {
     if (!form.setor) return alert("Setor é obrigatório.");
     if (!form.observacao) return alert("Selecione uma Observação.");
 
-    // ====== REGRA: NÃO REPETIR FROTA NO MESMO PCM (em aberto) ======
+    // NÃO REPETIR FROTA NO MESMO PCM (em aberto)
     const { data: jaExiste, error: errCheck } = await supabase
       .from("veiculos_pcm")
       .select("id")
@@ -452,12 +451,11 @@ export default function PCMDiario() {
       return alert("Erro ao lançar veículo.");
     }
 
-    // Histórico: lançamento
     await gravarHistorico({
       veiculo_pcm_id: inserted?.id,
       pcm_id: id,
       frota: inserted?.frota,
-      acao: "EDITAR", // ou "LANCAR" se quiser padronizar
+      acao: "LANCAR",
       de_categoria: null,
       para_categoria: inserted?.categoria || null,
       alteracoes: { lancamento: true },
@@ -475,6 +473,8 @@ export default function PCMDiario() {
   }
 
   async function liberarVeiculo(v) {
+    if (!confirm(`Confirmar liberação da frota ${v.frota}?`)) return;
+
     const { error } = await supabase
       .from("veiculos_pcm")
       .update({
@@ -505,10 +505,27 @@ export default function PCMDiario() {
     const v = editVeiculo;
     if (!v?.id) return;
 
-    const { error } = await supabase
-      .from("veiculos_pcm")
-      .update(payloadUpdate)
-      .eq("id", v.id);
+    // valida duplicidade de frota quando trocar
+    if (payloadUpdate.frota && payloadUpdate.frota !== v.frota) {
+      const { data: dup, error: errDup } = await supabase
+        .from("veiculos_pcm")
+        .select("id")
+        .eq("pcm_id", id)
+        .eq("frota", payloadUpdate.frota)
+        .is("data_saida", null)
+        .limit(1);
+
+      if (errDup) {
+        console.error(errDup);
+        return alert("Erro ao validar duplicidade de frota.");
+      }
+
+      if (dup && dup.length > 0) {
+        return alert(`A frota ${payloadUpdate.frota} já existe neste PCM (em aberto).`);
+      }
+    }
+
+    const { error } = await supabase.from("veiculos_pcm").update(payloadUpdate).eq("id", v.id);
 
     if (error) {
       console.error(error);
@@ -519,7 +536,7 @@ export default function PCMDiario() {
     await gravarHistorico({
       veiculo_pcm_id: v.id,
       pcm_id: id,
-      frota: v.frota,
+      frota: payloadUpdate.frota || v.frota,
       acao,
       de_categoria: deCat,
       para_categoria: paraCat,
@@ -594,11 +611,7 @@ export default function PCMDiario() {
       {/* CABEÇALHO */}
       <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/pcm-inicio")}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            title="Voltar"
-          >
+          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full" title="Voltar">
             <FaArrowLeft />
           </button>
 
@@ -615,17 +628,13 @@ export default function PCMDiario() {
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
             <button
-              className={`px-4 py-2 text-xs font-black ${
-                turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"
-              }`}
+              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}
               onClick={() => setTurnoAtivo("DIA")}
             >
               TURNO DIA
             </button>
             <button
-              className={`px-4 py-2 text-xs font-black ${
-                turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"
-              }`}
+              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"}`}
               onClick={() => setTurnoAtivo("NOITE")}
             >
               TURNO NOITE
@@ -647,22 +656,18 @@ export default function PCMDiario() {
           <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
           <p className="text-2xl font-black mt-1">{resumo.total}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
           <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
           <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
           <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
           <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
@@ -704,11 +709,7 @@ export default function PCMDiario() {
 
           <div className="flex flex-col">
             <label className="text-[10px] font-bold mb-1">SETOR</label>
-            <select
-              className="p-2 rounded text-black text-sm font-bold"
-              value={form.setor}
-              onChange={(e) => setForm({ ...form, setor: e.target.value })}
-            >
+            <select className="p-2 rounded text-black text-sm font-bold" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
               {SETORES.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -769,9 +770,7 @@ export default function PCMDiario() {
 
           <div className="flex items-end gap-2">
             <span className="text-[10px] font-black text-gray-300 uppercase">Lançado no turno:</span>
-            <span className="px-3 py-1 rounded-full bg-blue-700 text-white text-xs font-black">
-              {turnoAtivo}
-            </span>
+            <span className="px-3 py-1 rounded-full bg-blue-700 text-white text-xs font-black">{turnoAtivo}</span>
           </div>
         </div>
       </div>
@@ -794,11 +793,7 @@ export default function PCMDiario() {
               <FaFilter /> Filtros:
             </div>
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-            >
+            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
               <option value="">Categoria (todas)</option>
               {CATEGORIAS.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -807,11 +802,7 @@ export default function PCMDiario() {
               ))}
             </select>
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroSetor}
-              onChange={(e) => setFiltroSetor(e.target.value)}
-            >
+            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroSetor} onChange={(e) => setFiltroSetor(e.target.value)}>
               <option value="">Setor (todos)</option>
               {SETORES.map((s) => (
                 <option key={s} value={s}>
@@ -820,11 +811,7 @@ export default function PCMDiario() {
               ))}
             </select>
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroTurno}
-              onChange={(e) => setFiltroTurno(e.target.value)}
-            >
+            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroTurno} onChange={(e) => setFiltroTurno(e.target.value)}>
               <option value="">Turno (todos)</option>
               <option value="DIA">DIA</option>
               <option value="NOITE">NOITE</option>
@@ -848,9 +835,7 @@ export default function PCMDiario() {
         {/* ABAS */}
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            className={`px-4 py-2 rounded-lg text-xs font-black border ${
-              abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"
-            }`}
+            className={`px-4 py-2 rounded-lg text-xs font-black border ${abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"}`}
             onClick={() => setAbaAtiva("TODOS")}
           >
             TODOS
@@ -859,9 +844,7 @@ export default function PCMDiario() {
           {CATEGORIAS.map((c) => (
             <button
               key={c.value}
-              className={`px-4 py-2 rounded-lg text-xs font-black border ${
-                abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"
-              }`}
+              className={`px-4 py-2 rounded-lg text-xs font-black border ${abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"}`}
               onClick={() => setAbaAtiva(c.value)}
             >
               {c.label}
@@ -875,18 +858,14 @@ export default function PCMDiario() {
         <div className="p-4 border-b bg-gray-50">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
             <div>
-              <h2 className="text-sm md:text-base font-black uppercase text-gray-800">
-                Relatório diário - PCM
-              </h2>
+              <h2 className="text-sm md:text-base font-black uppercase text-gray-800">Relatório diário - PCM</h2>
               <p className="text-xs text-gray-500 font-semibold">
                 Data: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span> | Itens em aberto:{" "}
                 <span className="font-black">{veiculosFiltrados.length}</span>
               </p>
             </div>
 
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Ordenação automática: Dias (maiores primeiro)
-            </div>
+            <div className="text-[10px] font-black text-gray-500 uppercase">Ordenação automática: Dias (maiores primeiro)</div>
           </div>
         </div>
 
@@ -932,9 +911,7 @@ export default function PCMDiario() {
                       <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
                       <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
                       <td className="p-3 border-r border-black/10">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
-                          {catStyle.label}
-                        </span>
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>{catStyle.label}</span>
                       </td>
                       <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
                       <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
@@ -945,22 +922,30 @@ export default function PCMDiario() {
                         </span>
                       </td>
                       <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
-                        {v.observacao || "-"}
-                      </td>
+                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
 
-                      {/* 1 BOTÃO SÓ */}
+                      {/* 2 BOTÕES: LIBERAR + EDITAR */}
                       <td className="p-3 text-center">
-                        <button
-                          onClick={() => {
-                            setEditVeiculo(v);
-                            setEditOpen(true);
-                          }}
-                          className="bg-black/20 hover:bg-black/30 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
-                          title="Editar / Mover / Liberar"
-                        >
-                          <FaEdit size={16} />
-                        </button>
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => liberarVeiculo(v)}
+                            className="bg-green-500 hover:bg-green-400 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
+                            title="Liberar veículo"
+                          >
+                            <FaCheckCircle size={16} />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setEditVeiculo(v);
+                              setEditOpen(true);
+                            }}
+                            className="bg-black/20 hover:bg-black/30 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
+                            title="Editar / Mover"
+                          >
+                            <FaEdit size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -980,15 +965,12 @@ export default function PCMDiario() {
       <EditarVeiculoModal
         open={editOpen}
         veiculo={editVeiculo}
+        prefixos={prefixos}
         onClose={() => {
           setEditOpen(false);
           setEditVeiculo(null);
         }}
         onSalvar={salvarEdicaoVeiculo}
-        onLiberar={async () => {
-          if (!editVeiculo) return;
-          await liberarVeiculo(editVeiculo);
-        }}
       />
     </div>
   );
