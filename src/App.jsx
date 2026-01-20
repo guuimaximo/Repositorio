@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
@@ -24,6 +23,10 @@ import SOSCentral from "./pages/SOSCentral";
 import SOSDashboard from "./pages/SOSDashboard";
 
 import KMRodado from "./pages/KMRodado";
+
+// ✅ PCM - Manutenção
+import PCMInicio from "./pages/PCMInicio";
+import PCMDiario from "./pages/PCMDiario";
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -71,6 +74,10 @@ export default function App() {
 
           {/* (opcional) mantém /desempenho-diesel vivo, redirecionando pro Resumo */}
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
+
+          {/* ✅ PCM - Planejamento e Controle de Manutenção */}
+          <Route path="/pcm-inicio" element={<PCMInicio />} />
+          <Route path="/pcm-diario/:id" element={<PCMDiario />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
