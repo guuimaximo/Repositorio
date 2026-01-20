@@ -84,6 +84,61 @@ function buildDiff(before, after, keys) {
 }
 
 /* ============================
+   UI: MULTISELECT (CHIPS)
+   - Permite selecionar MAIS DE UM valor
+============================ */
+
+function MultiSelectChips({ label, options, values, onChange }) {
+  const set = useMemo(() => new Set(values || []), [values]);
+
+  function toggle(v) {
+    const next = new Set(set);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(Array.from(next));
+  }
+
+  function clear() {
+    onChange([]);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {label ? (
+        <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div>
+      ) : null}
+
+      {options.map((opt) => {
+        const active = set.has(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => toggle(opt.value)}
+            className={`px-3 py-2 rounded-lg text-xs font-black border transition-all ${
+              active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800 hover:bg-gray-100"
+            }`}
+            title={active ? "Remover filtro" : "Adicionar filtro"}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+
+      {(values || []).length > 0 && (
+        <button
+          type="button"
+          onClick={clear}
+          className="px-3 py-2 rounded-lg text-xs font-black bg-gray-100 hover:bg-gray-200"
+        >
+          Limpar
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ============================
    MODAL EDITAR (1 BOTÃO)
 ============================ */
 
@@ -241,9 +296,7 @@ function EditarVeiculoModal({
               inputMode="numeric"
               pattern="[0-9]*"
               value={draft.ordem_servico}
-              onChange={(e) =>
-                setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })
-              }
+              onChange={(e) => setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })}
               placeholder="Ex: 123456"
               required
             />
@@ -336,12 +389,11 @@ export default function PCMDiario() {
 
   // filtros
   const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtroCategoria, setFiltroCategoria] = useState("");
-  const [filtroSetor, setFiltroSetor] = useState("");
-  const [filtroTurno, setFiltroTurno] = useState("");
-
-  // ✅ filtro cluster
-  const [filtroCluster, setFiltroCluster] = useState("");
+  // ✅ AGORA MULTI
+  const [filtroCategorias, setFiltroCategorias] = useState([]); // ex: ["GNS","NOITE"]
+  const [filtroSetores, setFiltroSetores] = useState([]); // ex: ["GARANTIA","MANUTENÇÃO"]
+  const [filtroTurnos, setFiltroTurnos] = useState([]); // ex: ["DIA","NOITE"]
+  const [filtroCluster, setFiltroCluster] = useState([]);
 
   // abas
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
@@ -373,14 +425,12 @@ export default function PCMDiario() {
         .eq("pcm_id", id)
         .is("data_saida", null)
         .order("data_entrada", { ascending: true }),
-      // ✅ inclui cluster para montar o relatório
       supabase.from("prefixos").select("codigo, cluster").order("codigo"),
     ]);
 
     if (resPcm?.data) setPcmInfo(resPcm.data);
     if (resPrefixos?.data) setPrefixos(resPrefixos.data);
 
-    // ✅ injeta cluster nos veículos via mapa (não mexe no banco)
     const mapClusterByCodigo = new Map();
     (resPrefixos?.data || []).forEach((p) => {
       const cod = String(p?.codigo || "").trim();
@@ -436,7 +486,6 @@ export default function PCMDiario() {
     if (!form.setor) return alert("Setor é obrigatório.");
     if (!form.observacao) return alert("Selecione uma Observação.");
 
-    // NÃO REPETIR FROTA NO MESMO PCM (em aberto)
     const { data: jaExiste, error: errCheck } = await supabase
       .from("veiculos_pcm")
       .select("id")
@@ -463,11 +512,7 @@ export default function PCMDiario() {
       data_entrada: new Date().toISOString(),
     };
 
-    const { data: inserted, error } = await supabase
-      .from("veiculos_pcm")
-      .insert([payload])
-      .select("*")
-      .single();
+    const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
 
     if (error) {
       console.error(error);
@@ -528,7 +573,6 @@ export default function PCMDiario() {
     const v = editVeiculo;
     if (!v?.id) return;
 
-    // valida duplicidade de frota quando trocar
     if (payloadUpdate.frota && payloadUpdate.frota !== v.frota) {
       const { data: dup, error: errDup } = await supabase
         .from("veiculos_pcm")
@@ -569,7 +613,7 @@ export default function PCMDiario() {
     buscarDados();
   }
 
-  // ✅ lista de clusters para o filtro
+  // ✅ clusters disponíveis (para chips)
   const clustersDisponiveis = useMemo(() => {
     const s = new Set();
     (prefixos || []).forEach((p) => {
@@ -580,23 +624,26 @@ export default function PCMDiario() {
   }, [prefixos]);
 
   // ============================
-  // ORDENAÇÃO:
-  // 1) Categoria: GNS -> NOITE -> PENDENTES -> VENDA
-  // 2) Dentro: tempo parado (dias) DESC
+  // FILTRO + ORDENAÇÃO
   // ============================
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
     const orderCat = { GNS: 0, NOITE: 1, PENDENTES: 2, VENDA: 3 };
 
+    const setCats = new Set(filtroCategorias || []);
+    const setSetores = new Set(filtroSetores || []);
+    const setTurnos = new Set(filtroTurnos || []);
+    const setClusters = new Set(filtroCluster || []);
+
     return (veiculos || [])
       .filter((v) => {
         if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
-        if (filtroCategoria && v.categoria !== filtroCategoria) return false;
-        if (filtroSetor && v.setor !== filtroSetor) return false;
-        if (filtroTurno && v.lancado_no_turno !== filtroTurno) return false;
 
-        // ✅ filtro por cluster
-        if (filtroCluster && String(v.cluster || "") !== String(filtroCluster)) return false;
+        // ✅ MULTI: se vazio, não filtra; se tiver algo, precisa estar dentro
+        if (setCats.size && !setCats.has(v.categoria)) return false;
+        if (setSetores.size && !setSetores.has(v.setor)) return false;
+        if (setTurnos.size && !setTurnos.has(v.lancado_no_turno)) return false;
+        if (setClusters.size && !setClusters.has(String(v.cluster || ""))) return false;
 
         if (!txt) return true;
 
@@ -607,7 +654,7 @@ export default function PCMDiario() {
           v.setor,
           v.lancado_por,
           v.observacao,
-          v.cluster, // ✅ busca também por cluster
+          v.cluster,
         ]
           .filter(Boolean)
           .join(" ")
@@ -628,15 +675,7 @@ export default function PCMDiario() {
         const tb = new Date(b.data_entrada || 0).getTime();
         return ta - tb;
       });
-  }, [
-    veiculos,
-    filtroTexto,
-    filtroCategoria,
-    filtroSetor,
-    filtroTurno,
-    filtroCluster,
-    abaAtiva,
-  ]);
+  }, [veiculos, filtroTexto, filtroCategorias, filtroSetores, filtroTurnos, filtroCluster, abaAtiva]);
 
   const resumo = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
@@ -674,7 +713,11 @@ export default function PCMDiario() {
       {/* CABEÇALHO */}
       <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full" title="Voltar">
+          <button
+            onClick={() => navigate("/pcm-inicio")}
+            className="p-2 hover:bg-gray-100 rounded-full"
+            title="Voltar"
+          >
             <FaArrowLeft />
           </button>
 
@@ -691,13 +734,17 @@ export default function PCMDiario() {
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
             <button
-              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}
+              className={`px-4 py-2 text-xs font-black ${
+                turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"
+              }`}
               onClick={() => setTurnoAtivo("DIA")}
             >
               TURNO DIA
             </button>
             <button
-              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"}`}
+              className={`px-4 py-2 text-xs font-black ${
+                turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"
+              }`}
               onClick={() => setTurnoAtivo("NOITE")}
             >
               TURNO NOITE
@@ -855,74 +902,61 @@ export default function PCMDiario() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-col gap-2 items-start md:items-end">
             <div className="flex items-center gap-2 text-xs font-black text-gray-500">
-              <FaFilter /> Filtros:
+              <FaFilter /> Filtros (multi):
             </div>
 
-            {/* ✅ CLUSTER */}
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroCluster}
-              onChange={(e) => setFiltroCluster(e.target.value)}
-            >
-              <option value="">Cluster (todos)</option>
-              {clustersDisponiveis.map((cl) => (
-                <option key={cl} value={cl}>
-                  {cl}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* ✅ CLUSTER MULTI */}
+              <MultiSelectChips
+                label="Cluster"
+                options={clustersDisponiveis.map((cl) => ({ value: cl, label: cl }))}
+                values={filtroCluster}
+                onChange={setFiltroCluster}
+              />
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-            >
-              <option value="">Categoria (todas)</option>
-              {CATEGORIAS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              {/* ✅ CATEGORIA MULTI */}
+              <MultiSelectChips
+                label="Categoria"
+                options={CATEGORIAS.map((c) => ({ value: c.value, label: c.label }))}
+                values={filtroCategorias}
+                onChange={setFiltroCategorias}
+              />
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroSetor}
-              onChange={(e) => setFiltroSetor(e.target.value)}
-            >
-              <option value="">Setor (todos)</option>
-              {SETORES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              {/* ✅ SETOR MULTI */}
+              <MultiSelectChips
+                label="Setor"
+                options={SETORES.map((s) => ({ value: s, label: s }))}
+                values={filtroSetores}
+                onChange={setFiltroSetores}
+              />
 
-            <select
-              className="border rounded-lg px-3 py-2 text-xs font-black"
-              value={filtroTurno}
-              onChange={(e) => setFiltroTurno(e.target.value)}
-            >
-              <option value="">Turno (todos)</option>
-              <option value="DIA">DIA</option>
-              <option value="NOITE">NOITE</option>
-            </select>
+              {/* ✅ TURNO MULTI */}
+              <MultiSelectChips
+                label="Turno"
+                options={[
+                  { value: "DIA", label: "DIA" },
+                  { value: "NOITE", label: "NOITE" },
+                ]}
+                values={filtroTurnos}
+                onChange={setFiltroTurnos}
+              />
 
-            <button
-              className="px-3 py-2 text-xs font-black rounded-lg bg-gray-100 hover:bg-gray-200"
-              onClick={() => {
-                setFiltroTexto("");
-                setFiltroCluster("");
-                setFiltroCategoria("");
-                setFiltroSetor("");
-                setFiltroTurno("");
-                setAbaAtiva("TODOS");
-              }}
-            >
-              Limpar
-            </button>
+              <button
+                className="px-3 py-2 text-xs font-black rounded-lg bg-gray-100 hover:bg-gray-200"
+                onClick={() => {
+                  setFiltroTexto("");
+                  setFiltroCluster([]);
+                  setFiltroCategorias([]);
+                  setFiltroSetores([]);
+                  setFiltroTurnos([]);
+                  setAbaAtiva("TODOS");
+                }}
+              >
+                Limpar tudo
+              </button>
+            </div>
           </div>
         </div>
 
@@ -973,9 +1007,7 @@ export default function PCMDiario() {
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                {/* ✅ NOVA COLUNA */}
                 <th className="p-3 border-r whitespace-nowrap">Cluster</th>
-
                 <th className="p-3 border-r whitespace-nowrap">Frota</th>
                 <th className="p-3 border-r whitespace-nowrap">Entrada</th>
                 <th className="p-3 border-r text-center whitespace-nowrap">Dias</th>
@@ -1010,16 +1042,16 @@ export default function PCMDiario() {
 
                   return (
                     <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
-                      {/* ✅ CLUSTER */}
                       <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">
                         {v.cluster || "-"}
                       </td>
-
                       <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
                       <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
                       <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
                       <td className="p-3 border-r border-black/10">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>{catStyle.label}</span>
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
+                          {catStyle.label}
+                        </span>
                       </td>
                       <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
                       <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
