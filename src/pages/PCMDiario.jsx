@@ -241,7 +241,9 @@ function EditarVeiculoModal({
               inputMode="numeric"
               pattern="[0-9]*"
               value={draft.ordem_servico}
-              onChange={(e) => setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })}
+              onChange={(e) =>
+                setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })
+              }
               placeholder="Ex: 123456"
               required
             />
@@ -338,6 +340,9 @@ export default function PCMDiario() {
   const [filtroSetor, setFiltroSetor] = useState("");
   const [filtroTurno, setFiltroTurno] = useState("");
 
+  // ✅ filtro cluster
+  const [filtroCluster, setFiltroCluster] = useState("");
+
   // abas
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
 
@@ -368,13 +373,26 @@ export default function PCMDiario() {
         .eq("pcm_id", id)
         .is("data_saida", null)
         .order("data_entrada", { ascending: true }),
-      supabase.from("prefixos").select("codigo").order("codigo"),
+      // ✅ inclui cluster para montar o relatório
+      supabase.from("prefixos").select("codigo, cluster").order("codigo"),
     ]);
 
     if (resPcm?.data) setPcmInfo(resPcm.data);
-    if (resVeiculos?.data) setVeiculos(resVeiculos.data);
     if (resPrefixos?.data) setPrefixos(resPrefixos.data);
 
+    // ✅ injeta cluster nos veículos via mapa (não mexe no banco)
+    const mapClusterByCodigo = new Map();
+    (resPrefixos?.data || []).forEach((p) => {
+      const cod = String(p?.codigo || "").trim();
+      if (cod) mapClusterByCodigo.set(cod, String(p?.cluster || "").trim());
+    });
+
+    const veicsComCluster = (resVeiculos?.data || []).map((v) => ({
+      ...v,
+      cluster: mapClusterByCodigo.get(String(v?.frota || "").trim()) || "",
+    }));
+
+    setVeiculos(veicsComCluster);
     setLoading(false);
   }, [id]);
 
@@ -445,7 +463,12 @@ export default function PCMDiario() {
       data_entrada: new Date().toISOString(),
     };
 
-    const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
+    const { data: inserted, error } = await supabase
+      .from("veiculos_pcm")
+      .insert([payload])
+      .select("*")
+      .single();
+
     if (error) {
       console.error(error);
       return alert("Erro ao lançar veículo.");
@@ -546,8 +569,24 @@ export default function PCMDiario() {
     buscarDados();
   }
 
+  // ✅ lista de clusters para o filtro
+  const clustersDisponiveis = useMemo(() => {
+    const s = new Set();
+    (prefixos || []).forEach((p) => {
+      const cl = String(p?.cluster || "").trim();
+      if (cl) s.add(cl);
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [prefixos]);
+
+  // ============================
+  // ORDENAÇÃO:
+  // 1) Categoria: GNS -> NOITE -> PENDENTES -> VENDA
+  // 2) Dentro: tempo parado (dias) DESC
+  // ============================
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
+    const orderCat = { GNS: 0, NOITE: 1, PENDENTES: 2, VENDA: 3 };
 
     return (veiculos || [])
       .filter((v) => {
@@ -555,6 +594,9 @@ export default function PCMDiario() {
         if (filtroCategoria && v.categoria !== filtroCategoria) return false;
         if (filtroSetor && v.setor !== filtroSetor) return false;
         if (filtroTurno && v.lancado_no_turno !== filtroTurno) return false;
+
+        // ✅ filtro por cluster
+        if (filtroCluster && String(v.cluster || "") !== String(filtroCluster)) return false;
 
         if (!txt) return true;
 
@@ -565,6 +607,7 @@ export default function PCMDiario() {
           v.setor,
           v.lancado_por,
           v.observacao,
+          v.cluster, // ✅ busca também por cluster
         ]
           .filter(Boolean)
           .join(" ")
@@ -572,8 +615,28 @@ export default function PCMDiario() {
 
         return s.includes(txt);
       })
-      .sort((a, b) => daysBetween(b.data_entrada) - daysBetween(a.data_entrada));
-  }, [veiculos, filtroTexto, filtroCategoria, filtroSetor, filtroTurno, abaAtiva]);
+      .sort((a, b) => {
+        const ca = orderCat[a.categoria] ?? 99;
+        const cb = orderCat[b.categoria] ?? 99;
+        if (ca !== cb) return ca - cb;
+
+        const da = daysBetween(a.data_entrada);
+        const db = daysBetween(b.data_entrada);
+        if (da !== db) return db - da;
+
+        const ta = new Date(a.data_entrada || 0).getTime();
+        const tb = new Date(b.data_entrada || 0).getTime();
+        return ta - tb;
+      });
+  }, [
+    veiculos,
+    filtroTexto,
+    filtroCategoria,
+    filtroSetor,
+    filtroTurno,
+    filtroCluster,
+    abaAtiva,
+  ]);
 
   const resumo = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
@@ -709,7 +772,11 @@ export default function PCMDiario() {
 
           <div className="flex flex-col">
             <label className="text-[10px] font-bold mb-1">SETOR</label>
-            <select className="p-2 rounded text-black text-sm font-bold" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
+            <select
+              className="p-2 rounded text-black text-sm font-bold"
+              value={form.setor}
+              onChange={(e) => setForm({ ...form, setor: e.target.value })}
+            >
               {SETORES.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -793,7 +860,25 @@ export default function PCMDiario() {
               <FaFilter /> Filtros:
             </div>
 
-            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+            {/* ✅ CLUSTER */}
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroCluster}
+              onChange={(e) => setFiltroCluster(e.target.value)}
+            >
+              <option value="">Cluster (todos)</option>
+              {clustersDisponiveis.map((cl) => (
+                <option key={cl} value={cl}>
+                  {cl}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+            >
               <option value="">Categoria (todas)</option>
               {CATEGORIAS.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -802,7 +887,11 @@ export default function PCMDiario() {
               ))}
             </select>
 
-            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroSetor} onChange={(e) => setFiltroSetor(e.target.value)}>
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroSetor}
+              onChange={(e) => setFiltroSetor(e.target.value)}
+            >
               <option value="">Setor (todos)</option>
               {SETORES.map((s) => (
                 <option key={s} value={s}>
@@ -811,7 +900,11 @@ export default function PCMDiario() {
               ))}
             </select>
 
-            <select className="border rounded-lg px-3 py-2 text-xs font-black" value={filtroTurno} onChange={(e) => setFiltroTurno(e.target.value)}>
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroTurno}
+              onChange={(e) => setFiltroTurno(e.target.value)}
+            >
               <option value="">Turno (todos)</option>
               <option value="DIA">DIA</option>
               <option value="NOITE">NOITE</option>
@@ -821,6 +914,7 @@ export default function PCMDiario() {
               className="px-3 py-2 text-xs font-black rounded-lg bg-gray-100 hover:bg-gray-200"
               onClick={() => {
                 setFiltroTexto("");
+                setFiltroCluster("");
                 setFiltroCategoria("");
                 setFiltroSetor("");
                 setFiltroTurno("");
@@ -835,7 +929,9 @@ export default function PCMDiario() {
         {/* ABAS */}
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            className={`px-4 py-2 rounded-lg text-xs font-black border ${abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"}`}
+            className={`px-4 py-2 rounded-lg text-xs font-black border ${
+              abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"
+            }`}
             onClick={() => setAbaAtiva("TODOS")}
           >
             TODOS
@@ -844,7 +940,9 @@ export default function PCMDiario() {
           {CATEGORIAS.map((c) => (
             <button
               key={c.value}
-              className={`px-4 py-2 rounded-lg text-xs font-black border ${abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"}`}
+              className={`px-4 py-2 rounded-lg text-xs font-black border ${
+                abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"
+              }`}
               onClick={() => setAbaAtiva(c.value)}
             >
               {c.label}
@@ -865,7 +963,9 @@ export default function PCMDiario() {
               </p>
             </div>
 
-            <div className="text-[10px] font-black text-gray-500 uppercase">Ordenação automática: Dias (maiores primeiro)</div>
+            <div className="text-[10px] font-black text-gray-500 uppercase">
+              Ordenação: Categoria (GNS → Branco → Cinza → Venda) e Tempo parado (desc)
+            </div>
           </div>
         </div>
 
@@ -873,6 +973,9 @@ export default function PCMDiario() {
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                {/* ✅ NOVA COLUNA */}
+                <th className="p-3 border-r whitespace-nowrap">Cluster</th>
+
                 <th className="p-3 border-r whitespace-nowrap">Frota</th>
                 <th className="p-3 border-r whitespace-nowrap">Entrada</th>
                 <th className="p-3 border-r text-center whitespace-nowrap">Dias</th>
@@ -890,13 +993,13 @@ export default function PCMDiario() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold">
+                  <td colSpan={12} className="p-6 text-center text-gray-500 font-bold">
                     Carregando PCM...
                   </td>
                 </tr>
               ) : veiculosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold">
+                  <td colSpan={12} className="p-6 text-center text-gray-500 font-bold">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -907,6 +1010,11 @@ export default function PCMDiario() {
 
                   return (
                     <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
+                      {/* ✅ CLUSTER */}
+                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">
+                        {v.cluster || "-"}
+                      </td>
+
                       <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
                       <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
                       <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
@@ -924,7 +1032,6 @@ export default function PCMDiario() {
                       <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
                       <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
 
-                      {/* 2 BOTÕES: LIBERAR + EDITAR */}
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-2">
                           <button
