@@ -1,180 +1,641 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useContext, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { 
-  FaDownload, FaSun, FaMoon, FaCheckCircle, 
-  FaArrowLeft, FaTruckLoading, FaExclamationTriangle 
+import { AuthContext } from "../context/AuthContext";
+import {
+  FaDownload,
+  FaCheckCircle,
+  FaArrowLeft,
+  FaTruckLoading,
+  FaSearch,
+  FaFilter,
 } from "react-icons/fa";
+
+import html2canvas from "html2canvas";
+
+/* ============================
+   HELPERS DE ESTILO / STATUS
+============================ */
+
+const CATEGORIAS = [
+  { value: "GNS", label: "GNS", color: "bg-red-600 text-white", badge: "bg-red-600 text-white" },
+  { value: "NOITE", label: "Liberação Noturno", color: "bg-white text-gray-900", badge: "bg-gray-900 text-white" },
+  { value: "VENDA", label: "Venda", color: "bg-blue-600 text-white", badge: "bg-blue-600 text-white" },
+  { value: "PENDENTES", label: "Pendentes", color: "bg-gray-500 text-white", badge: "bg-gray-500 text-white" },
+];
+
+function getCategoriaStyle(cat) {
+  const found = CATEGORIAS.find((c) => c.value === cat);
+  return found || { value: cat, label: cat, color: "bg-gray-200 text-gray-800", badge: "bg-gray-200 text-gray-800" };
+}
+
+function formatBRDate(dt) {
+  try {
+    if (!dt) return "-";
+    return new Date(dt).toLocaleDateString("pt-BR");
+  } catch {
+    return "-";
+  }
+}
+
+function daysBetween(inicioISO) {
+  try {
+    const d0 = new Date(inicioISO);
+    const diff = Date.now() - d0.getTime();
+    return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+  } catch {
+    return 0;
+  }
+}
+
+/* ============================
+   PAGE
+============================ */
 
 export default function PCMDiario() {
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  // Estados de Dados
+  const { user } = useContext(AuthContext);
+
   const [veiculos, setVeiculos] = useState([]);
   const [prefixos, setPrefixos] = useState([]);
   const [pcmInfo, setPcmInfo] = useState(null);
-  
-  // Estados de Interface
   const [loading, setLoading] = useState(true);
+
   const [turnoAtivo, setTurnoAtivo] = useState("DIA");
-  const [form, setForm] = useState({ 
-    frota: "", setor: "MANUTENÇÃO", descricao: "", categoria: "GNS" 
+
+  // filtro global
+  const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
+  const [filtroSetor, setFiltroSetor] = useState("");
+  const [filtroTurno, setFiltroTurno] = useState("");
+
+  // aba (visão de relatório)
+  const [abaAtiva, setAbaAtiva] = useState("TODOS");
+
+  const reportRef = useRef(null);
+
+  const [form, setForm] = useState({
+    frota: "",
+    setor: "MANUTENÇÃO",
+    descricao: "",
+    categoria: "GNS",
+    ordem_servico: "",
+    previsao: "",
+    observacao: "",
   });
 
-  // 1. Carregar dados iniciais (Cabeçalho do PCM e Prefixos)
-  const carregarDadosBase = useCallback(async () => {
-    const [resPcm, resPrefixos] = await Promise.all([
-      supabase.from("pcm_diario").select("*").eq("id", id).single(),
-      supabase.from("prefixos").select("codigo").order("codigo")
-    ]);
-    
-    if (resPcm.data) setPcmInfo(resPcm.data);
-    if (resPrefixos.data) setPrefixos(resPrefixos.data);
-  }, [id]);
-
-  // 2. Buscar veículos vinculados a este PCM (Apenas os que não saíram)
-  const buscarVeiculos = useCallback(async () => {
+  const buscarDados = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("veiculos_pcm")
-      .select("*")
-      .eq("pcm_id", id)
-      .is("data_saida", null)
-      .order("categoria", { ascending: true });
 
-    if (!error) setVeiculos(data);
+    const [resPcm, resVeiculos, resPrefixos] = await Promise.all([
+      supabase.from("pcm_diario").select("*").eq("id", id).single(),
+      supabase
+        .from("veiculos_pcm")
+        .select("*")
+        .eq("pcm_id", id)
+        .is("data_saida", null)
+        .order("data_entrada", { ascending: true }),
+      supabase.from("prefixos").select("codigo").order("codigo"),
+    ]);
+
+    if (resPcm.data) setPcmInfo(resPcm.data);
+    if (resVeiculos.data) setVeiculos(resVeiculos.data);
+    if (resPrefixos.data) setPrefixos(resPrefixos.data);
+
     setLoading(false);
   }, [id]);
 
   useEffect(() => {
-    carregarDadosBase();
-    buscarVeiculos();
-  }, [carregarDadosBase, buscarVeiculos]);
+    buscarDados();
+  }, [buscarDados]);
 
-  // 3. Lógica de Lançamento
   async function lancarVeiculo() {
-    if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição!");
+    if (!form.frota || !form.descricao) return alert("Preencha os campos obrigatórios!");
 
     const payload = {
       pcm_id: id,
       ...form,
+      lancado_por: user?.nome || "Sistema",
       lancado_no_turno: turnoAtivo,
-      data_entrada: new Date().toISOString()
+      data_entrada: new Date().toISOString(),
     };
 
     const { error } = await supabase.from("veiculos_pcm").insert([payload]);
-    if (!error) {
-      setForm({ ...form, frota: "", descricao: "" });
-      buscarVeiculos();
+    if (error) {
+      console.error(error);
+      return alert("Erro ao lançar veículo.");
     }
+
+    setForm({
+      ...form,
+      frota: "",
+      descricao: "",
+      ordem_servico: "",
+      observacao: "",
+    });
+
+    buscarDados();
   }
 
-  // 4. Lógica de Liberação (Baixa no sistema)
   async function liberarVeiculo(vId) {
+    if (!confirm("Confirmar liberação do veículo?")) return;
+
     const { error } = await supabase
       .from("veiculos_pcm")
-      .update({ data_saida: new Date().toISOString() })
+      .update({
+        data_saida: new Date().toISOString(),
+        liberado_por: user?.nome || "Sistema",
+      })
       .eq("id", vId);
 
-    if (!error) buscarVeiculos();
+    if (error) {
+      console.error(error);
+      return alert("Erro ao liberar veículo.");
+    }
+
+    buscarDados();
   }
 
-  // Auxiliares de UI
-  const calcularDias = (dataEntrada) => {
-    const inicio = new Date(dataEntrada);
-    const hoje = new Date();
-    const diff = Math.floor((hoje - inicio) / (1000 * 60 * 60 * 24));
-    return diff;
-  };
+  /* ============================
+     FILTROS + ORDENACAO
+  ============================ */
 
-  const getRowStyle = (cat) => {
-    switch (cat) {
-      case "GNS": return "bg-red-600 text-white border-red-700";
-      case "NOITE": return "bg-white text-gray-800 border-gray-200";
-      case "VENDA": return "bg-blue-600 text-white border-blue-700";
-      case "PENDENTES": return "bg-gray-400 text-white border-gray-500";
-      default: return "bg-white";
+  const veiculosFiltrados = useMemo(() => {
+    const txt = filtroTexto.trim().toLowerCase();
+
+    return (veiculos || [])
+      .filter((v) => {
+        if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
+
+        if (filtroCategoria && v.categoria !== filtroCategoria) return false;
+        if (filtroSetor && v.setor !== filtroSetor) return false;
+        if (filtroTurno && v.lancado_no_turno !== filtroTurno) return false;
+
+        if (!txt) return true;
+
+        const s = [
+          v.frota,
+          v.descricao,
+          v.ordem_servico,
+          v.setor,
+          v.lancado_por,
+          v.observacao,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return s.includes(txt);
+      })
+      .sort((a, b) => daysBetween(b.data_entrada) - daysBetween(a.data_entrada)); // críticos em cima
+  }, [veiculos, filtroTexto, filtroCategoria, filtroSetor, filtroTurno, abaAtiva]);
+
+  const resumo = useMemo(() => {
+    const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
+
+    const total = (base || []).length;
+
+    const byCat = {
+      GNS: 0,
+      NOITE: 0,
+      VENDA: 0,
+      PENDENTES: 0,
+    };
+
+    (base || []).forEach((v) => {
+      if (byCat[v.categoria] !== undefined) byCat[v.categoria]++;
+    });
+
+    return {
+      total,
+      ...byCat,
+    };
+  }, [veiculos, veiculosFiltrados]);
+
+  /* ============================
+     EXPORTAR RELATORIO PNG
+  ============================ */
+  async function baixarImagemPCM() {
+    try {
+      if (!reportRef.current) return;
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+      });
+
+      const link = document.createElement("a");
+      link.download = `PCM_${pcmInfo?.data_referencia || "diario"}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar imagem do PCM.");
     }
-  };
+  }
+
+  const setores = ["MANUTENÇÃO", "SUPRIMENTOS", "GARANTIA"];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 font-sans">
-      {/* HEADER E RESUMO */}
-      <div className="bg-white p-4 rounded-t-xl shadow-md flex flex-wrap justify-between items-center border-b-2 border-blue-500">
+    <div className="min-h-screen bg-gray-50 p-4">
+      {/* CABEÇALHO */}
+      <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full"><FaArrowLeft /></button>
+          <button
+            onClick={() => navigate("/pcm-inicio")}
+            className="p-2 hover:bg-gray-100 rounded-full"
+            title="Voltar"
+          >
+            <FaArrowLeft />
+          </button>
+
           <div>
-            <h1 className="text-xl font-black uppercase tracking-tighter">PCM - {pcmInfo?.data_referencia}</h1>
-            <p className="text-xs font-bold text-gray-400">Responsável: {pcmInfo?.criado_por}</p>
+            <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight">
+              PCM - Planejamento e Controle de Manutenção
+            </h1>
+            <p className="text-xs text-gray-500 font-semibold">
+              Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
+            </p>
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <div className="flex bg-gray-200 p-1 rounded-lg">
-            <button onClick={() => setTurnoAtivo("DIA")} className={`px-4 py-1 rounded-md flex items-center gap-2 font-bold text-sm ${turnoAtivo === "DIA" ? "bg-yellow-400 shadow" : ""}`}><FaSun /> DIA</button>
-            <button onClick={() => setTurnoAtivo("NOITE")} className={`px-4 py-1 rounded-md flex items-center gap-2 font-bold text-sm ${turnoAtivo === "NOITE" ? "bg-gray-800 text-white shadow" : ""}`}><FaMoon /> NOITE</button>
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+          <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
+            <button
+              className={`px-4 py-2 text-xs font-black ${
+                turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"
+              }`}
+              onClick={() => setTurnoAtivo("DIA")}
+            >
+              TURNO DIA
+            </button>
+            <button
+              className={`px-4 py-2 text-xs font-black ${
+                turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"
+              }`}
+              onClick={() => setTurnoAtivo("NOITE")}
+            >
+              TURNO NOITE
+            </button>
           </div>
-          <button className="bg-blue-700 text-white px-4 py-1 rounded-lg font-bold text-sm flex items-center gap-2"><FaDownload /> BAIXAR</button>
+
+          <button
+            onClick={baixarImagemPCM}
+            className="bg-blue-700 text-white px-5 py-2 rounded-lg font-black flex items-center justify-center gap-2 hover:bg-blue-800 transition-all"
+          >
+            <FaDownload /> BAIXAR PCM (IMAGEM)
+          </button>
         </div>
       </div>
 
-      {/* INPUT DE LANÇAMENTO */}
-      <div className="bg-gray-800 p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end shadow-inner">
-        <div className="flex flex-col text-white">
-          <label className="text-[10px] font-bold mb-1">VEÍCULO</label>
-          <select className="p-2 rounded text-black text-sm" value={form.frota} onChange={e => setForm({...form, frota: e.target.value})}>
-            <option value="">Selecione...</option>
-            {prefixos.map(p => <option key={p.codigo} value={p.codigo}>{p.codigo}</option>)}
-          </select>
+      {/* CARDS RESUMO */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
+          <p className="text-2xl font-black mt-1">{resumo.total}</p>
         </div>
-        <div className="flex flex-col text-white">
-          <label className="text-[10px] font-bold mb-1">CATEGORIA</label>
-          <select className="p-2 rounded text-black text-sm font-bold" value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})}>
-            <option value="GNS">GNS (Vermelho)</option>
-            <option value="NOITE">NOITE (Branco)</option>
-            <option value="VENDA">VENDA (Azul)</option>
-            <option value="PENDENTES">PENDENTES (Cinza)</option>
-          </select>
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
+          <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
         </div>
-        <div className="md:col-span-2 flex flex-col text-white">
-          <label className="text-[10px] font-bold mb-1">DESCRIÇÃO DO DEFEITO</label>
-          <input className="p-2 rounded text-black text-sm" type="text" value={form.descricao} onChange={e => setForm({...form, descricao: e.target.value})} placeholder="Descreva o problema..." />
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
+          <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
         </div>
-        <button onClick={lancarVeiculo} className="bg-green-600 hover:bg-green-500 text-white p-2 rounded font-black flex items-center justify-center gap-2"><FaTruckLoading /> LANÇAR</button>
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
+          <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4 border">
+          <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
+          <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
+        </div>
       </div>
 
-      {/* TABELA DE OPERAÇÃO */}
-      <div className="bg-white shadow-xl rounded-b-xl overflow-hidden overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b">
-              <th className="p-3 w-20">Frota</th>
-              <th className="p-3 w-24">Dias</th>
-              <th className="p-3">Descrição / Observação</th>
-              <th className="p-3 w-32">Setor</th>
-              <th className="p-3 w-20 text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {veiculos.map((v) => (
-              <tr key={v.id} className={`${getRowStyle(v.categoria)} border-b transition-all`}>
-                <td className="p-3 text-xl font-black">{v.frota}</td>
-                <td className="p-3">
-                  <span className="flex items-center gap-1 font-bold">
-                    <FaExclamationTriangle className={calcularDias(v.data_entrada) > 3 ? "text-yellow-400" : "opacity-20"} />
-                    {calcularDias(v.data_entrada)} d
-                  </span>
-                </td>
-                <td className="p-3 text-xs font-medium uppercase leading-tight">{v.descricao}</td>
-                <td className="p-3 text-[10px] font-black">{v.setor}</td>
-                <td className="p-3 text-center">
-                  <button onClick={() => liberarVeiculo(v.id)} className="bg-green-500 hover:bg-green-400 text-white p-2 rounded-full shadow-lg"><FaCheckCircle size={16}/></button>
-                </td>
+      {/* FORMULÁRIO */}
+      <div className="bg-gray-900 p-5 mt-4 rounded-xl shadow-inner text-white">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold mb-1">FROTA</label>
+            <select
+              className="p-2 rounded text-black text-sm font-bold"
+              value={form.frota}
+              onChange={(e) => setForm({ ...form, frota: e.target.value })}
+            >
+              <option value="">Selecione...</option>
+              {prefixos.map((p) => (
+                <option key={p.codigo} value={p.codigo}>
+                  {p.codigo}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold mb-1">CATEGORIA</label>
+            <select
+              className="p-2 rounded text-black text-sm font-bold"
+              value={form.categoria}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+            >
+              <option value="GNS">GNS (Vermelho)</option>
+              <option value="NOITE">Liberação Noturno (Branco)</option>
+              <option value="VENDA">Venda (Azul)</option>
+              <option value="PENDENTES">Pendentes (Cinza)</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold mb-1">SETOR</label>
+            <select
+              className="p-2 rounded text-black text-sm font-bold"
+              value={form.setor}
+              onChange={(e) => setForm({ ...form, setor: e.target.value })}
+            >
+              <option value="MANUTENÇÃO">MANUTENÇÃO</option>
+              <option value="SUPRIMENTOS">SUPRIMENTOS</option>
+              <option value="GARANTIA">GARANTIA</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold mb-1">ORDEM SERVIÇO</label>
+            <input
+              className="p-2 rounded text-black text-sm"
+              type="text"
+              value={form.ordem_servico}
+              onChange={(e) => setForm({ ...form, ordem_servico: e.target.value })}
+              placeholder="O.S nº"
+            />
+          </div>
+
+          <div className="flex flex-col md:col-span-2">
+            <label className="text-[10px] font-bold mb-1">DESCRIÇÃO DO DEFEITO</label>
+            <input
+              className="p-2 rounded text-black text-sm"
+              type="text"
+              value={form.descricao}
+              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+              placeholder="Defeito relatado..."
+            />
+          </div>
+
+          <button
+            onClick={lancarVeiculo}
+            className="bg-green-600 hover:bg-green-500 text-white p-2 rounded font-black flex items-center justify-center gap-2 h-[40px]"
+          >
+            <FaTruckLoading size={18} /> LANÇAR
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold mb-1">OBSERVAÇÃO</label>
+            <input
+              className="p-2 rounded text-black text-sm"
+              type="text"
+              value={form.observacao}
+              onChange={(e) => setForm({ ...form, observacao: e.target.value })}
+              placeholder="Ex: Aguardando peças / Manutenção diurna..."
+            />
+          </div>
+
+          <div className="flex items-end gap-2">
+            <span className="text-[10px] font-black text-gray-300 uppercase">Lançado no turno:</span>
+            <span className="px-3 py-1 rounded-full bg-blue-700 text-white text-xs font-black">
+              {turnoAtivo}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* FILTROS */}
+      <div className="bg-white rounded-xl shadow p-4 mt-4 border">
+        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <FaSearch className="text-gray-500" />
+            <input
+              className="w-full md:w-[380px] border rounded-lg px-3 py-2 text-sm font-semibold"
+              value={filtroTexto}
+              onChange={(e) => setFiltroTexto(e.target.value)}
+              placeholder="Buscar frota, OS, descrição, setor, responsável..."
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center gap-2 text-xs font-black text-gray-500">
+              <FaFilter /> Filtros:
+            </div>
+
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+            >
+              <option value="">Categoria (todas)</option>
+              {CATEGORIAS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroSetor}
+              onChange={(e) => setFiltroSetor(e.target.value)}
+            >
+              <option value="">Setor (todos)</option>
+              {setores.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="border rounded-lg px-3 py-2 text-xs font-black"
+              value={filtroTurno}
+              onChange={(e) => setFiltroTurno(e.target.value)}
+            >
+              <option value="">Turno (todos)</option>
+              <option value="DIA">DIA</option>
+              <option value="NOITE">NOITE</option>
+            </select>
+
+            <button
+              className="px-3 py-2 text-xs font-black rounded-lg bg-gray-100 hover:bg-gray-200"
+              onClick={() => {
+                setFiltroTexto("");
+                setFiltroCategoria("");
+                setFiltroSetor("");
+                setFiltroTurno("");
+                setAbaAtiva("TODOS");
+              }}
+            >
+              Limpar
+            </button>
+          </div>
+        </div>
+
+        {/* ABAS */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            className={`px-4 py-2 rounded-lg text-xs font-black border ${
+              abaAtiva === "TODOS" ? "bg-gray-900 text-white" : "bg-white text-gray-800"
+            }`}
+            onClick={() => setAbaAtiva("TODOS")}
+          >
+            TODOS
+          </button>
+
+          {CATEGORIAS.map((c) => (
+            <button
+              key={c.value}
+              className={`px-4 py-2 rounded-lg text-xs font-black border ${
+                abaAtiva === c.value ? "bg-gray-900 text-white" : "bg-white text-gray-800"
+              }`}
+              onClick={() => setAbaAtiva(c.value)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* RELATORIO TABELA (EXPORTA COMO IMAGEM) */}
+      <div ref={reportRef} className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
+        <div className="p-4 border-b bg-gray-50">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
+            <div>
+              <h2 className="text-sm md:text-base font-black uppercase text-gray-800">
+                Relatório diário - PCM
+              </h2>
+              <p className="text-xs text-gray-500 font-semibold">
+                Data: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span> | Itens em aberto:{" "}
+                <span className="font-black">{veiculosFiltrados.length}</span>
+              </p>
+            </div>
+
+            <div className="text-[10px] font-black text-gray-500 uppercase">
+              Ordenação automática: Dias (maiores primeiro)
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                <th className="p-3 border-r whitespace-nowrap">Frota</th>
+                <th className="p-3 border-r whitespace-nowrap">Entrada</th>
+                <th className="p-3 border-r text-center whitespace-nowrap">Dias</th>
+                <th className="p-3 border-r whitespace-nowrap">Categoria</th>
+                <th className="p-3 border-r w-[420px]">Descrição</th>
+                <th className="p-3 border-r whitespace-nowrap">O.S</th>
+                <th className="p-3 border-r whitespace-nowrap">Setor</th>
+                <th className="p-3 border-r whitespace-nowrap">Turno</th>
+                <th className="p-3 border-r whitespace-nowrap">Responsável</th>
+                <th className="p-3 border-r w-[260px]">Observação</th>
+                <th className="p-3 text-center whitespace-nowrap">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold">
+                    Carregando PCM...
+                  </td>
+                </tr>
+              ) : veiculosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="p-6 text-center text-gray-500 font-bold">
+                    Nenhum registro encontrado.
+                  </td>
+                </tr>
+              ) : (
+                veiculosFiltrados.map((v) => {
+                  const catStyle = getCategoriaStyle(v.categoria);
+                  const dias = daysBetween(v.data_entrada);
+
+                  return (
+                    <tr
+                      key={v.id}
+                      className={`border-b border-gray-200 font-medium ${catStyle.color}`}
+                    >
+                      <td className="p-3 text-lg font-black border-r border-black/10">
+                        {v.frota}
+                      </td>
+
+                      <td className="p-3 border-r border-black/10">
+                        {formatBRDate(v.data_entrada)}
+                      </td>
+
+                      <td className="p-3 text-center font-black border-r border-black/10 text-lg">
+                        {dias}
+                      </td>
+
+                      <td className="p-3 border-r border-black/10">
+                        <span
+                          className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}
+                        >
+                          {catStyle.label}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">
+                        {v.descricao}
+                      </td>
+
+                      <td className="p-3 font-bold border-r border-black/10">
+                        {v.ordem_servico || "-"}
+                      </td>
+
+                      <td className="p-3 text-[10px] font-black border-r border-black/10">
+                        {v.setor}
+                      </td>
+
+                      <td className="p-3 border-r border-black/10">
+                        <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
+                          {v.lancado_no_turno || "-"}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-[10px] italic border-r border-black/10">
+                        {v.lancado_por || "-"}
+                      </td>
+
+                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
+                        {v.observacao || "-"}
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => liberarVeiculo(v.id)}
+                          className="bg-green-500 hover:bg-green-400 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
+                          title="Liberar veículo"
+                        >
+                          <FaCheckCircle size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="p-3 border-t bg-gray-50 text-[10px] text-gray-500 font-bold flex justify-between">
+          <span>PCM Diário — Quatai</span>
+          <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
+        </div>
       </div>
     </div>
   );
