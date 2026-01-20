@@ -1,3 +1,4 @@
+// src/pages/PCMDiario.jsx
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
@@ -10,12 +11,19 @@ import {
   FaSearch,
   FaFilter,
 } from "react-icons/fa";
-
 import html2canvas from "html2canvas";
 
 /* ============================
-   HELPERS DE ESTILO / STATUS
+   CONSTANTES (PADRÃO)
 ============================ */
+
+const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
+
+const OBS_OPCOES = [
+  "AG. CHEGADA DE PEÇAS",
+  "AG. EXECUÇÃO DO SERVIÇO",
+  "AG. GARANTIA",
+];
 
 const CATEGORIAS = [
   { value: "GNS", label: "GNS", color: "bg-red-600 text-white", badge: "bg-red-600 text-white" },
@@ -24,9 +32,20 @@ const CATEGORIAS = [
   { value: "PENDENTES", label: "Pendentes", color: "bg-gray-500 text-white", badge: "bg-gray-500 text-white" },
 ];
 
+/* ============================
+   HELPERS
+============================ */
+
 function getCategoriaStyle(cat) {
   const found = CATEGORIAS.find((c) => c.value === cat);
-  return found || { value: cat, label: cat, color: "bg-gray-200 text-gray-800", badge: "bg-gray-200 text-gray-800" };
+  return (
+    found || {
+      value: cat,
+      label: cat,
+      color: "bg-gray-200 text-gray-800",
+      badge: "bg-gray-200 text-gray-800",
+    }
+  );
 }
 
 function formatBRDate(dt) {
@@ -40,6 +59,7 @@ function formatBRDate(dt) {
 
 function daysBetween(inicioISO) {
   try {
+    if (!inicioISO) return 0;
     const d0 = new Date(inicioISO);
     const diff = Date.now() - d0.getTime();
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
@@ -64,13 +84,13 @@ export default function PCMDiario() {
 
   const [turnoAtivo, setTurnoAtivo] = useState("DIA");
 
-  // filtro global
+  // filtros
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [filtroSetor, setFiltroSetor] = useState("");
   const [filtroTurno, setFiltroTurno] = useState("");
 
-  // aba (visão de relatório)
+  // abas
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
 
   const reportRef = useRef(null);
@@ -99,9 +119,9 @@ export default function PCMDiario() {
       supabase.from("prefixos").select("codigo").order("codigo"),
     ]);
 
-    if (resPcm.data) setPcmInfo(resPcm.data);
-    if (resVeiculos.data) setVeiculos(resVeiculos.data);
-    if (resPrefixos.data) setPrefixos(resPrefixos.data);
+    if (resPcm?.data) setPcmInfo(resPcm.data);
+    if (resVeiculos?.data) setVeiculos(resVeiculos.data);
+    if (resPrefixos?.data) setPrefixos(resPrefixos.data);
 
     setLoading(false);
   }, [id]);
@@ -111,11 +131,28 @@ export default function PCMDiario() {
   }, [buscarDados]);
 
   async function lancarVeiculo() {
-    if (!form.frota || !form.descricao) return alert("Preencha os campos obrigatórios!");
+    const os = String(form.ordem_servico || "").trim();
+
+    if (!form.frota || !form.descricao) {
+      return alert("Preencha Frota e Descrição.");
+    }
+    if (!os) {
+      return alert("Ordem de Serviço é obrigatória.");
+    }
+    if (!/^\d+$/.test(os)) {
+      return alert("Ordem de Serviço deve conter somente números.");
+    }
+    if (!form.setor) {
+      return alert("Setor é obrigatório.");
+    }
+    if (!form.observacao) {
+      return alert("Selecione uma Observação.");
+    }
 
     const payload = {
       pcm_id: id,
       ...form,
+      ordem_servico: os,
       lancado_por: user?.nome || "Sistema",
       lancado_no_turno: turnoAtivo,
       data_entrada: new Date().toISOString(),
@@ -157,17 +194,12 @@ export default function PCMDiario() {
     buscarDados();
   }
 
-  /* ============================
-     FILTROS + ORDENACAO
-  ============================ */
-
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
 
     return (veiculos || [])
       .filter((v) => {
         if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
-
         if (filtroCategoria && v.categoria !== filtroCategoria) return false;
         if (filtroSetor && v.setor !== filtroSetor) return false;
         if (filtroTurno && v.lancado_no_turno !== filtroTurno) return false;
@@ -188,34 +220,21 @@ export default function PCMDiario() {
 
         return s.includes(txt);
       })
-      .sort((a, b) => daysBetween(b.data_entrada) - daysBetween(a.data_entrada)); // críticos em cima
+      .sort((a, b) => daysBetween(b.data_entrada) - daysBetween(a.data_entrada));
   }, [veiculos, filtroTexto, filtroCategoria, filtroSetor, filtroTurno, abaAtiva]);
 
   const resumo = useMemo(() => {
     const base = veiculosFiltrados.length ? veiculosFiltrados : veiculos;
-
     const total = (base || []).length;
 
-    const byCat = {
-      GNS: 0,
-      NOITE: 0,
-      VENDA: 0,
-      PENDENTES: 0,
-    };
-
+    const byCat = { GNS: 0, NOITE: 0, VENDA: 0, PENDENTES: 0 };
     (base || []).forEach((v) => {
       if (byCat[v.categoria] !== undefined) byCat[v.categoria]++;
     });
 
-    return {
-      total,
-      ...byCat,
-    };
+    return { total, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  /* ============================
-     EXPORTAR RELATORIO PNG
-  ============================ */
   async function baixarImagemPCM() {
     try {
       if (!reportRef.current) return;
@@ -234,8 +253,6 @@ export default function PCMDiario() {
       alert("Erro ao gerar imagem do PCM.");
     }
   }
-
-  const setores = ["MANUTENÇÃO", "SUPRIMENTOS", "GARANTIA"];
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -289,7 +306,7 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* CARDS RESUMO */}
+      {/* RESUMO */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
@@ -357,20 +374,28 @@ export default function PCMDiario() {
               value={form.setor}
               onChange={(e) => setForm({ ...form, setor: e.target.value })}
             >
-              <option value="MANUTENÇÃO">MANUTENÇÃO</option>
-              <option value="SUPRIMENTOS">SUPRIMENTOS</option>
-              <option value="GARANTIA">GARANTIA</option>
+              {SETORES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
 
           <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">ORDEM SERVIÇO</label>
+            <label className="text-[10px] font-bold mb-1">ORDEM SERVIÇO (OBRIGATÓRIO)</label>
             <input
               className="p-2 rounded text-black text-sm"
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={form.ordem_servico}
-              onChange={(e) => setForm({ ...form, ordem_servico: e.target.value })}
-              placeholder="O.S nº"
+              onChange={(e) => {
+                const onlyDigits = e.target.value.replace(/\D/g, "");
+                setForm({ ...form, ordem_servico: onlyDigits });
+              }}
+              placeholder="Somente números"
+              required
             />
           </div>
 
@@ -395,14 +420,19 @@ export default function PCMDiario() {
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex flex-col">
-            <label className="text-[10px] font-bold mb-1">OBSERVAÇÃO</label>
-            <input
-              className="p-2 rounded text-black text-sm"
-              type="text"
+            <label className="text-[10px] font-bold mb-1">OBSERVAÇÃO (OBRIGATÓRIA)</label>
+            <select
+              className="p-2 rounded text-black text-sm font-bold"
               value={form.observacao}
               onChange={(e) => setForm({ ...form, observacao: e.target.value })}
-              placeholder="Ex: Aguardando peças / Manutenção diurna..."
-            />
+            >
+              <option value="">Selecione...</option>
+              {OBS_OPCOES.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-end gap-2">
@@ -451,7 +481,7 @@ export default function PCMDiario() {
               onChange={(e) => setFiltroSetor(e.target.value)}
             >
               <option value="">Setor (todos)</option>
-              {setores.map((s) => (
+              {SETORES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -508,7 +538,7 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* RELATORIO TABELA (EXPORTA COMO IMAGEM) */}
+      {/* RELATORIO */}
       <div ref={reportRef} className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
         <div className="p-4 border-b bg-gray-50">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
@@ -565,56 +595,27 @@ export default function PCMDiario() {
                   const dias = daysBetween(v.data_entrada);
 
                   return (
-                    <tr
-                      key={v.id}
-                      className={`border-b border-gray-200 font-medium ${catStyle.color}`}
-                    >
-                      <td className="p-3 text-lg font-black border-r border-black/10">
-                        {v.frota}
-                      </td>
-
+                    <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
+                      <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
+                      <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
+                      <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
                       <td className="p-3 border-r border-black/10">
-                        {formatBRDate(v.data_entrada)}
-                      </td>
-
-                      <td className="p-3 text-center font-black border-r border-black/10 text-lg">
-                        {dias}
-                      </td>
-
-                      <td className="p-3 border-r border-black/10">
-                        <span
-                          className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}
-                        >
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
                           {catStyle.label}
                         </span>
                       </td>
-
-                      <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">
-                        {v.descricao}
-                      </td>
-
-                      <td className="p-3 font-bold border-r border-black/10">
-                        {v.ordem_servico || "-"}
-                      </td>
-
-                      <td className="p-3 text-[10px] font-black border-r border-black/10">
-                        {v.setor}
-                      </td>
-
+                      <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
+                      <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
+                      <td className="p-3 text-[10px] font-black border-r border-black/10">{v.setor}</td>
                       <td className="p-3 border-r border-black/10">
                         <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
                           {v.lancado_no_turno || "-"}
                         </span>
                       </td>
-
-                      <td className="p-3 text-[10px] italic border-r border-black/10">
-                        {v.lancado_por || "-"}
-                      </td>
-
+                      <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
                       <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
                         {v.observacao || "-"}
                       </td>
-
                       <td className="p-3 text-center">
                         <button
                           onClick={() => liberarVeiculo(v.id)}
