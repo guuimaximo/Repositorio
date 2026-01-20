@@ -5,11 +5,13 @@ import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
 import {
   FaDownload,
-  FaCheckCircle,
   FaArrowLeft,
   FaTruckLoading,
   FaSearch,
   FaFilter,
+  FaEdit,
+  FaTimes,
+  FaSave,
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 
@@ -68,6 +70,251 @@ function daysBetween(inicioISO) {
   }
 }
 
+function buildDiff(before, after, keys) {
+  const diff = {};
+  keys.forEach((k) => {
+    const a = before?.[k] ?? null;
+    const b = after?.[k] ?? null;
+    if (String(a ?? "") !== String(b ?? "")) {
+      diff[k] = { de: a, para: b };
+    }
+  });
+  return diff;
+}
+
+/* ============================
+   MODAL EDITAR (1 BOTÃO)
+============================ */
+
+function EditarVeiculoModal({
+  open,
+  onClose,
+  veiculo,
+  onSalvar,        // (payloadUpdate, acao, deCat, paraCat, diff) => Promise<void>
+  onLiberar,       // () => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false);
+
+  const [draft, setDraft] = useState({
+    setor: "",
+    ordem_servico: "",
+    descricao: "",
+    observacao: "",
+    categoria: "",
+  });
+
+  useEffect(() => {
+    if (!open || !veiculo) return;
+    setDraft({
+      setor: veiculo.setor || "MANUTENÇÃO",
+      ordem_servico: String(veiculo.ordem_servico || ""),
+      descricao: veiculo.descricao || "",
+      observacao: veiculo.observacao || "",
+      categoria: veiculo.categoria || "GNS",
+    });
+  }, [open, veiculo]);
+
+  const opcoesCategoriaPermitidas = useMemo(() => {
+    const atual = veiculo?.categoria;
+
+    // Regra:
+    // PENDENTES -> GNS ou NOITE ou Liberar
+    // NOITE -> GNS ou Liberar
+    // GNS -> PENDENTES ou NOITE
+    // VENDA (se usar) -> manter livre pelo modal
+    if (atual === "PENDENTES") return ["PENDENTES", "GNS", "NOITE"];
+    if (atual === "NOITE") return ["NOITE", "GNS"];
+    if (atual === "GNS") return ["GNS", "PENDENTES", "NOITE"];
+    if (atual === "VENDA") return ["VENDA", "GNS", "PENDENTES", "NOITE"];
+    return ["GNS", "PENDENTES", "NOITE", "VENDA"];
+  }, [veiculo]);
+
+  if (!open || !veiculo) return null;
+
+  const catAtual = veiculo.categoria || "-";
+
+  async function handleSalvar() {
+    const os = String(draft.ordem_servico || "").trim();
+
+    if (!os) return alert("Ordem de Serviço é obrigatória.");
+    if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
+    if (!draft.setor) return alert("Setor é obrigatório.");
+    if (!draft.observacao) return alert("Selecione uma Observação.");
+
+    // Monta update
+    const payloadUpdate = {
+      setor: draft.setor,
+      ordem_servico: os,
+      descricao: draft.descricao,
+      observacao: draft.observacao,
+      categoria: draft.categoria,
+    };
+
+    const diff = buildDiff(veiculo, payloadUpdate, [
+      "setor",
+      "ordem_servico",
+      "descricao",
+      "observacao",
+      "categoria",
+    ]);
+
+    // Se não mudou nada, não faz update
+    if (!Object.keys(diff).length) {
+      return alert("Nenhuma alteração para salvar.");
+    }
+
+    setSaving(true);
+    try {
+      const deCat = veiculo.categoria || null;
+      const paraCat = payloadUpdate.categoria || null;
+
+      const acao = (deCat !== paraCat) ? "MOVER_CATEGORIA" : "EDITAR";
+
+      await onSalvar(payloadUpdate, acao, deCat, paraCat, diff);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLiberar() {
+    if (!confirm("Confirmar liberação do veículo?")) return;
+    setSaving(true);
+    try {
+      await onLiberar();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div>
+            <div className="text-xs font-black text-gray-500 uppercase">Editar veículo</div>
+            <div className="text-lg font-black text-gray-900">
+              Frota: {veiculo.frota}{" "}
+              <span className="ml-2 text-xs font-black px-2 py-1 rounded-full bg-gray-100">
+                Atual: {catAtual}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" title="Fechar">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Setor</label>
+            <select
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              value={draft.setor}
+              onChange={(e) => setDraft({ ...draft, setor: e.target.value })}
+            >
+              {SETORES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Ordem de Serviço (somente números)</label>
+            <input
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={draft.ordem_servico}
+              onChange={(e) =>
+                setDraft({ ...draft, ordem_servico: e.target.value.replace(/\D/g, "") })
+              }
+              placeholder="Ex: 123456"
+              required
+            />
+          </div>
+
+          <div className="flex flex-col md:col-span-2">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Descrição</label>
+            <input
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              type="text"
+              value={draft.descricao}
+              onChange={(e) => setDraft({ ...draft, descricao: e.target.value })}
+              placeholder="Defeito relatado..."
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Observação</label>
+            <select
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              value={draft.observacao}
+              onChange={(e) => setDraft({ ...draft, observacao: e.target.value })}
+            >
+              <option value="">Selecione...</option>
+              {OBS_OPCOES.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Categoria</label>
+            <select
+              className="border rounded-lg px-3 py-2 text-sm font-bold"
+              value={draft.categoria}
+              onChange={(e) => setDraft({ ...draft, categoria: e.target.value })}
+            >
+              {opcoesCategoriaPermitidas.map((c) => (
+                <option key={c} value={c}>
+                  {getCategoriaStyle(c).label}
+                </option>
+              ))}
+            </select>
+            <div className="text-[10px] text-gray-500 font-semibold mt-1">
+              Regras aplicadas conforme categoria atual.
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t bg-gray-50 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
+          <button
+            onClick={handleLiberar}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg font-black text-sm bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            LIBERAR
+          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg font-black text-sm bg-white border hover:bg-gray-100 disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSalvar}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg font-black text-sm bg-gray-900 text-white hover:bg-black disabled:opacity-60 flex items-center gap-2"
+            >
+              <FaSave /> Salvar alterações
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================
    PAGE
 ============================ */
@@ -94,6 +341,10 @@ export default function PCMDiario() {
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
 
   const reportRef = useRef(null);
+
+  // modal editar
+  const [editOpen, setEditOpen] = useState(false);
+  const [editVeiculo, setEditVeiculo] = useState(null);
 
   const [form, setForm] = useState({
     frota: "",
@@ -130,23 +381,60 @@ export default function PCMDiario() {
     buscarDados();
   }, [buscarDados]);
 
+  async function gravarHistorico({
+    veiculo_pcm_id,
+    pcm_id,
+    frota,
+    acao,
+    de_categoria,
+    para_categoria,
+    alteracoes,
+  }) {
+    // Se a tabela não existir ainda, isso vai dar erro — mas você vai criar pelo SQL acima.
+    const { error } = await supabase.from("veiculos_pcm_historico").insert([
+      {
+        veiculo_pcm_id,
+        pcm_id,
+        frota,
+        acao,
+        de_categoria,
+        para_categoria,
+        alteracoes: alteracoes || {},
+        executado_por: user?.nome || "Sistema",
+      },
+    ]);
+
+    if (error) {
+      console.warn("Falha ao gravar histórico (ver RLS/tabela):", error);
+      // Não travo operação por causa do histórico, mas você pode travar se quiser.
+    }
+  }
+
   async function lancarVeiculo() {
     const os = String(form.ordem_servico || "").trim();
 
-    if (!form.frota || !form.descricao) {
-      return alert("Preencha Frota e Descrição.");
+    if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição.");
+    if (!os) return alert("Ordem de Serviço é obrigatória.");
+    if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
+    if (!form.setor) return alert("Setor é obrigatório.");
+    if (!form.observacao) return alert("Selecione uma Observação.");
+
+    // ====== REGRA: NÃO REPETIR FROTA NO MESMO PCM (em aberto) ======
+    const { data: jaExiste, error: errCheck } = await supabase
+      .from("veiculos_pcm")
+      .select("id")
+      .eq("pcm_id", id)
+      .eq("frota", form.frota)
+      .is("data_saida", null)
+      .limit(1);
+
+    if (errCheck) {
+      console.error(errCheck);
+      return alert("Erro ao validar duplicidade.");
     }
-    if (!os) {
-      return alert("Ordem de Serviço é obrigatória.");
-    }
-    if (!/^\d+$/.test(os)) {
-      return alert("Ordem de Serviço deve conter somente números.");
-    }
-    if (!form.setor) {
-      return alert("Setor é obrigatório.");
-    }
-    if (!form.observacao) {
-      return alert("Selecione uma Observação.");
+
+    if (jaExiste && jaExiste.length > 0) {
+      return alert(`A frota ${form.frota} já está lançada neste PCM (em aberto).`);
     }
 
     const payload = {
@@ -158,11 +446,22 @@ export default function PCMDiario() {
       data_entrada: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("veiculos_pcm").insert([payload]);
+    const { data: inserted, error } = await supabase.from("veiculos_pcm").insert([payload]).select("*").single();
     if (error) {
       console.error(error);
       return alert("Erro ao lançar veículo.");
     }
+
+    // Histórico: lançamento
+    await gravarHistorico({
+      veiculo_pcm_id: inserted?.id,
+      pcm_id: id,
+      frota: inserted?.frota,
+      acao: "EDITAR", // ou "LANCAR" se quiser padronizar
+      de_categoria: null,
+      para_categoria: inserted?.categoria || null,
+      alteracoes: { lancamento: true },
+    });
 
     setForm({
       ...form,
@@ -175,21 +474,57 @@ export default function PCMDiario() {
     buscarDados();
   }
 
-  async function liberarVeiculo(vId) {
-    if (!confirm("Confirmar liberação do veículo?")) return;
-
+  async function liberarVeiculo(v) {
     const { error } = await supabase
       .from("veiculos_pcm")
       .update({
         data_saida: new Date().toISOString(),
         liberado_por: user?.nome || "Sistema",
       })
-      .eq("id", vId);
+      .eq("id", v.id);
 
     if (error) {
       console.error(error);
       return alert("Erro ao liberar veículo.");
     }
+
+    await gravarHistorico({
+      veiculo_pcm_id: v.id,
+      pcm_id: id,
+      frota: v.frota,
+      acao: "LIBERAR",
+      de_categoria: v.categoria || null,
+      para_categoria: v.categoria || null,
+      alteracoes: { liberado_por: user?.nome || "Sistema" },
+    });
+
+    buscarDados();
+  }
+
+  async function salvarEdicaoVeiculo(payloadUpdate, acao, deCat, paraCat, diff) {
+    const v = editVeiculo;
+    if (!v?.id) return;
+
+    const { error } = await supabase
+      .from("veiculos_pcm")
+      .update(payloadUpdate)
+      .eq("id", v.id);
+
+    if (error) {
+      console.error(error);
+      alert("Erro ao salvar alterações.");
+      return;
+    }
+
+    await gravarHistorico({
+      veiculo_pcm_id: v.id,
+      pcm_id: id,
+      frota: v.frota,
+      acao,
+      de_categoria: deCat,
+      para_categoria: paraCat,
+      alteracoes: diff,
+    });
 
     buscarDados();
   }
@@ -390,10 +725,7 @@ export default function PCMDiario() {
               inputMode="numeric"
               pattern="[0-9]*"
               value={form.ordem_servico}
-              onChange={(e) => {
-                const onlyDigits = e.target.value.replace(/\D/g, "");
-                setForm({ ...form, ordem_servico: onlyDigits });
-              }}
+              onChange={(e) => setForm({ ...form, ordem_servico: e.target.value.replace(/\D/g, "") })}
               placeholder="Somente números"
               required
             />
@@ -616,13 +948,18 @@ export default function PCMDiario() {
                       <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
                         {v.observacao || "-"}
                       </td>
+
+                      {/* 1 BOTÃO SÓ */}
                       <td className="p-3 text-center">
                         <button
-                          onClick={() => liberarVeiculo(v.id)}
-                          className="bg-green-500 hover:bg-green-400 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
-                          title="Liberar veículo"
+                          onClick={() => {
+                            setEditVeiculo(v);
+                            setEditOpen(true);
+                          }}
+                          className="bg-black/20 hover:bg-black/30 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
+                          title="Editar / Mover / Liberar"
                         >
-                          <FaCheckCircle size={18} />
+                          <FaEdit size={16} />
                         </button>
                       </td>
                     </tr>
@@ -638,6 +975,21 @@ export default function PCMDiario() {
           <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
         </div>
       </div>
+
+      {/* MODAL EDITAR */}
+      <EditarVeiculoModal
+        open={editOpen}
+        veiculo={editVeiculo}
+        onClose={() => {
+          setEditOpen(false);
+          setEditVeiculo(null);
+        }}
+        onSalvar={salvarEdicaoVeiculo}
+        onLiberar={async () => {
+          if (!editVeiculo) return;
+          await liberarVeiculo(editVeiculo);
+        }}
+      />
     </div>
   );
 }
