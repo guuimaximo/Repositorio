@@ -14,6 +14,8 @@ import {
   FaSave,
   FaCheckCircle,
 } from "react-icons/fa";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf"; // ✅ PDF real (sem print)
 
 /* ============================
    CONSTANTES (PADRÃO)
@@ -83,216 +85,7 @@ function buildDiff(before, after, keys) {
 }
 
 /* ============================
-   PDF (OFFSCREEN) — NÃO MEXE NA TELA
-   - Gera um HTML próprio para impressão (A4 paisagem)
-   - Cabeçalho com resumo + tabela completa
-============================ */
-
-function escapeHtml(s = "") {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function buildResumoPCM(rows) {
-  const total = rows.length;
-
-  const diasFn = (r) => Number(r?.dias ?? 0);
-
-  const faixas = {
-    "0-14": rows.filter((r) => diasFn(r) <= 14).length,
-    "15-30": rows.filter((r) => diasFn(r) >= 15 && diasFn(r) <= 30).length,
-    ">30": rows.filter((r) => diasFn(r) > 30).length,
-  };
-
-  const by = (key) => {
-    const m = new Map();
-    for (const r of rows) {
-      const k = String(r?.[key] ?? "—").trim() || "—";
-      m.set(k, (m.get(k) || 0) + 1);
-    }
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
-  };
-
-  const setor = by("setor").slice(0, 6);
-  const categoria = by("categoria").slice(0, 6);
-
-  return { total, faixas, setor, categoria };
-}
-
-function buildPdfHtmlPCM(rows, meta = {}) {
-  const resumo = buildResumoPCM(rows);
-
-  const chips = (arr) =>
-    arr
-      .map(
-        ([k, v]) =>
-          `<span class="chip"><b>${escapeHtml(k)}</b>: ${escapeHtml(v)}</span>`
-      )
-      .join("");
-
-  const dataLinha = meta?.dataRef ? `Data: <b>${escapeHtml(meta.dataRef)}</b>` : "";
-  const abertosLinha =
-    typeof meta?.itensEmAberto === "number"
-      ? `Itens em aberto: <b>${meta.itensEmAberto}</b>`
-      : `Itens: <b>${resumo.total}</b>`;
-
-  const thead = `
-    <thead>
-      <tr>
-        <th>Cluster</th>
-        <th>Frota</th>
-        <th>Entrada</th>
-        <th class="num">Dias</th>
-        <th>Categoria</th>
-        <th class="desc">Descrição</th>
-        <th>O.S</th>
-        <th>Setor</th>
-        <th>Turno</th>
-        <th>Responsável</th>
-        <th>Observação</th>
-      </tr>
-    </thead>`;
-
-  const tbody = rows
-    .map((r) => {
-      return `
-      <tr>
-        <td>${escapeHtml(r?.cluster)}</td>
-        <td class="strong">${escapeHtml(r?.frota)}</td>
-        <td>${escapeHtml(r?.entrada)}</td>
-        <td class="num strong">${escapeHtml(r?.dias)}</td>
-        <td>${escapeHtml(r?.categoria)}</td>
-        <td class="desc">${escapeHtml(r?.descricao)}</td>
-        <td>${escapeHtml(r?.os)}</td>
-        <td>${escapeHtml(r?.setor)}</td>
-        <td>${escapeHtml(r?.turno)}</td>
-        <td>${escapeHtml(r?.responsavel)}</td>
-        <td>${escapeHtml(r?.observacao)}</td>
-      </tr>`;
-    })
-    .join("");
-
-  return `<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8" />
-<title>Relatório Diário - PCM</title>
-<style>
-  @page { size: A4 landscape; margin: 10mm; }
-  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: Arial, Helvetica, sans-serif; color:#0f172a; }
-  .header {
-    display:flex; justify-content:space-between; align-items:flex-start;
-    border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; margin-bottom:10px;
-    background:#ffffff;
-  }
-  .title { font-size: 16px; font-weight: 800; margin:0; letter-spacing: .3px; }
-  .meta { font-size: 12px; color:#475569; margin-top:4px; }
-  .badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
-  .chip {
-    display:inline-flex; gap:6px; align-items:center; padding:6px 8px;
-    border:1px solid #e2e8f0; border-radius:999px; background:#f8fafc;
-    font-size:11px; color:#0f172a; white-space:nowrap;
-  }
-  .chip b { font-weight: 800; }
-  .section { margin-top:6px; font-size:11px; color:#334155; }
-  .row { display:flex; flex-wrap:wrap; gap:6px; }
-
-  table { width:100%; border-collapse: collapse; table-layout: fixed; }
-  thead { display: table-header-group; }
-  th, td { border:1px solid #e2e8f0; padding:6px 6px; font-size:10px; vertical-align:top; }
-  th { background:#f1f5f9; font-weight:800; }
-  td.num, th.num { text-align:right; white-space:nowrap; width: 42px; }
-  td.desc, th.desc { width: 44%; }
-  td.strong { font-weight:800; }
-  .footer { margin-top:8px; font-size:10px; color:#64748b; display:flex; justify-content:space-between; }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <div class="title">RELATÓRIO DIÁRIO - PCM</div>
-      <div class="meta">${dataLinha} &nbsp;|&nbsp; ${abertosLinha}</div>
-
-      <div class="section"><b>Aging</b></div>
-      <div class="row">
-        <span class="chip"><b>0–14</b>: ${resumo.faixas["0-14"]}</span>
-        <span class="chip"><b>15–30</b>: ${resumo.faixas["15-30"]}</span>
-        <span class="chip"><b>&gt;30</b>: ${resumo.faixas[">30"]}</span>
-      </div>
-
-      <div class="section"><b>Por Setor (top)</b></div>
-      <div class="row">${chips(resumo.setor)}</div>
-
-      <div class="section"><b>Por Categoria (top)</b></div>
-      <div class="row">${chips(resumo.categoria)}</div>
-    </div>
-
-    <div class="badges">
-      <span class="chip"><b>Total</b>: ${resumo.total}</span>
-      <span class="chip">Gerado em: ${escapeHtml(new Date().toLocaleString("pt-BR"))}</span>
-    </div>
-  </div>
-
-  <table>
-    ${thead}
-    <tbody>
-      ${tbody}
-    </tbody>
-  </table>
-
-  <div class="footer">
-    <div>PCM Diário — Quatai</div>
-    <div>PDF (A4 paisagem) — WhatsApp: envie como <b>Documento</b>.</div>
-  </div>
-</body>
-</html>`;
-}
-
-function gerarPdfPCM_offscreen(rows, meta = {}) {
-  const html = buildPdfHtmlPCM(rows, meta);
-
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.style.visibility = "hidden";
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    document.body.removeChild(iframe);
-    throw new Error("Não foi possível criar documento para PDF.");
-  }
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  // aguarda renderização e imprime (salvar como PDF)
-  setTimeout(() => {
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-
-    // limpa iframe
-    setTimeout(() => {
-      try {
-        document.body.removeChild(iframe);
-      } catch {}
-    }, 800);
-  }, 350);
-}
-
-/* ============================
    UI: MULTISELECT (CHIPS)
-   - Permite selecionar MAIS DE UM valor
 ============================ */
 
 function MultiSelectChips({ label, options, values, onChange }) {
@@ -349,13 +142,7 @@ function MultiSelectChips({ label, options, values, onChange }) {
    MODAL EDITAR (1 BOTÃO)
 ============================ */
 
-function EditarVeiculoModal({
-  open,
-  onClose,
-  veiculo,
-  prefixos,
-  onSalvar, // (payloadUpdate, acao, deCat, paraCat, diff) => Promise<void>
-}) {
+function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
   const [saving, setSaving] = useState(false);
 
   const [draft, setDraft] = useState({
@@ -382,11 +169,6 @@ function EditarVeiculoModal({
   const opcoesCategoriaPermitidas = useMemo(() => {
     const atual = veiculo?.categoria;
 
-    // Regra:
-    // PENDENTES -> GNS ou NOITE
-    // NOITE -> GNS
-    // GNS -> PENDENTES ou NOITE
-    // VENDA -> livre
     if (atual === "PENDENTES") return ["PENDENTES", "GNS", "NOITE"];
     if (atual === "NOITE") return ["NOITE", "GNS"];
     if (atual === "GNS") return ["GNS", "PENDENTES", "NOITE"];
@@ -461,7 +243,6 @@ function EditarVeiculoModal({
         </div>
 
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* FROTA EDITÁVEL */}
           <div className="flex flex-col">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Frota</label>
             <select
@@ -596,10 +377,9 @@ export default function PCMDiario() {
 
   // filtros
   const [filtroTexto, setFiltroTexto] = useState("");
-  // ✅ AGORA MULTI
-  const [filtroCategorias, setFiltroCategorias] = useState([]); // ex: ["GNS","NOITE"]
-  const [filtroSetores, setFiltroSetores] = useState([]); // ex: ["GARANTIA","MANUTENÇÃO"]
-  const [filtroTurnos, setFiltroTurnos] = useState([]); // ex: ["DIA","NOITE"]
+  const [filtroCategorias, setFiltroCategorias] = useState([]);
+  const [filtroSetores, setFiltroSetores] = useState([]);
+  const [filtroTurnos, setFiltroTurnos] = useState([]);
   const [filtroCluster, setFiltroCluster] = useState([]);
 
   // abas
@@ -657,15 +437,7 @@ export default function PCMDiario() {
     buscarDados();
   }, [buscarDados]);
 
-  async function gravarHistorico({
-    veiculo_pcm_id,
-    pcm_id,
-    frota,
-    acao,
-    de_categoria,
-    para_categoria,
-    alteracoes,
-  }) {
+  async function gravarHistorico({ veiculo_pcm_id, pcm_id, frota, acao, de_categoria, para_categoria, alteracoes }) {
     const { error } = await supabase.from("veiculos_pcm_historico").insert([
       {
         veiculo_pcm_id,
@@ -846,7 +618,6 @@ export default function PCMDiario() {
       .filter((v) => {
         if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
 
-        // ✅ MULTI: se vazio, não filtra; se tiver algo, precisa estar dentro
         if (setCats.size && !setCats.has(v.categoria)) return false;
         if (setSetores.size && !setSetores.has(v.setor)) return false;
         if (setTurnos.size && !setTurnos.has(v.lancado_no_turno)) return false;
@@ -854,15 +625,7 @@ export default function PCMDiario() {
 
         if (!txt) return true;
 
-        const s = [
-          v.frota,
-          v.descricao,
-          v.ordem_servico,
-          v.setor,
-          v.lancado_por,
-          v.observacao,
-          v.cluster,
-        ]
+        const s = [v.frota, v.descricao, v.ordem_servico, v.setor, v.lancado_por, v.observacao, v.cluster]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -896,27 +659,67 @@ export default function PCMDiario() {
     return { total, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  // ✅ Substitui imagem por PDF (sem alterar layout da tela)
-  function baixarPdfPCM() {
+  // ✅ PDF PROFISSIONAL (sem print, mantendo cores, com paginação)
+  async function baixarPdfPCM() {
     try {
-      const rows = (veiculosFiltrados || []).map((v) => ({
-        cluster: v.cluster || "-",
-        frota: v.frota || "-",
-        entrada: formatBRDate(v.data_entrada),
-        dias: daysBetween(v.data_entrada),
-        categoria: getCategoriaStyle(v.categoria).label,
-        descricao: v.descricao || "-",
-        os: v.ordem_servico || "-",
-        setor: v.setor || "-",
-        turno: v.lancado_no_turno || "-",
-        responsavel: v.lancado_por || "-",
-        observacao: v.observacao || "-",
-      }));
+      if (!reportRef.current) return;
 
-      gerarPdfPCM_offscreen(rows, {
-        dataRef: pcmInfo?.data_referencia || "-",
-        itensEmAberto: (veiculosFiltrados || []).length,
+      // garante que fontes/estilos já assentaram
+      await new Promise((r) => requestAnimationFrame(r));
+
+      const scale = 3; // nítido
+      const canvas = await html2canvas(reportRef.current, {
+        scale,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
       });
+
+      const fileName = `PCM_${pcmInfo?.data_referencia || "diario"}.pdf`;
+
+      // A4 landscape (mm)
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 6;
+
+      const printableW = pageW - margin * 2;
+      const printableH = pageH - margin * 2;
+
+      // conversão px -> mm baseado na largura
+      const mmPerPx = printableW / canvas.width;
+      const pageSlicePx = Math.floor(printableH / mmPerPx);
+
+      let y = 0;
+      let pageIndex = 0;
+
+      while (y < canvas.height) {
+        const sliceH = Math.min(pageSlicePx, canvas.height - y);
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+
+        const ctx = pageCanvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+        const imgData = pageCanvas.toDataURL("image/png", 1.0);
+
+        if (pageIndex > 0) doc.addPage();
+
+        const renderW = printableW;
+        const renderH = sliceH * mmPerPx;
+
+        doc.addImage(imgData, "PNG", margin, margin, renderW, renderH, undefined, "FAST");
+
+        y += sliceH;
+        pageIndex += 1;
+      }
+
+      doc.save(fileName);
     } catch (err) {
       console.error(err);
       alert("Erro ao gerar PDF do PCM.");
@@ -1123,7 +926,6 @@ export default function PCMDiario() {
             </div>
 
             <div className="flex flex-wrap gap-2 items-center">
-              {/* ✅ CLUSTER MULTI */}
               <MultiSelectChips
                 label="Cluster"
                 options={clustersDisponiveis.map((cl) => ({ value: cl, label: cl }))}
@@ -1131,7 +933,6 @@ export default function PCMDiario() {
                 onChange={setFiltroCluster}
               />
 
-              {/* ✅ CATEGORIA MULTI */}
               <MultiSelectChips
                 label="Categoria"
                 options={CATEGORIAS.map((c) => ({ value: c.value, label: c.label }))}
@@ -1139,7 +940,6 @@ export default function PCMDiario() {
                 onChange={setFiltroCategorias}
               />
 
-              {/* ✅ SETOR MULTI */}
               <MultiSelectChips
                 label="Setor"
                 options={SETORES.map((s) => ({ value: s, label: s }))}
@@ -1147,7 +947,6 @@ export default function PCMDiario() {
                 onChange={setFiltroSetores}
               />
 
-              {/* ✅ TURNO MULTI */}
               <MultiSelectChips
                 label="Turno"
                 options={[
@@ -1277,7 +1076,9 @@ export default function PCMDiario() {
                         </span>
                       </td>
                       <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
+                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
+                        {v.observacao || "-"}
+                      </td>
 
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-2">
