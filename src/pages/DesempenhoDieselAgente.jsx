@@ -19,13 +19,8 @@ import {
 
 const API_BASE = "https://agentediesel.onrender.com";
 const BUCKET = "relatorios";
+const TIPO_RELATORIO = "diesel_gerencial";
 const LIMIT_HISTORICO = 80;
-
-// Tipos (mantém propriedades e permite alternar “agentes” no mesmo componente)
-const AGENTES = {
-  GERENCIAL: { key: "GERENCIAL", label: "Agente Gerencial", tipo: "diesel_gerencial" },
-  ACOMP: { key: "ACOMP", label: "Agente Acompanhamento", tipo: "diesel_acompanhamento" }, // ajuste se seu backend usa outro “tipo”
-};
 
 function clsx(...arr) {
   return arr.filter(Boolean).join(" ");
@@ -165,9 +160,6 @@ export default function DesempenhoDieselAgente() {
     };
   }, []);
 
-  // ====== Estado “Agente” (dois botões no topo) ======
-  const [agente, setAgente] = useState(AGENTES.GERENCIAL);
-
   // ====== Execução ======
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState(null);
@@ -184,13 +176,13 @@ export default function DesempenhoDieselAgente() {
   const [urlsLoading, setUrlsLoading] = useState(false);
   const [urlsErro, setUrlsErro] = useState(null);
 
-  // ====== Modal PDF (unifica visualização e reduz poluição da página) ======
+  // ====== Modal PDF ======
   const [pdfOpen, setPdfOpen] = useState(false);
 
   // ====== UI ======
   const [showFilters, setShowFilters] = useState(true);
   const [searchText, setSearchText] = useState("");
-  const [showCount, setShowCount] = useState(12); // histórico “menos extenso” por padrão
+  const [showCount, setShowCount] = useState(12);
 
   const hoje = useMemo(() => new Date(), []);
   const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
@@ -208,10 +200,10 @@ export default function DesempenhoDieselAgente() {
     const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
     const fim = it?.periodo_fim ? String(it.periodo_fim) : "";
     const periodo = ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
-    return `${agente.label} — ${periodo}`;
+    return `Agente Gerencial — ${periodo}`;
   }
 
-  async function carregarHistorico(tipo = agente.tipo) {
+  async function carregarHistorico() {
     setHistoricoLoading(true);
     setHistoricoErro(null);
 
@@ -221,7 +213,7 @@ export default function DesempenhoDieselAgente() {
         .select(
           "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
         )
-        .eq("tipo", tipo)
+        .eq("tipo", TIPO_RELATORIO)
         .order("created_at", { ascending: false })
         .limit(LIMIT_HISTORICO);
 
@@ -252,13 +244,12 @@ export default function DesempenhoDieselAgente() {
 
       const folder = getFolderFromPath(arquivoPath);
 
-      // Mantém compatibilidade com seu padrão atual de nomes
       let pdfPath = arquivoPath;
       if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
 
+      // mantém propriedades (html/png continuam gerando URL), mas não polui a página
       let htmlPath = arquivoPath;
       if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
-
       const pngPath = `${folder}/cluster_evolution_unificado.png`;
 
       const [pdfRes, htmlRes, pngRes] = await Promise.all([
@@ -281,7 +272,6 @@ export default function DesempenhoDieselAgente() {
       };
 
       setUrls(newUrls);
-
       if (openPdf && newUrls?.pdf) setPdfOpen(true);
     } catch (e) {
       if (!mountedRef.current) return;
@@ -292,9 +282,9 @@ export default function DesempenhoDieselAgente() {
   }
 
   useEffect(() => {
-    carregarHistorico(agente.tipo);
+    carregarHistorico();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agente?.tipo]);
+  }, []);
 
   async function gerar() {
     setLoading(true);
@@ -304,9 +294,9 @@ export default function DesempenhoDieselAgente() {
     try {
       if (!validarPeriodo()) throw new Error("Período inválido: Data início maior que Data fim.");
 
-      // Mantém propriedade do payload, porém remove filtros extras (motorista/linha/veiculo/cluster)
+      // Mantém propriedades do payload, porém sem filtros extras
       const payload = {
-        tipo: agente.tipo,
+        tipo: TIPO_RELATORIO,
         periodo_inicio: periodoInicio ? String(periodoInicio) : null,
         periodo_fim: periodoFim ? String(periodoFim) : null,
         motorista: null,
@@ -330,7 +320,7 @@ export default function DesempenhoDieselAgente() {
       }
 
       setResp(data);
-      await carregarHistorico(agente.tipo);
+      await carregarHistorico();
 
       if (data?.report_id) {
         const { data: row, error } = await supabase
@@ -398,27 +388,22 @@ export default function DesempenhoDieselAgente() {
 
   return (
     <div className="min-h-[calc(100vh-140px)]">
-      {/* Background clean (menos “brilho” e menos ruído) */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90 p-6">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[radial-gradient(1100px_circle_at_10%_10%,rgba(56,189,248,0.12),transparent_50%),radial-gradient(900px_circle_at_90%_20%,rgba(217,70,239,0.10),transparent_55%)]" />
           <div className="absolute inset-0 opacity-15 [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:52px_52px]" />
         </div>
 
-        {/* Header + Botões de Agente */}
+        {/* Header */}
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+              <div className="h-10 w-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
                 <FaBolt className="text-cyan-200" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-xl font-semibold tracking-tight text-white">
-                  {agente.label}
-                </h2>
-                <p className="text-sm text-white/60">
-                  Geração (API) e histórico/arquivos (Supabase Storage).
-                </p>
+                <h2 className="text-xl font-semibold tracking-tight text-white">Agente Diesel</h2>
+                <p className="text-sm text-white/60">Clean: datas + histórico + PDF em modal.</p>
               </div>
             </div>
 
@@ -435,35 +420,24 @@ export default function DesempenhoDieselAgente() {
             </div>
           </div>
 
+          {/* Botões topo */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            {/* Botões “AGENTE GERENCIAL / AGENTE ACOMPANHAMENTO” */}
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setAgente(AGENTES.GERENCIAL)}
-                className={clsx(
-                  "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border",
-                  agente.key === AGENTES.GERENCIAL.key
-                    ? "border-cyan-400/30 bg-cyan-400/15 text-white"
-                    : "border-white/10 bg-white/5 text-white hover:bg-white/10"
-                )}
-                title="Trocar para Agente Gerencial"
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-cyan-400/30 bg-cyan-400/15 text-white"
+                title="Ativo"
               >
                 AGENTE GERENCIAL
               </button>
 
               <button
                 type="button"
-                onClick={() => setAgente(AGENTES.ACOMP)}
-                className={clsx(
-                  "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border",
-                  agente.key === AGENTES.ACOMP.key
-                    ? "border-cyan-400/30 bg-cyan-400/15 text-white"
-                    : "border-white/10 bg-white/5 text-white hover:bg-white/10"
-                )}
-                title="Trocar para Agente Acompanhamento"
+                disabled
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
+                title="Ainda não existe"
               >
-                AGENTE ACOMPANHAMENTO
+                AGENTE ACOMPANHAMENTO (em breve)
               </button>
             </div>
 
@@ -482,9 +456,7 @@ export default function DesempenhoDieselAgente() {
               className={clsx(
                 "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition",
                 "border border-cyan-400/20",
-                loading
-                  ? "bg-white/10 text-white/60 cursor-not-allowed"
-                  : "bg-white/5 text-white hover:bg-white/10"
+                loading ? "bg-white/10 text-white/60 cursor-not-allowed" : "bg-white/5 text-white hover:bg-white/10"
               )}
               title="Executa a geração do relatório na API"
             >
@@ -494,7 +466,7 @@ export default function DesempenhoDieselAgente() {
           </div>
         </div>
 
-        {/* Filtros (apenas DATA) */}
+        {/* Datas */}
         {showFilters && (
           <div className="relative mt-5">
             <Card className="p-4">
@@ -504,19 +476,17 @@ export default function DesempenhoDieselAgente() {
                     <FaFilter className="text-white/70" />
                     <p className="text-sm font-semibold text-white">Período</p>
                   </div>
-                  <p className="mt-1 text-xs text-white/60">Datas no formato YYYY-MM-DD.</p>
+                  <p className="mt-1 text-xs text-white/60">Somente datas (YYYY-MM-DD).</p>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
-                  >
-                    <FaBroom />
-                    Limpar
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
+                >
+                  <FaBroom />
+                  Limpar
+                </button>
               </div>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -556,7 +526,7 @@ export default function DesempenhoDieselAgente() {
           </div>
         )}
 
-        {/* Linha “selecionado” (clean) + botão ÚNICO de PDF */}
+        {/* Visualização (sem iframe na página) */}
         <div className="relative mt-5">
           <Card className="p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -568,7 +538,7 @@ export default function DesempenhoDieselAgente() {
 
                 {!selected ? (
                   <div className="mt-1 text-xs text-white/60">
-                    Selecione um item no histórico para habilitar a visualização do PDF.
+                    Selecione um item no histórico para habilitar o PDF.
                   </div>
                 ) : (
                   <div className="mt-2 space-y-1 text-xs text-white/60">
@@ -624,13 +594,12 @@ export default function DesempenhoDieselAgente() {
                   PDF
                 </button>
 
-                {/* Mantém propriedade: abrir em nova aba (sem poluir a página) */}
                 {urls?.pdf ? (
                   <a
                     href={urls.pdf}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
                     title="Abrir PDF em nova aba"
                   >
                     Abrir em nova aba
@@ -639,7 +608,7 @@ export default function DesempenhoDieselAgente() {
 
                 <button
                   type="button"
-                  onClick={() => carregarHistorico(agente.tipo)}
+                  onClick={carregarHistorico}
                   disabled={historicoLoading}
                   className={clsx(
                     "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition",
@@ -674,7 +643,7 @@ export default function DesempenhoDieselAgente() {
           </Card>
         </div>
 
-        {/* HISTÓRICO (limpo, menos extenso por padrão) */}
+        {/* Histórico compacto */}
         <div className="relative mt-5">
           <Card className="p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -694,7 +663,6 @@ export default function DesempenhoDieselAgente() {
                     className="w-full sm:w-[360px] rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-cyan-400/30"
                   />
                 </div>
-
                 {!!searchText && (
                   <button
                     type="button"
@@ -790,7 +758,6 @@ export default function DesempenhoDieselAgente() {
                       </div>
 
                       <div className="shrink-0 flex flex-col items-end gap-2">
-                        <div className="text-[11px] text-white/45">Clique para selecionar</div>
                         {isSel && (
                           <span className="text-[11px] text-cyan-200/90 border border-cyan-400/20 bg-cyan-400/10 rounded-full px-2 py-1">
                             selecionado
@@ -803,7 +770,6 @@ export default function DesempenhoDieselAgente() {
               )}
             </div>
 
-            {/* “Ver mais” para não ficar estenso */}
             {filteredItems.length > showCount && (
               <div className="mt-4 flex justify-center">
                 <button
@@ -816,7 +782,6 @@ export default function DesempenhoDieselAgente() {
               </div>
             )}
 
-            {/* Erro ao gerar */}
             {erro && (
               <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
                 <div className="flex items-center gap-2 font-semibold">
@@ -829,7 +794,6 @@ export default function DesempenhoDieselAgente() {
           </Card>
         </div>
 
-        {/* Debug (mantido) */}
         {!!resp && (resp?.stderr || resp?.stdout || resp?.stdout_tail) && (
           <div className="relative mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-4">
@@ -849,14 +813,14 @@ export default function DesempenhoDieselAgente() {
         )}
       </div>
 
-      {/* MODAL PDF (unifica visualização e limpa a página) */}
+      {/* MODAL PDF */}
       <Modal
         open={pdfOpen}
         onClose={() => setPdfOpen(false)}
         title={
           selectedMeta
-            ? `${agente.label} — ${selectedMeta.ini} → ${selectedMeta.fim}`
-            : `${agente.label} — PDF`
+            ? `Agente Gerencial — ${selectedMeta.ini} → ${selectedMeta.fim}`
+            : "Agente Gerencial — PDF"
         }
       >
         {!canOpenPdf ? (
@@ -870,21 +834,18 @@ export default function DesempenhoDieselAgente() {
                 <span className="h-2 w-2 rounded-full bg-emerald-400/70" />
                 Viewer seguro (Signed URL)
               </div>
-              <div className="flex items-center gap-2">
-                {/* Mantém propriedade de abrir fora */}
-                {urls?.pdf && (
-                  <a
-                    href={urls.pdf}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
-                    title="Abrir PDF em nova aba"
-                  >
-                    <FaFilePdf />
-                    Abrir
-                  </a>
-                )}
-              </div>
+              {urls?.pdf && (
+                <a
+                  href={urls.pdf}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                  title="Abrir PDF em nova aba"
+                >
+                  <FaFilePdf />
+                  Abrir
+                </a>
+              )}
             </div>
 
             <div style={{ height: 760 }} className="bg-black/20">
