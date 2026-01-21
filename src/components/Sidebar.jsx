@@ -68,6 +68,8 @@ const ACCESS = {
     ...Object.values(DIESEL_ROUTES),
   ],
   Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
+
+  // ✅ AQUI: adiciona PCM para Manutenção
   Manutenção: [
     "/",
     "/solicitar",
@@ -79,7 +81,10 @@ const ACCESS = {
     "/sos-central",
     "/sos-dashboard",
     "/km-rodado",
+    PCM_ROUTES.inicio,
+    PCM_ROUTES.diario,
   ],
+
   CCO: ["/", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
 };
 
@@ -104,12 +109,13 @@ export default function Sidebar() {
 
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
+  const isManutencao = user?.nivel === "Manutenção";
 
   const links = useMemo(
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
 
-      // ✅ PCM (Admin + Gestor)
+      // ✅ PCM
       pcm: { path: PCM_ROUTES.inicio, label: "PCM - Manutenção", icon: <FaClipboardList /> },
 
       desempenhoDiesel: {
@@ -169,7 +175,9 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor;
-  const showPCM = isAdmin || isGestor; // ✅ Apenas Gestor e Admin
+  // ✅ AQUI: Manutenção também vê PCM
+  const showPCM = isAdmin || isGestor || isManutencao;
+
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
   const showAvarias = links.avarias.some((l) => {
     if (l.path === "/avarias-resumo") return isAdmin || isGestor;
@@ -197,8 +205,8 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ PCM - Manutenção (Admin + Gestor) */}
-        {showPCM && (
+        {/* ✅ PCM - Manutenção (Admin + Gestor + Manutenção) */}
+        {showPCM && canSee(user, links.pcm.path) && (
           <NavLink to={links.pcm.path} className={navLinkClass}>
             {links.pcm.icon} <span className="whitespace-nowrap">{links.pcm.label}</span>
           </NavLink>
