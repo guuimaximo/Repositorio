@@ -15,6 +15,7 @@ import {
   FaCheckCircle,
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 /* ============================
    CONSTANTES (PADRÃO)
@@ -22,15 +23,16 @@ import html2canvas from "html2canvas";
 
 const SETORES = ["GARANTIA", "MANUTENÇÃO", "SUPRIMENTOS"];
 
-const OBS_OPCOES = [
-  "AG. CHEGADA DE PEÇAS",
-  "AG. EXECUÇÃO DO SERVIÇO",
-  "AG. GARANTIA",
-];
+const OBS_OPCOES = ["AG. CHEGADA DE PEÇAS", "AG. EXECUÇÃO DO SERVIÇO", "AG. GARANTIA"];
 
 const CATEGORIAS = [
   { value: "GNS", label: "GNS", color: "bg-red-600 text-white", badge: "bg-red-600 text-white" },
-  { value: "NOITE", label: "Liberação Noturno", color: "bg-white text-gray-900", badge: "bg-gray-900 text-white" },
+  {
+    value: "NOITE",
+    label: "Liberação Noturno",
+    color: "bg-white text-gray-900",
+    badge: "bg-gray-900 text-white",
+  },
   { value: "VENDA", label: "Venda", color: "bg-blue-600 text-white", badge: "bg-blue-600 text-white" },
   { value: "PENDENTES", label: "Pendentes", color: "bg-gray-500 text-white", badge: "bg-gray-500 text-white" },
 ];
@@ -85,7 +87,6 @@ function buildDiff(before, after, keys) {
 
 /* ============================
    UI: MULTISELECT (CHIPS)
-   - Permite selecionar MAIS DE UM valor
 ============================ */
 
 function MultiSelectChips({ label, options, values, onChange }) {
@@ -104,9 +105,7 @@ function MultiSelectChips({ label, options, values, onChange }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {label ? (
-        <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div>
-      ) : null}
+      {label ? <div className="text-[10px] font-black text-gray-500 uppercase mr-1">{label}:</div> : null}
 
       {options.map((opt) => {
         const active = set.has(opt.value);
@@ -142,13 +141,7 @@ function MultiSelectChips({ label, options, values, onChange }) {
    MODAL EDITAR (1 BOTÃO)
 ============================ */
 
-function EditarVeiculoModal({
-  open,
-  onClose,
-  veiculo,
-  prefixos,
-  onSalvar, // (payloadUpdate, acao, deCat, paraCat, diff) => Promise<void>
-}) {
+function EditarVeiculoModal({ open, onClose, veiculo, prefixos, onSalvar }) {
   const [saving, setSaving] = useState(false);
 
   const [draft, setDraft] = useState({
@@ -174,12 +167,6 @@ function EditarVeiculoModal({
 
   const opcoesCategoriaPermitidas = useMemo(() => {
     const atual = veiculo?.categoria;
-
-    // Regra:
-    // PENDENTES -> GNS ou NOITE
-    // NOITE -> GNS
-    // GNS -> PENDENTES ou NOITE
-    // VENDA -> livre
     if (atual === "PENDENTES") return ["PENDENTES", "GNS", "NOITE"];
     if (atual === "NOITE") return ["NOITE", "GNS"];
     if (atual === "GNS") return ["GNS", "PENDENTES", "NOITE"];
@@ -218,9 +205,7 @@ function EditarVeiculoModal({
       "categoria",
     ]);
 
-    if (!Object.keys(diff).length) {
-      return alert("Nenhuma alteração para salvar.");
-    }
+    if (!Object.keys(diff).length) return alert("Nenhuma alteração para salvar.");
 
     setSaving(true);
     try {
@@ -243,9 +228,7 @@ function EditarVeiculoModal({
             <div className="text-xs font-black text-gray-500 uppercase">Editar veículo</div>
             <div className="text-lg font-black text-gray-900">
               Frota: {veiculo.frota}{" "}
-              <span className="ml-2 text-xs font-black px-2 py-1 rounded-full bg-gray-100">
-                Atual: {catAtual}
-              </span>
+              <span className="ml-2 text-xs font-black px-2 py-1 rounded-full bg-gray-100">Atual: {catAtual}</span>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" title="Fechar">
@@ -254,7 +237,6 @@ function EditarVeiculoModal({
         </div>
 
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* FROTA EDITÁVEL */}
           <div className="flex flex-col">
             <label className="text-[10px] font-black text-gray-500 uppercase mb-1">Frota</label>
             <select
@@ -342,10 +324,7 @@ function EditarVeiculoModal({
                 </option>
               ))}
             </select>
-
-            <div className="text-[10px] text-gray-500 font-semibold mt-1">
-              Regras aplicadas conforme categoria atual.
-            </div>
+            <div className="text-[10px] text-gray-500 font-semibold mt-1">Regras aplicadas conforme categoria atual.</div>
           </div>
         </div>
 
@@ -387,20 +366,18 @@ export default function PCMDiario() {
 
   const [turnoAtivo, setTurnoAtivo] = useState("DIA");
 
-  // filtros
   const [filtroTexto, setFiltroTexto] = useState("");
-  // ✅ AGORA MULTI
-  const [filtroCategorias, setFiltroCategorias] = useState([]); // ex: ["GNS","NOITE"]
-  const [filtroSetores, setFiltroSetores] = useState([]); // ex: ["GARANTIA","MANUTENÇÃO"]
-  const [filtroTurnos, setFiltroTurnos] = useState([]); // ex: ["DIA","NOITE"]
+  const [filtroCategorias, setFiltroCategorias] = useState([]);
+  const [filtroSetores, setFiltroSetores] = useState([]);
+  const [filtroTurnos, setFiltroTurnos] = useState([]);
   const [filtroCluster, setFiltroCluster] = useState([]);
 
-  // abas
   const [abaAtiva, setAbaAtiva] = useState("TODOS");
 
+  // ✅ refs: tela e pdf (PDF inclui cabeçalho + cards + tabela)
   const reportRef = useRef(null);
+  const pdfRef = useRef(null);
 
-  // modal editar
   const [editOpen, setEditOpen] = useState(false);
   const [editVeiculo, setEditVeiculo] = useState(null);
 
@@ -450,15 +427,7 @@ export default function PCMDiario() {
     buscarDados();
   }, [buscarDados]);
 
-  async function gravarHistorico({
-    veiculo_pcm_id,
-    pcm_id,
-    frota,
-    acao,
-    de_categoria,
-    para_categoria,
-    alteracoes,
-  }) {
+  async function gravarHistorico({ veiculo_pcm_id, pcm_id, frota, acao, de_categoria, para_categoria, alteracoes }) {
     const { error } = await supabase.from("veiculos_pcm_historico").insert([
       {
         veiculo_pcm_id,
@@ -472,9 +441,7 @@ export default function PCMDiario() {
       },
     ]);
 
-    if (error) {
-      console.warn("Falha ao gravar histórico (ver RLS/tabela):", error);
-    }
+    if (error) console.warn("Falha ao gravar histórico (ver RLS/tabela):", error);
   }
 
   async function lancarVeiculo() {
@@ -529,14 +496,7 @@ export default function PCMDiario() {
       alteracoes: { lancamento: true },
     });
 
-    setForm({
-      ...form,
-      frota: "",
-      descricao: "",
-      ordem_servico: "",
-      observacao: "",
-    });
-
+    setForm({ ...form, frota: "", descricao: "", ordem_servico: "", observacao: "" });
     buscarDados();
   }
 
@@ -613,7 +573,6 @@ export default function PCMDiario() {
     buscarDados();
   }
 
-  // ✅ clusters disponíveis (para chips)
   const clustersDisponiveis = useMemo(() => {
     const s = new Set();
     (prefixos || []).forEach((p) => {
@@ -623,9 +582,6 @@ export default function PCMDiario() {
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   }, [prefixos]);
 
-  // ============================
-  // FILTRO + ORDENAÇÃO
-  // ============================
   const veiculosFiltrados = useMemo(() => {
     const txt = filtroTexto.trim().toLowerCase();
     const orderCat = { GNS: 0, NOITE: 1, PENDENTES: 2, VENDA: 3 };
@@ -638,8 +594,6 @@ export default function PCMDiario() {
     return (veiculos || [])
       .filter((v) => {
         if (abaAtiva !== "TODOS" && v.categoria !== abaAtiva) return false;
-
-        // ✅ MULTI: se vazio, não filtra; se tiver algo, precisa estar dentro
         if (setCats.size && !setCats.has(v.categoria)) return false;
         if (setSetores.size && !setSetores.has(v.setor)) return false;
         if (setTurnos.size && !setTurnos.has(v.lancado_no_turno)) return false;
@@ -647,15 +601,7 @@ export default function PCMDiario() {
 
         if (!txt) return true;
 
-        const s = [
-          v.frota,
-          v.descricao,
-          v.ordem_servico,
-          v.setor,
-          v.lancado_por,
-          v.observacao,
-          v.cluster,
-        ]
+        const s = [v.frota, v.descricao, v.ordem_servico, v.setor, v.lancado_por, v.observacao, v.cluster]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -689,35 +635,58 @@ export default function PCMDiario() {
     return { total, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  async function baixarImagemPCM() {
+  // ✅ PDF: captura um "layout espelho" que inclui o mesmo cabeçalho + cards + tabela
+  async function baixarPdfPCM() {
     try {
-      if (!reportRef.current) return;
+      if (!pdfRef.current) return;
 
-      const canvas = await html2canvas(reportRef.current, {
+      const canvas = await html2canvas(pdfRef.current, {
         scale: 2,
         backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
       });
 
-      const link = document.createElement("a");
-      link.download = `PCM_${pcmInfo?.data_referencia || "diario"}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
+      const imgData = canvas.toDataURL("image/png", 1.0);
+
+      // A4 landscape (melhor para tabela larga)
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+
+      // Dimensão da imagem proporcional à largura da página
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+
+      let y = 0;
+      let remaining = imgH;
+
+      // Primeira página
+      pdf.addImage(imgData, "PNG", 0, y, imgW, imgH, undefined, "FAST");
+      remaining -= pageH;
+
+      // Páginas extras (se precisar)
+      while (remaining > 0) {
+        pdf.addPage();
+        y = -((imgH - remaining) + 0); // desloca para "mostrar" o resto
+        pdf.addImage(imgData, "PNG", 0, y, imgW, imgH, undefined, "FAST");
+        remaining -= pageH;
+      }
+
+      const ref = pcmInfo?.data_referencia || "diario";
+      pdf.save(`PCM_${ref}.pdf`);
     } catch (err) {
       console.error(err);
-      alert("Erro ao gerar imagem do PCM.");
+      alert("Erro ao gerar PDF do PCM.");
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      {/* CABEÇALHO */}
+      {/* CABEÇALHO (TELA) */}
       <div className="bg-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-4 border-blue-600">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/pcm-inicio")}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            title="Voltar"
-          >
+          <button onClick={() => navigate("/pcm-inicio")} className="p-2 hover:bg-gray-100 rounded-full" title="Voltar">
             <FaArrowLeft />
           </button>
 
@@ -734,9 +703,7 @@ export default function PCMDiario() {
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
             <button
-              className={`px-4 py-2 text-xs font-black ${
-                turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"
-              }`}
+              className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}
               onClick={() => setTurnoAtivo("DIA")}
             >
               TURNO DIA
@@ -752,15 +719,15 @@ export default function PCMDiario() {
           </div>
 
           <button
-            onClick={baixarImagemPCM}
+            onClick={baixarPdfPCM}
             className="bg-blue-700 text-white px-5 py-2 rounded-lg font-black flex items-center justify-center gap-2 hover:bg-blue-800 transition-all"
           >
-            <FaDownload /> BAIXAR PCM (IMAGEM)
+            <FaDownload /> BAIXAR PCM (PDF)
           </button>
         </div>
       </div>
 
-      {/* RESUMO */}
+      {/* RESUMO (TELA) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
         <div className="bg-white rounded-xl shadow p-4 border">
           <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
@@ -908,7 +875,6 @@ export default function PCMDiario() {
             </div>
 
             <div className="flex flex-wrap gap-2 items-center">
-              {/* ✅ CLUSTER MULTI */}
               <MultiSelectChips
                 label="Cluster"
                 options={clustersDisponiveis.map((cl) => ({ value: cl, label: cl }))}
@@ -916,7 +882,6 @@ export default function PCMDiario() {
                 onChange={setFiltroCluster}
               />
 
-              {/* ✅ CATEGORIA MULTI */}
               <MultiSelectChips
                 label="Categoria"
                 options={CATEGORIAS.map((c) => ({ value: c.value, label: c.label }))}
@@ -924,7 +889,6 @@ export default function PCMDiario() {
                 onChange={setFiltroCategorias}
               />
 
-              {/* ✅ SETOR MULTI */}
               <MultiSelectChips
                 label="Setor"
                 options={SETORES.map((s) => ({ value: s, label: s }))}
@@ -932,7 +896,6 @@ export default function PCMDiario() {
                 onChange={setFiltroSetores}
               />
 
-              {/* ✅ TURNO MULTI */}
               <MultiSelectChips
                 label="Turno"
                 options={[
@@ -960,7 +923,6 @@ export default function PCMDiario() {
           </div>
         </div>
 
-        {/* ABAS */}
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             className={`px-4 py-2 rounded-lg text-xs font-black border ${
@@ -985,7 +947,7 @@ export default function PCMDiario() {
         </div>
       </div>
 
-      {/* RELATORIO */}
+      {/* RELATORIO (TELA) */}
       <div ref={reportRef} className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4">
         <div className="p-4 border-b bg-gray-50">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
@@ -1042,9 +1004,7 @@ export default function PCMDiario() {
 
                   return (
                     <tr key={v.id} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
-                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">
-                        {v.cluster || "-"}
-                      </td>
+                      <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
                       <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
                       <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
                       <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
@@ -1053,15 +1013,7 @@ export default function PCMDiario() {
                           {catStyle.label}
                         </span>
                       </td>
-
-                      {/* ✅ AJUSTE (APENAS ISSO): descrição com quebra correta + line-height melhor */}
-                      <td
-                        className="p-3 border-r border-black/10 align-top text-[11px] leading-snug whitespace-normal break-words"
-                        style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
-                      >
-                        {String(v.descricao || "-").toUpperCase()}
-                      </td>
-
+                      <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
                       <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
                       <td className="p-3 text-[10px] font-black border-r border-black/10">{v.setor}</td>
                       <td className="p-3 border-r border-black/10">
@@ -1070,9 +1022,7 @@ export default function PCMDiario() {
                         </span>
                       </td>
                       <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
-                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">
-                        {v.observacao || "-"}
-                      </td>
+                      <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
 
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-2">
@@ -1107,6 +1057,140 @@ export default function PCMDiario() {
         <div className="p-3 border-t bg-gray-50 text-[10px] text-gray-500 font-bold flex justify-between">
           <span>PCM Diário — Quatai</span>
           <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
+        </div>
+      </div>
+
+      {/* ✅ VIEW "SOMENTE PDF" (NÃO MEXE NA TELA) */}
+      <div className="fixed left-[-99999px] top-0">
+        <div ref={pdfRef} className="bg-white">
+          {/* Cabeçalho + cards iguais ao da tela */}
+          <div className="bg-white p-5 rounded-xl shadow-sm flex flex-row justify-between items-center gap-4 border-b-4 border-blue-600">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-2xl font-black uppercase tracking-tight">PCM - Planejamento e Controle de Manutenção</h1>
+                <p className="text-xs text-gray-500 font-semibold">
+                  Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 items-center">
+              <div className="flex bg-gray-100 rounded-lg overflow-hidden border">
+                <div className={`px-4 py-2 text-xs font-black ${turnoAtivo === "DIA" ? "bg-blue-700 text-white" : "text-gray-700"}`}>
+                  TURNO DIA
+                </div>
+                <div
+                  className={`px-4 py-2 text-xs font-black ${turnoAtivo === "NOITE" ? "bg-blue-700 text-white" : "text-gray-700"}`}
+                >
+                  TURNO NOITE
+                </div>
+              </div>
+
+              <div className="bg-blue-700 text-white px-5 py-2 rounded-lg font-black flex items-center justify-center gap-2">
+                <FaDownload /> BAIXAR PCM (PDF)
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-5 gap-3 mt-4 px-5">
+            <div className="bg-white rounded-xl shadow p-4 border">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Total</p>
+              <p className="text-2xl font-black mt-1">{resumo.total}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4 border">
+              <p className="text-[10px] font-black text-gray-500 uppercase">GNS</p>
+              <p className="text-2xl font-black mt-1 text-red-600">{resumo.GNS}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4 border">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Noturno</p>
+              <p className="text-2xl font-black mt-1">{resumo.NOITE}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4 border">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Venda</p>
+              <p className="text-2xl font-black mt-1 text-blue-700">{resumo.VENDA}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4 border">
+              <p className="text-[10px] font-black text-gray-500 uppercase">Pendentes</p>
+              <p className="text-2xl font-black mt-1 text-gray-600">{resumo.PENDENTES}</p>
+            </div>
+          </div>
+
+          {/* Tabela (mesma do relatório) */}
+          <div className="bg-white shadow-2xl overflow-hidden rounded-xl border mt-4 mx-5">
+            <div className="p-4 border-b bg-gray-50">
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-black uppercase text-gray-800">Relatório diário - PCM</h2>
+                  <p className="text-xs text-gray-500 font-semibold">
+                    Data: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span> | Itens em aberto:{" "}
+                    <span className="font-black">{veiculosFiltrados.length}</span>
+                  </p>
+                </div>
+
+                <div className="text-[10px] font-black text-gray-500 uppercase">
+                  Ordenação: Categoria (GNS → Branco → Cinza → Venda) e Tempo parado (desc)
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                    <th className="p-3 border-r whitespace-nowrap">Cluster</th>
+                    <th className="p-3 border-r whitespace-nowrap">Frota</th>
+                    <th className="p-3 border-r whitespace-nowrap">Entrada</th>
+                    <th className="p-3 border-r text-center whitespace-nowrap">Dias</th>
+                    <th className="p-3 border-r whitespace-nowrap">Categoria</th>
+                    <th className="p-3 border-r w-[420px]">Descrição</th>
+                    <th className="p-3 border-r whitespace-nowrap">O.S</th>
+                    <th className="p-3 border-r whitespace-nowrap">Setor</th>
+                    <th className="p-3 border-r whitespace-nowrap">Turno</th>
+                    <th className="p-3 border-r whitespace-nowrap">Responsável</th>
+                    <th className="p-3 border-r w-[260px]">Observação</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {(veiculosFiltrados || []).map((v) => {
+                    const catStyle = getCategoriaStyle(v.categoria);
+                    const dias = daysBetween(v.data_entrada);
+
+                    return (
+                      <tr key={`pdf-${v.id}`} className={`border-b border-gray-200 font-medium ${catStyle.color}`}>
+                        <td className="p-3 border-r border-black/10 text-[10px] font-black uppercase">{v.cluster || "-"}</td>
+                        <td className="p-3 text-lg font-black border-r border-black/10">{v.frota}</td>
+                        <td className="p-3 border-r border-black/10">{formatBRDate(v.data_entrada)}</td>
+                        <td className="p-3 text-center font-black border-r border-black/10 text-lg">{dias}</td>
+                        <td className="p-3 border-r border-black/10">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${catStyle.badge}`}>
+                            {catStyle.label}
+                          </span>
+                        </td>
+                        <td className="p-3 text-[11px] uppercase leading-tight border-r border-black/10">{v.descricao}</td>
+                        <td className="p-3 font-bold border-r border-black/10">{v.ordem_servico || "-"}</td>
+                        <td className="p-3 text-[10px] font-black border-r border-black/10">{v.setor}</td>
+                        <td className="p-3 border-r border-black/10">
+                          <span className="px-2 py-1 rounded-full bg-black/20 text-[10px] font-black uppercase">
+                            {v.lancado_no_turno || "-"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-[10px] italic border-r border-black/10">{v.lancado_por || "-"}</td>
+                        <td className="p-3 text-[10px] font-bold border-r border-black/10 uppercase">{v.observacao || "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-3 border-t bg-gray-50 text-[10px] text-gray-500 font-bold flex justify-between">
+              <span>PCM Diário — Quatai</span>
+              <span>Gerado em: {new Date().toLocaleString("pt-BR")}</span>
+            </div>
+          </div>
+
+          <div className="h-6" />
         </div>
       </div>
 
