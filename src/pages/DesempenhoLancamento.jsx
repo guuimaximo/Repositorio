@@ -5,6 +5,8 @@ import CampoMotorista from "../components/CampoMotorista";
 import CampoPrefixo from "../components/CampoPrefixo";
 import { useAuth } from "../context/AuthContext";
 
+const API_BASE = "https://agentediesel.onrender.com"; // ✅ consulta premiacao (API Python)
+
 const MOTIVOS = [
   "KM/L abaixo da meta",
   "Tendência de queda",
@@ -68,6 +70,20 @@ async function uploadManyToStorage({ files, bucket, folder }) {
   return out;
 }
 
+// ✅ consulta API (Supabase A / premiacao_diaria via agentediesel)
+async function fetchResumoPremiacao({ chapa, inicio, fim }) {
+  const qs = new URLSearchParams({
+    chapa: String(chapa || "").trim(),
+    inicio: String(inicio || "").trim(),
+    fim: String(fim || "").trim(),
+  }).toString();
+
+  const r = await fetch(`${API_BASE}/premiacao/resumo?${qs}`);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.detail || j?.error || "Erro ao consultar premiacao.");
+  return j;
+}
+
 export default function DesempenhoLancamento() {
   const { user } = useAuth ? useAuth() : { user: null };
 
@@ -98,6 +114,12 @@ export default function DesempenhoLancamento() {
   const [errMsg, setErrMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
 
+  // ✅ resumo premiacao (Supabase A)
+  const [resumoLoading, setResumoLoading] = useState(false);
+  const [resumoErr, setResumoErr] = useState("");
+  const [resumoTotais, setResumoTotais] = useState({ dias: 0, km: 0, litros: 0, kml: 0 });
+  const [resumoVeiculos, setResumoVeiculos] = useState([]);
+
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
   useEffect(() => {
@@ -118,6 +140,46 @@ export default function DesempenhoLancamento() {
       }
     })();
   }, []);
+
+  // ✅ busca resumo quando chapa + periodo estiverem preenchidos
+  useEffect(() => {
+    const chapa = String(motorista?.chapa || "").trim();
+    const ini = String(periodoInicio || "").trim();
+    const fim = String(periodoFim || "").trim();
+
+    // limpa quando faltar info
+    if (!chapa || !ini || !fim) {
+      setResumoErr("");
+      setResumoLoading(false);
+      setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
+      setResumoVeiculos([]);
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      setResumoLoading(true);
+      setResumoErr("");
+      try {
+        const j = await fetchResumoPremiacao({ chapa, inicio: ini, fim });
+        if (!alive) return;
+        setResumoTotais(j?.totais || { dias: 0, km: 0, litros: 0, kml: 0 });
+        setResumoVeiculos(Array.isArray(j?.veiculos) ? j.veiculos : []);
+      } catch (e) {
+        if (!alive) return;
+        setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
+        setResumoVeiculos([]);
+        setResumoErr(e?.message || "Erro ao buscar resumo.");
+      } finally {
+        if (!alive) return;
+        setResumoLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [motorista?.chapa, periodoInicio, periodoFim]);
 
   function addFiles(e) {
     const list = filesToList(e.target.files);
@@ -148,7 +210,18 @@ export default function DesempenhoLancamento() {
     const periodoOk = String(periodoInicio || "").trim() && String(periodoFim || "").trim();
 
     return motivoOk && kmlOk && metaOk && evidOk && periodoOk;
-  }, [motorista, prefixo, linha, cluster, motivoFinal, kmlInicial, kmlMeta, evidAcomp, periodoInicio, periodoFim]);
+  }, [
+    motorista,
+    prefixo,
+    linha,
+    cluster,
+    motivoFinal,
+    kmlInicial,
+    kmlMeta,
+    evidAcomp,
+    periodoInicio,
+    periodoFim,
+  ]);
 
   function limpar() {
     setMotorista({ chapa: "", nome: "" });
@@ -165,6 +238,12 @@ export default function DesempenhoLancamento() {
     setEvidAcomp([]);
     setErrMsg("");
     setOkMsg("");
+
+    // ✅ limpa resumo
+    setResumoLoading(false);
+    setResumoErr("");
+    setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
+    setResumoVeiculos([]);
   }
 
   async function lancar() {
@@ -263,9 +342,7 @@ export default function DesempenhoLancamento() {
         },
       };
 
-      const { error: eE } = await supabase
-        .from("diesel_acompanhamento_eventos")
-        .insert(payloadEvento);
+      const { error: eE } = await supabase.from("diesel_acompanhamento_eventos").insert(payloadEvento);
 
       if (eE) throw eE;
 
@@ -394,6 +471,109 @@ export default function DesempenhoLancamento() {
                 onChange={(e) => setPeriodoFim(e.target.value)}
                 disabled={saving}
               />
+            </div>
+          </div>
+
+          {/* ✅ RESUMO AUTOMÁTICO (premiacao_diaria) */}
+          <div className="md:col-span-4">
+            <div className="rounded-md border bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-gray-800">Resumo do período (premiação)</div>
+                <div className="text-xs text-gray-500">
+                  {resumoLoading ? "Consultando..." : resumoErr ? "Erro" : "OK"}
+                </div>
+              </div>
+
+              {resumoErr ? (
+                <div className="mt-2 text-sm text-red-700">{resumoErr}</div>
+              ) : (
+                <>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div className="rounded-md bg-white border p-2">
+                      <div className="text-xs text-gray-500">Dias</div>
+                      <div className="text-sm font-semibold text-gray-800">{resumoTotais?.dias ?? 0}</div>
+                    </div>
+                    <div className="rounded-md bg-white border p-2">
+                      <div className="text-xs text-gray-500">KM rodado</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {Number(resumoTotais?.km || 0).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-white border p-2">
+                      <div className="text-xs text-gray-500">Combustível</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {Number(resumoTotais?.litros || 0).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-white border p-2">
+                      <div className="text-xs text-gray-500">KM/L (período)</div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {Number(resumoTotais?.kml || 0).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(resumoVeiculos || []).length > 0 && (
+                    <div className="mt-3 overflow-auto border rounded-md bg-white">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-100 text-gray-700">
+                          <tr>
+                            <th className="text-left px-3 py-2">Veículo</th>
+                            <th className="text-right px-3 py-2">Dias</th>
+                            <th className="text-right px-3 py-2">KM</th>
+                            <th className="text-right px-3 py-2">Comb.</th>
+                            <th className="text-right px-3 py-2">KM/L</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resumoVeiculos.map((v) => (
+                            <tr key={v.veiculo} className="border-t">
+                              <td className="px-3 py-2">{v.veiculo}</td>
+                              <td className="px-3 py-2 text-right">{v.dias}</td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(v.km || 0).toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(v.litros || 0).toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(v.kml || 0).toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {!resumoLoading &&
+                    !resumoErr &&
+                    String(motorista?.chapa || "").trim() &&
+                    String(periodoInicio || "").trim() &&
+                    String(periodoFim || "").trim() &&
+                    (resumoVeiculos || []).length === 0 && (
+                      <div className="mt-2 text-sm text-gray-600">Nenhum dado encontrado para o período.</div>
+                    )}
+                </>
+              )}
             </div>
           </div>
         </div>
