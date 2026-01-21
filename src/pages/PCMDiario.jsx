@@ -14,7 +14,6 @@ import {
   FaSave,
   FaCheckCircle,
 } from "react-icons/fa";
-import html2canvas from "html2canvas";
 
 /* ============================
    CONSTANTES (PADRÃO)
@@ -81,6 +80,214 @@ function buildDiff(before, after, keys) {
     }
   });
   return diff;
+}
+
+/* ============================
+   PDF (OFFSCREEN) — NÃO MEXE NA TELA
+   - Gera um HTML próprio para impressão (A4 paisagem)
+   - Cabeçalho com resumo + tabela completa
+============================ */
+
+function escapeHtml(s = "") {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function buildResumoPCM(rows) {
+  const total = rows.length;
+
+  const diasFn = (r) => Number(r?.dias ?? 0);
+
+  const faixas = {
+    "0-14": rows.filter((r) => diasFn(r) <= 14).length,
+    "15-30": rows.filter((r) => diasFn(r) >= 15 && diasFn(r) <= 30).length,
+    ">30": rows.filter((r) => diasFn(r) > 30).length,
+  };
+
+  const by = (key) => {
+    const m = new Map();
+    for (const r of rows) {
+      const k = String(r?.[key] ?? "—").trim() || "—";
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  };
+
+  const setor = by("setor").slice(0, 6);
+  const categoria = by("categoria").slice(0, 6);
+
+  return { total, faixas, setor, categoria };
+}
+
+function buildPdfHtmlPCM(rows, meta = {}) {
+  const resumo = buildResumoPCM(rows);
+
+  const chips = (arr) =>
+    arr
+      .map(
+        ([k, v]) =>
+          `<span class="chip"><b>${escapeHtml(k)}</b>: ${escapeHtml(v)}</span>`
+      )
+      .join("");
+
+  const dataLinha = meta?.dataRef ? `Data: <b>${escapeHtml(meta.dataRef)}</b>` : "";
+  const abertosLinha =
+    typeof meta?.itensEmAberto === "number"
+      ? `Itens em aberto: <b>${meta.itensEmAberto}</b>`
+      : `Itens: <b>${resumo.total}</b>`;
+
+  const thead = `
+    <thead>
+      <tr>
+        <th>Cluster</th>
+        <th>Frota</th>
+        <th>Entrada</th>
+        <th class="num">Dias</th>
+        <th>Categoria</th>
+        <th class="desc">Descrição</th>
+        <th>O.S</th>
+        <th>Setor</th>
+        <th>Turno</th>
+        <th>Responsável</th>
+        <th>Observação</th>
+      </tr>
+    </thead>`;
+
+  const tbody = rows
+    .map((r) => {
+      return `
+      <tr>
+        <td>${escapeHtml(r?.cluster)}</td>
+        <td class="strong">${escapeHtml(r?.frota)}</td>
+        <td>${escapeHtml(r?.entrada)}</td>
+        <td class="num strong">${escapeHtml(r?.dias)}</td>
+        <td>${escapeHtml(r?.categoria)}</td>
+        <td class="desc">${escapeHtml(r?.descricao)}</td>
+        <td>${escapeHtml(r?.os)}</td>
+        <td>${escapeHtml(r?.setor)}</td>
+        <td>${escapeHtml(r?.turno)}</td>
+        <td>${escapeHtml(r?.responsavel)}</td>
+        <td>${escapeHtml(r?.observacao)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Relatório Diário - PCM</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, Helvetica, sans-serif; color:#0f172a; }
+  .header {
+    display:flex; justify-content:space-between; align-items:flex-start;
+    border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; margin-bottom:10px;
+    background:#ffffff;
+  }
+  .title { font-size: 16px; font-weight: 800; margin:0; letter-spacing: .3px; }
+  .meta { font-size: 12px; color:#475569; margin-top:4px; }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .chip {
+    display:inline-flex; gap:6px; align-items:center; padding:6px 8px;
+    border:1px solid #e2e8f0; border-radius:999px; background:#f8fafc;
+    font-size:11px; color:#0f172a; white-space:nowrap;
+  }
+  .chip b { font-weight: 800; }
+  .section { margin-top:6px; font-size:11px; color:#334155; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; }
+
+  table { width:100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; }
+  th, td { border:1px solid #e2e8f0; padding:6px 6px; font-size:10px; vertical-align:top; }
+  th { background:#f1f5f9; font-weight:800; }
+  td.num, th.num { text-align:right; white-space:nowrap; width: 42px; }
+  td.desc, th.desc { width: 44%; }
+  td.strong { font-weight:800; }
+  .footer { margin-top:8px; font-size:10px; color:#64748b; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">RELATÓRIO DIÁRIO - PCM</div>
+      <div class="meta">${dataLinha} &nbsp;|&nbsp; ${abertosLinha}</div>
+
+      <div class="section"><b>Aging</b></div>
+      <div class="row">
+        <span class="chip"><b>0–14</b>: ${resumo.faixas["0-14"]}</span>
+        <span class="chip"><b>15–30</b>: ${resumo.faixas["15-30"]}</span>
+        <span class="chip"><b>&gt;30</b>: ${resumo.faixas[">30"]}</span>
+      </div>
+
+      <div class="section"><b>Por Setor (top)</b></div>
+      <div class="row">${chips(resumo.setor)}</div>
+
+      <div class="section"><b>Por Categoria (top)</b></div>
+      <div class="row">${chips(resumo.categoria)}</div>
+    </div>
+
+    <div class="badges">
+      <span class="chip"><b>Total</b>: ${resumo.total}</span>
+      <span class="chip">Gerado em: ${escapeHtml(new Date().toLocaleString("pt-BR"))}</span>
+    </div>
+  </div>
+
+  <table>
+    ${thead}
+    <tbody>
+      ${tbody}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>PCM Diário — Quatai</div>
+    <div>PDF (A4 paisagem) — WhatsApp: envie como <b>Documento</b>.</div>
+  </div>
+</body>
+</html>`;
+}
+
+function gerarPdfPCM_offscreen(rows, meta = {}) {
+  const html = buildPdfHtmlPCM(rows, meta);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.visibility = "hidden";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (!doc) {
+    document.body.removeChild(iframe);
+    throw new Error("Não foi possível criar documento para PDF.");
+  }
+
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  // aguarda renderização e imprime (salvar como PDF)
+  setTimeout(() => {
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+
+    // limpa iframe
+    setTimeout(() => {
+      try {
+        document.body.removeChild(iframe);
+      } catch {}
+    }, 800);
+  }, 350);
 }
 
 /* ============================
@@ -481,7 +688,7 @@ export default function PCMDiario() {
     const os = String(form.ordem_servico || "").trim();
 
     if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição.");
-    if (!os) return alert("Ordem de Serviço é obrigatória.");
+0    if (!os) return alert("Ordem de Serviço é obrigatória.");
     if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
     if (!form.setor) return alert("Setor é obrigatório.");
     if (!form.observacao) return alert("Selecione uma Observação.");
@@ -689,22 +896,30 @@ export default function PCMDiario() {
     return { total, ...byCat };
   }, [veiculos, veiculosFiltrados]);
 
-  async function baixarImagemPCM() {
+  // ✅ Substitui imagem por PDF (sem alterar layout da tela)
+  function baixarPdfPCM() {
     try {
-      if (!reportRef.current) return;
+      const rows = (veiculosFiltrados || []).map((v) => ({
+        cluster: v.cluster || "-",
+        frota: v.frota || "-",
+        entrada: formatBRDate(v.data_entrada),
+        dias: daysBetween(v.data_entrada),
+        categoria: getCategoriaStyle(v.categoria).label,
+        descricao: v.descricao || "-",
+        os: v.ordem_servico || "-",
+        setor: v.setor || "-",
+        turno: v.lancado_no_turno || "-",
+        responsavel: v.lancado_por || "-",
+        observacao: v.observacao || "-",
+      }));
 
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        backgroundColor: "#ffffff",
+      gerarPdfPCM_offscreen(rows, {
+        dataRef: pcmInfo?.data_referencia || "-",
+        itensEmAberto: (veiculosFiltrados || []).length,
       });
-
-      const link = document.createElement("a");
-      link.download = `PCM_${pcmInfo?.data_referencia || "diario"}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
     } catch (err) {
       console.error(err);
-      alert("Erro ao gerar imagem do PCM.");
+      alert("Erro ao gerar PDF do PCM.");
     }
   }
 
@@ -752,10 +967,10 @@ export default function PCMDiario() {
           </div>
 
           <button
-            onClick={baixarImagemPCM}
+            onClick={baixarPdfPCM}
             className="bg-blue-700 text-white px-5 py-2 rounded-lg font-black flex items-center justify-center gap-2 hover:bg-blue-800 transition-all"
           >
-            <FaDownload /> BAIXAR PCM (IMAGEM)
+            <FaDownload /> BAIXAR PCM (PDF)
           </button>
         </div>
       </div>
