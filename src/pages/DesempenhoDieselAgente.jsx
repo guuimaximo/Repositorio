@@ -80,13 +80,14 @@ function statusTextFrom({ loading, erro, ok }) {
 }
 
 function Pill({ tone = "neutral", icon = null, children }) {
+  // ✅ versão mais clara
   const toneCls = {
-    neutral: "border-white/10 bg-white/5 text-gray-100",
-    blue: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
-    green: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    red: "border-rose-400/20 bg-rose-400/10 text-rose-100",
-    yellow: "border-amber-400/20 bg-amber-400/10 text-amber-100",
-    purple: "border-fuchsia-400/20 bg-fuchsia-400/10 text-fuchsia-100",
+    neutral: "border-slate-200 bg-white/80 text-slate-700",
+    blue: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    red: "border-rose-200 bg-rose-50 text-rose-700",
+    yellow: "border-amber-200 bg-amber-50 text-amber-800",
+    purple: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
   }[tone];
 
   return (
@@ -104,10 +105,12 @@ function Pill({ tone = "neutral", icon = null, children }) {
 }
 
 function Card({ children, className = "" }) {
+  // ✅ versão mais clara
   return (
     <div
       className={clsx(
-        "rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_18px_60px_rgba(0,0,0,0.35)]",
+        "rounded-2xl border border-slate-200 bg-white/75 backdrop-blur-xl",
+        "shadow-[0_0_0_1px_rgba(15,23,42,0.03),0_12px_40px_rgba(0,0,0,0.06)]",
         className
       )}
     >
@@ -117,33 +120,47 @@ function Card({ children, className = "" }) {
 }
 
 function Modal({ open, title, onClose, children }) {
+  // ✅ header sticky + scroll interno + garante que o botão Fechar nunca “suma”
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0 bg-black/40"
         onClick={onClose}
         role="button"
         tabIndex={0}
         aria-label="Fechar"
       />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-6">
         <div className="w-full max-w-6xl">
-          <div className="rounded-2xl border border-white/10 bg-slate-950/95 shadow-[0_25px_90px_rgba(0,0,0,0.6)] overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
+          <div
+            className={clsx(
+              "rounded-2xl border border-slate-200/70 bg-white/85 backdrop-blur-xl",
+              "shadow-[0_25px_90px_rgba(0,0,0,0.25)] overflow-hidden"
+            )}
+            style={{ maxHeight: "calc(100vh - 24px)" }}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200/70 bg-white/90">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-white truncate">{title}</div>
+                <div className="text-sm font-semibold text-slate-800 truncate">{title}</div>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
                 <FaTimes />
                 Fechar
               </button>
             </div>
-            <div className="p-4">{children}</div>
+
+            <div
+              className="p-4 overflow-auto"
+              style={{ maxHeight: "calc(100vh - 24px - 52px)" }}
+            >
+              {children}
+            </div>
           </div>
         </div>
       </div>
@@ -247,7 +264,7 @@ export default function DesempenhoDieselAgente() {
       let pdfPath = arquivoPath;
       if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
 
-      // mantém propriedades (html/png continuam gerando URL), mas não polui a página
+      // mantém propriedades (html/png continuam existindo), mas não polui a página
       let htmlPath = arquivoPath;
       if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
       const pngPath = `${folder}/cluster_evolution_unificado.png`;
@@ -294,7 +311,6 @@ export default function DesempenhoDieselAgente() {
     try {
       if (!validarPeriodo()) throw new Error("Período inválido: Data início maior que Data fim.");
 
-      // Mantém propriedades do payload, porém sem filtros extras
       const payload = {
         tipo: TIPO_RELATORIO,
         periodo_inicio: periodoInicio ? String(periodoInicio) : null,
@@ -350,10 +366,10 @@ export default function DesempenhoDieselAgente() {
   );
 
   const statusIcon = useMemo(() => {
-    if (loading) return <FaBolt className="text-amber-200" />;
-    if (erro) return <FaTimesCircle className="text-rose-200" />;
-    if (resp?.ok === true) return <FaCheckCircle className="text-emerald-200" />;
-    return <FaCloud className="text-cyan-200" />;
+    if (loading) return <FaBolt className="text-amber-600" />;
+    if (erro) return <FaTimesCircle className="text-rose-600" />;
+    if (resp?.ok === true) return <FaCheckCircle className="text-emerald-600" />;
+    return <FaCloud className="text-cyan-600" />;
   }, [loading, erro, resp]);
 
   const filteredItems = useMemo(() => {
@@ -388,22 +404,25 @@ export default function DesempenhoDieselAgente() {
 
   return (
     <div className="min-h-[calc(100vh-140px)]">
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90 p-6">
+      {/* ✅ Fundo mais claro */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/70 backdrop-blur-xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(1100px_circle_at_10%_10%,rgba(56,189,248,0.12),transparent_50%),radial-gradient(900px_circle_at_90%_20%,rgba(217,70,239,0.10),transparent_55%)]" />
-          <div className="absolute inset-0 opacity-15 [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:52px_52px]" />
+          <div className="absolute inset-0 bg-[radial-gradient(1000px_circle_at_10%_10%,rgba(56,189,248,0.18),transparent_55%),radial-gradient(900px_circle_at_90%_20%,rgba(217,70,239,0.14),transparent_60%)]" />
+          <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(15,23,42,0.10)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.10)_1px,transparent_1px)] [background-size:56px_56px]" />
         </div>
 
         {/* Header */}
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                <FaBolt className="text-cyan-200" />
+              <div className="h-10 w-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center">
+                <FaBolt className="text-cyan-700" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-xl font-semibold tracking-tight text-white">Agente Diesel</h2>
-                <p className="text-sm text-white/60">Clean: datas + histórico + PDF em modal.</p>
+                <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                  Agente Diesel
+                </h2>
+                <p className="text-sm text-slate-600">Clean: datas + histórico + PDF em modal.</p>
               </div>
             </div>
 
@@ -425,7 +444,7 @@ export default function DesempenhoDieselAgente() {
             <div className="flex gap-2">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-cyan-400/30 bg-cyan-400/15 text-white"
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-cyan-200 bg-cyan-50 text-cyan-800"
                 title="Ativo"
               >
                 AGENTE GERENCIAL
@@ -434,7 +453,7 @@ export default function DesempenhoDieselAgente() {
               <button
                 type="button"
                 disabled
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-slate-200 bg-white text-slate-400 cursor-not-allowed"
                 title="Ainda não existe"
               >
                 AGENTE ACOMPANHAMENTO (em breve)
@@ -443,7 +462,7 @@ export default function DesempenhoDieselAgente() {
 
             <button
               onClick={() => setShowFilters((v) => !v)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
               type="button"
             >
               <FaFilter />
@@ -454,9 +473,10 @@ export default function DesempenhoDieselAgente() {
               onClick={gerar}
               disabled={loading}
               className={clsx(
-                "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition",
-                "border border-cyan-400/20",
-                loading ? "bg-white/10 text-white/60 cursor-not-allowed" : "bg-white/5 text-white hover:bg-white/10"
+                "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition border",
+                loading
+                  ? "border-slate-200 bg-white text-slate-400 cursor-not-allowed"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               )}
               title="Executa a geração do relatório na API"
             >
@@ -473,16 +493,16 @@ export default function DesempenhoDieselAgente() {
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <FaFilter className="text-white/70" />
-                    <p className="text-sm font-semibold text-white">Período</p>
+                    <FaFilter className="text-slate-500" />
+                    <p className="text-sm font-semibold text-slate-800">Período</p>
                   </div>
-                  <p className="mt-1 text-xs text-white/60">Somente datas (YYYY-MM-DD).</p>
+                  <p className="mt-1 text-xs text-slate-500">Somente datas (YYYY-MM-DD).</p>
                 </div>
 
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   <FaBroom />
                   Limpar
@@ -491,33 +511,33 @@ export default function DesempenhoDieselAgente() {
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-white/60">Data início</label>
+                  <label className="text-[11px] font-semibold text-slate-500">Data início</label>
                   <input
                     type="date"
                     value={periodoInicio}
                     onChange={(e) => setPeriodoInicio(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-400/30"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-cyan-200"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-white/60">Data fim</label>
+                  <label className="text-[11px] font-semibold text-slate-500">Data fim</label>
                   <input
                     type="date"
                     value={periodoFim}
                     onChange={(e) => setPeriodoFim(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-400/30"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-cyan-200"
                   />
                 </div>
               </div>
 
               {!validarPeriodo() && (
-                <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   <div className="flex items-center gap-2 font-semibold">
                     <FaExclamationTriangle />
                     Período inválido
                   </div>
-                  <div className="mt-1 text-xs text-rose-100/80">
+                  <div className="mt-1 text-xs text-rose-600">
                     A data de início deve ser menor ou igual à data fim.
                   </div>
                 </div>
@@ -526,39 +546,39 @@ export default function DesempenhoDieselAgente() {
           </div>
         )}
 
-        {/* Visualização (sem iframe na página) */}
+        {/* Visualização */}
         <div className="relative mt-5">
           <Card className="p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <FaFilePdf className="text-white/80" />
-                  <div className="text-sm font-semibold text-white">Visualização</div>
+                  <FaFilePdf className="text-slate-600" />
+                  <div className="text-sm font-semibold text-slate-800">Visualização</div>
                 </div>
 
                 {!selected ? (
-                  <div className="mt-1 text-xs text-white/60">
+                  <div className="mt-1 text-xs text-slate-500">
                     Selecione um item no histórico para habilitar o PDF.
                   </div>
                 ) : (
-                  <div className="mt-2 space-y-1 text-xs text-white/60">
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
                     <div className="truncate">
-                      <span className="text-white/80 font-semibold">Relatório:</span>{" "}
-                      <span className="text-white/70">{labelRelatorio(selected)}</span>
+                      <span className="text-slate-800 font-semibold">Relatório:</span>{" "}
+                      <span className="text-slate-700">{labelRelatorio(selected)}</span>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                       <div>
-                        <span className="text-white/80 font-semibold">Gerado:</span>{" "}
-                        <span className="text-white/70">{fmtBR(selected.created_at)}</span>
+                        <span className="text-slate-800 font-semibold">Gerado:</span>{" "}
+                        <span className="text-slate-700">{fmtBR(selected.created_at)}</span>
                       </div>
                       <div>
-                        <span className="text-white/80 font-semibold">Status:</span>{" "}
-                        <span className="text-white/70">{String(selected.status || "")}</span>
+                        <span className="text-slate-800 font-semibold">Status:</span>{" "}
+                        <span className="text-slate-700">{String(selected.status || "")}</span>
                       </div>
                       {selectedMeta ? (
                         <div>
-                          <span className="text-white/80 font-semibold">Período:</span>{" "}
-                          <span className="text-white/70">
+                          <span className="text-slate-800 font-semibold">Período:</span>{" "}
+                          <span className="text-slate-700">
                             {selectedMeta.ini} → {selectedMeta.fim}
                           </span>
                         </div>
@@ -566,8 +586,8 @@ export default function DesempenhoDieselAgente() {
                     </div>
 
                     {urls?.pdf_path_used ? (
-                      <div className="text-[11px] text-white/45 break-all">
-                        <span className="font-semibold text-white/60">PDF path:</span>{" "}
+                      <div className="text-[11px] text-slate-500 break-all">
+                        <span className="font-semibold text-slate-700">PDF path:</span>{" "}
                         {urls.pdf_path_used} ({urls.pdf_mode})
                       </div>
                     ) : null}
@@ -585,8 +605,8 @@ export default function DesempenhoDieselAgente() {
                   className={clsx(
                     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition border",
                     !canOpenPdf || urlsLoading
-                      ? "border-white/10 bg-white/5 text-white/50 cursor-not-allowed"
-                      : "border-cyan-400/20 bg-white/5 text-white hover:bg-white/10"
+                      ? "border-slate-200 bg-white text-slate-400 cursor-not-allowed"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   )}
                   title={!canOpenPdf ? "Selecione um relatório com PDF" : "Abrir PDF"}
                 >
@@ -599,7 +619,7 @@ export default function DesempenhoDieselAgente() {
                     href={urls.pdf}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                     title="Abrir PDF em nova aba"
                   >
                     Abrir em nova aba
@@ -611,8 +631,8 @@ export default function DesempenhoDieselAgente() {
                   onClick={carregarHistorico}
                   disabled={historicoLoading}
                   className={clsx(
-                    "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition",
-                    historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-white/10"
+                    "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition",
+                    historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-slate-50"
                   )}
                   title="Recarregar histórico"
                 >
@@ -623,7 +643,7 @@ export default function DesempenhoDieselAgente() {
             </div>
 
             {urlsLoading && (
-              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
                 <div className="flex items-center gap-2 font-semibold">
                   <FaSyncAlt className="animate-spin" />
                   Carregando URLs...
@@ -632,42 +652,42 @@ export default function DesempenhoDieselAgente() {
             )}
 
             {urlsErro && (
-              <div className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <div className="flex items-center gap-2 font-semibold">
                   <FaTimesCircle />
                   Falha ao preparar PDF
                 </div>
-                <div className="mt-1 text-xs text-rose-100/80 break-all">{urlsErro}</div>
+                <div className="mt-1 text-xs text-rose-600 break-all">{urlsErro}</div>
               </div>
             )}
           </Card>
         </div>
 
-        {/* Histórico compacto */}
+        {/* Histórico */}
         <div className="relative mt-5">
           <Card className="p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
-                <FaDatabase className="text-white/80" />
-                <h3 className="text-sm font-semibold text-white">Histórico</h3>
-                <span className="text-xs text-white/50">({filteredItems.length} item(ns))</span>
+                <FaDatabase className="text-slate-600" />
+                <h3 className="text-sm font-semibold text-slate-800">Histórico</h3>
+                <span className="text-xs text-slate-500">({filteredItems.length} item(ns))</span>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
                 <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm" />
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
                   <input
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
                     placeholder="Buscar (status, período, arquivo, path...)"
-                    className="w-full sm:w-[360px] rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-cyan-400/30"
+                    className="w-full sm:w-[360px] rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-200"
                   />
                 </div>
                 {!!searchText && (
                   <button
                     type="button"
                     onClick={() => setSearchText("")}
-                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                   >
                     limpar
                   </button>
@@ -676,18 +696,18 @@ export default function DesempenhoDieselAgente() {
             </div>
 
             {historicoErro && (
-              <div className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <div className="flex items-center gap-2 font-semibold">
                   <FaTimesCircle />
                   Erro ao carregar histórico
                 </div>
-                <div className="mt-1 text-xs text-rose-100/80 break-all">{historicoErro}</div>
+                <div className="mt-1 text-xs text-rose-600 break-all">{historicoErro}</div>
               </div>
             )}
 
             <div className="mt-3 space-y-2">
               {!visibleItems.length ? (
-                <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-white/60">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
                   Nenhum relatório encontrado.
                 </div>
               ) : (
@@ -725,8 +745,8 @@ export default function DesempenhoDieselAgente() {
                       className={clsx(
                         "w-full text-left rounded-2xl border p-3 transition flex items-start justify-between gap-3",
                         isSel
-                          ? "border-cyan-400/30 bg-cyan-400/10"
-                          : "border-white/10 bg-white/5 hover:bg-white/10"
+                          ? "border-cyan-200 bg-cyan-50"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
                       )}
                       title="Selecionar relatório"
                     >
@@ -735,23 +755,23 @@ export default function DesempenhoDieselAgente() {
                           <Pill tone={tone} icon={icon}>
                             {String(it.status || "—")}
                           </Pill>
-                          <div className="truncate text-sm font-semibold text-white">
+                          <div className="truncate text-sm font-semibold text-slate-800">
                             {ini} → {fim}
                           </div>
                         </div>
 
-                        <div className="mt-1 text-xs text-white/60">
+                        <div className="mt-1 text-xs text-slate-600">
                           {fmtBR(it.created_at)}
                           {it?.arquivo_nome ? (
                             <>
                               {" "}
-                              • <span className="text-white/70">{it.arquivo_nome}</span>
+                              • <span className="text-slate-700">{it.arquivo_nome}</span>
                             </>
                           ) : null}
                         </div>
 
                         {it?.erro_msg && it.status === "ERRO" ? (
-                          <div className="mt-2 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100 break-all">
+                          <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700 break-all">
                             <span className="font-semibold">Erro:</span> {it.erro_msg}
                           </div>
                         ) : null}
@@ -759,7 +779,7 @@ export default function DesempenhoDieselAgente() {
 
                       <div className="shrink-0 flex flex-col items-end gap-2">
                         {isSel && (
-                          <span className="text-[11px] text-cyan-200/90 border border-cyan-400/20 bg-cyan-400/10 rounded-full px-2 py-1">
+                          <span className="text-[11px] text-cyan-800 border border-cyan-200 bg-cyan-50 rounded-full px-2 py-1">
                             selecionado
                           </span>
                         )}
@@ -775,7 +795,7 @@ export default function DesempenhoDieselAgente() {
                 <button
                   type="button"
                   onClick={() => setShowCount((c) => Math.min(filteredItems.length, c + 12))}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   Ver mais
                 </button>
@@ -783,12 +803,12 @@ export default function DesempenhoDieselAgente() {
             )}
 
             {erro && (
-              <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <div className="flex items-center gap-2 font-semibold">
                   <FaExclamationTriangle />
                   Erro ao gerar
                 </div>
-                <div className="mt-1 text-xs text-rose-100/80 break-all">{erro}</div>
+                <div className="mt-1 text-xs text-rose-600 break-all">{erro}</div>
               </div>
             )}
           </Card>
@@ -797,15 +817,15 @@ export default function DesempenhoDieselAgente() {
         {!!resp && (resp?.stderr || resp?.stdout || resp?.stdout_tail) && (
           <div className="relative mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-4">
-              <div className="text-xs font-semibold text-white/70">STDERR</div>
-              <pre className="mt-2 text-xs bg-black/30 border border-white/10 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-white/80">
+              <div className="text-xs font-semibold text-slate-700">STDERR</div>
+              <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-slate-800">
 {resp?.stderr || "(vazio)"}
               </pre>
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs font-semibold text-white/70">STDOUT</div>
-              <pre className="mt-2 text-xs bg-black/30 border border-white/10 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-white/80">
+              <div className="text-xs font-semibold text-slate-700">STDOUT</div>
+              <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-slate-800">
 {resp?.stdout || resp?.stdout_tail || "(vazio)"}
               </pre>
             </Card>
@@ -824,14 +844,14 @@ export default function DesempenhoDieselAgente() {
         }
       >
         {!canOpenPdf ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-white/60">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
             Nenhum PDF disponível para exibir.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <div className="flex items-center gap-2 text-xs text-white/70">
-                <span className="h-2 w-2 rounded-full bg-emerald-400/70" />
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 Viewer seguro (Signed URL)
               </div>
               {urls?.pdf && (
@@ -839,7 +859,7 @@ export default function DesempenhoDieselAgente() {
                   href={urls.pdf}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                   title="Abrir PDF em nova aba"
                 >
                   <FaFilePdf />
@@ -848,7 +868,8 @@ export default function DesempenhoDieselAgente() {
               )}
             </div>
 
-            <div style={{ height: 760 }} className="bg-black/20">
+            {/* ✅ altura responsiva (evita estourar tela) */}
+            <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
               <iframe
                 title="RelatorioPDF"
                 src={urls.pdf}
