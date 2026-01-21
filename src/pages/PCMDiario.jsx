@@ -688,7 +688,7 @@ export default function PCMDiario() {
     const os = String(form.ordem_servico || "").trim();
 
     if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição.");
-0    if (!os) return alert("Ordem de Serviço é obrigatória.");
+    if (!os) return alert("Ordem de Serviço é obrigatória.");
     if (!/^\d+$/.test(os)) return alert("Ordem de Serviço deve conter somente números.");
     if (!form.setor) return alert("Setor é obrigatório.");
     if (!form.observacao) return alert("Selecione uma Observação.");
