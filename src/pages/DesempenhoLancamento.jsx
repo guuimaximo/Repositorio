@@ -4,13 +4,13 @@ import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
 import CampoPrefixo from "../components/CampoPrefixo";
 import { useAuth } from "../context/AuthContext";
+import { FaTimes } from "react-icons/fa";
 
 const API_BASE = "https://agentediesel.onrender.com"; // ✅ API Python
-const BUCKET_DIESEL = "diesel"; // evidências do lançamento
-const BUCKET_PRONTUARIO = "relatorios"; // ✅ igual gerencial (bucket dos relatórios)
+const BUCKET_RELATORIOS = "relatorios"; // ✅ onde o prontuário será salvo
 
-// ✅ tipo do prontuário (no mesmo padrão do gerencial)
-const TIPO_PRONTUARIO = "diesel_prontuario";
+// ✅ tipo do prontuário (seu backend deve reconhecer e rodar prontuarios_acompanhamento.py)
+const TIPO_PRONTUARIO = "prontuarios_acompanhamento";
 
 const MOTIVOS = [
   "KM/L abaixo da meta",
@@ -89,26 +89,33 @@ async function fetchResumoPremiacao({ chapa, inicio, fim }) {
   return j;
 }
 
-// ===== Helpers prontuário (bucket signed url, como gerencial) =====
+/* =========================
+   HELPERS (igual conceito do Agente, mas só aqui)
+========================= */
 function normalizePath(p) {
   if (!p) return "";
   return String(p).replace(/^\/+/, "");
 }
 
-async function makeSignedOrPublicUrl(bucket, path, expiresIn = 3600) {
+function getFolderFromPath(p) {
+  const parts = normalizePath(p).split("/").filter(Boolean);
+  if (parts.length <= 1) return "";
+  return parts.slice(0, -1).join("/");
+}
+
+async function makeUrlFromPath(bucket, path, expiresIn = 3600) {
   const clean = normalizePath(path);
 
-  // signed (bucket privado)
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(clean, expiresIn);
   if (!error && data?.signedUrl) return { url: data.signedUrl, mode: "signed", path: clean };
 
-  // fallback public
   const pub = supabase.storage.from(bucket).getPublicUrl(clean);
   return { url: pub?.data?.publicUrl, mode: "public", path: clean };
 }
 
 function Modal({ open, title, onClose, children }) {
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50">
       <div
@@ -124,7 +131,7 @@ function Modal({ open, title, onClose, children }) {
             className="rounded-2xl border border-slate-200/70 bg-white/90 shadow-[0_25px_90px_rgba(0,0,0,0.25)] overflow-hidden"
             style={{ maxHeight: "calc(100vh - 24px)" }}
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200/70 bg-white">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200/70 bg-white/95">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-slate-800 truncate">{title}</div>
               </div>
@@ -133,11 +140,12 @@ function Modal({ open, title, onClose, children }) {
                 onClick={onClose}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
+                <FaTimes />
                 Fechar
               </button>
             </div>
 
-            <div className="p-0 overflow-hidden" style={{ height: "calc(100vh - 24px - 52px - 64px)" }}>
+            <div className="p-4 overflow-auto" style={{ maxHeight: "calc(100vh - 24px - 52px)" }}>
               {children}
             </div>
           </div>
@@ -149,8 +157,8 @@ function Modal({ open, title, onClose, children }) {
 
 export default function DesempenhoLancamento() {
   const { user } = useAuth ? useAuth() : { user: null };
-
   const mountedRef = useRef(true);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -171,8 +179,6 @@ export default function DesempenhoLancamento() {
   const dias = 10;
 
   const [kmlInicial, setKmlInicial] = useState("");
-
-  // ✅ NOVO: KM/L meta
   const [kmlMeta, setKmlMeta] = useState("");
 
   const [periodoInicio, setPeriodoInicio] = useState("");
@@ -191,13 +197,14 @@ export default function DesempenhoLancamento() {
   const [resumoTotais, setResumoTotais] = useState({ dias: 0, km: 0, litros: 0, kml: 0 });
   const [resumoVeiculos, setResumoVeiculos] = useState([]);
 
-  // ✅ PRONTUÁRIO (novo botão)
+  // ✅ PRONTUÁRIO (NOVO)
   const [prontLoading, setProntLoading] = useState(false);
   const [prontErr, setProntErr] = useState("");
-  const [prontInfo, setProntInfo] = useState(null); // { report_id, status }
-  const [prontUrl, setProntUrl] = useState(null);
-  const [prontModalOpen, setProntModalOpen] = useState(false);
-  const [prontPathInfo, setProntPathInfo] = useState(null); // { path, mode }
+  const [prontRow, setProntRow] = useState(null); // relatorios_gerados row
+  const [prontUrlsLoading, setProntUrlsLoading] = useState(false);
+  const [prontPdfUrl, setProntPdfUrl] = useState(null);
+  const [prontPdfPathUsed, setProntPdfPathUsed] = useState(null);
+  const [prontPdfOpen, setProntPdfOpen] = useState(false);
 
   const motivoFinal = motivo === "Outro" ? motivoOutro.trim() : motivo;
 
@@ -226,7 +233,6 @@ export default function DesempenhoLancamento() {
     const ini = String(periodoInicio || "").trim();
     const fim = String(periodoFim || "").trim();
 
-    // limpa quando faltar info
     if (!chapa || !ini || !fim) {
       setResumoErr("");
       setResumoLoading(false);
@@ -281,8 +287,6 @@ export default function DesempenhoLancamento() {
 
     const motivoOk = String(motivoFinal || "").trim().length > 0;
     const kmlOk = String(kmlInicial || "").trim().length > 0;
-
-    // ✅ meta obrigatória
     const metaOk = String(kmlMeta || "").trim().length > 0;
 
     const evidOk = (evidAcomp || []).length > 0;
@@ -302,13 +306,6 @@ export default function DesempenhoLancamento() {
     periodoFim,
   ]);
 
-  const podeGerarProntuario = useMemo(() => {
-    const chapa = String(motorista?.chapa || "").trim();
-    const ini = String(periodoInicio || "").trim();
-    const fim = String(periodoFim || "").trim();
-    return !!(chapa && ini && fim) && !saving && !prontLoading;
-  }, [motorista?.chapa, periodoInicio, periodoFim, saving, prontLoading]);
-
   function limpar() {
     setMotorista({ chapa: "", nome: "" });
     setPrefixo("");
@@ -325,15 +322,19 @@ export default function DesempenhoLancamento() {
     setErrMsg("");
     setOkMsg("");
 
-    // ✅ limpa resumo
     setResumoLoading(false);
     setResumoErr("");
     setResumoTotais({ dias: 0, km: 0, litros: 0, kml: 0 });
     setResumoVeiculos([]);
 
-    // ✅ não apaga prontuário automaticamente (pra não sumir modal)
-    // se quiser limpar também:
-    // setProntErr(""); setProntInfo(null); setProntUrl(null); setProntPathInfo(null); setProntModalOpen(false);
+    // ✅ prontuário (reset visual)
+    setProntLoading(false);
+    setProntErr("");
+    setProntRow(null);
+    setProntUrlsLoading(false);
+    setProntPdfUrl(null);
+    setProntPdfPathUsed(null);
+    setProntPdfOpen(false);
   }
 
   async function lancar() {
@@ -351,12 +352,11 @@ export default function DesempenhoLancamento() {
       const folder = `diesel/acompanhamentos/${motorista.chapa || "sem_chapa"}/lancamento_${Date.now()}`;
       const uploaded = await uploadManyToStorage({
         files: evidAcomp,
-        bucket: BUCKET_DIESEL,
+        bucket: "diesel",
         folder,
       });
 
       const evidenciasUrls = uploaded.map((u) => u.publicUrl).filter(Boolean);
-
       const obsInit = String(observacaoInicial || "").trim() || null;
 
       const payloadAcomp = {
@@ -372,10 +372,7 @@ export default function DesempenhoLancamento() {
         dt_fim_real: null,
 
         kml_inicial: Number(kmlInicial),
-
-        // ✅ NOVO: grava meta aqui
         kml_meta: Number(kmlMeta),
-
         kml_final: null,
 
         observacao_inicial: obsInit,
@@ -414,7 +411,6 @@ export default function DesempenhoLancamento() {
         observacoes: obsInit ? `${motivoFinal}\n\n${obsInit}` : motivoFinal,
         evidencias_urls: evidenciasUrls,
 
-        // guarda kml inicial e meta no evento
         kml: Number(kmlInicial),
         periodo_inicio: String(periodoInicio || "").trim() || null,
         periodo_fim: String(periodoFim || "").trim() || null,
@@ -426,7 +422,6 @@ export default function DesempenhoLancamento() {
           prefixo: String(prefixo || "").trim(),
           linha: String(linha || "").trim(),
           cluster: String(cluster || "").trim(),
-
           kml_meta: Number(kmlMeta),
           evidencias_kml_inicial: true,
         },
@@ -445,30 +440,38 @@ export default function DesempenhoLancamento() {
     }
   }
 
-  // ===== PRONTUÁRIO: chama API e abre do bucket =====
+  /* =========================
+     PRONTUÁRIO (NOVO)
+     - chama API
+     - mostra "carregando prontuário"
+     - busca arquivo no bucket relatorios
+     - abre PDF em modal
+  ========================= */
   async function gerarProntuario() {
-    if (!podeGerarProntuario) return;
+    if (prontLoading) return;
 
     setProntLoading(true);
     setProntErr("");
-    setProntInfo(null);
-    setProntUrl(null);
-    setProntPathInfo(null);
+    setProntRow(null);
+    setProntPdfUrl(null);
+    setProntPdfPathUsed(null);
 
     try {
       const chapa = String(motorista?.chapa || "").trim();
       const ini = String(periodoInicio || "").trim();
       const fim = String(periodoFim || "").trim();
+      if (!chapa) throw new Error("Informe a chapa do motorista.");
+      if (!ini || !fim) throw new Error("Informe o período (início e fim).");
 
-      // ✅ usa o MESMO endpoint do gerencial (não mexe no agente)
+      // ✅ payload estilo gerencial, mas com tipo do prontuário
       const payload = {
         tipo: TIPO_PRONTUARIO,
         periodo_inicio: ini,
         periodo_fim: fim,
-        motorista: chapa, // (se seu backend usa outro campo, troque aqui)
-        linha: null,
-        veiculo: null,
-        cluster: null,
+        motorista: chapa, // ✅ aqui vai a chapa
+        linha: String(linha || "").trim() || null,
+        veiculo: String(prefixo || "").trim() || null,
+        cluster: String(cluster || "").trim() || null,
       };
 
       const r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
@@ -477,63 +480,85 @@ export default function DesempenhoLancamento() {
         body: JSON.stringify(payload),
       });
 
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data?.error || data?.detail || `HTTP ${r.status}`);
-
-      if (!data?.report_id) throw new Error("API não retornou report_id para o prontuário.");
-
-      if (!mountedRef.current) return;
-
-      setProntInfo({ report_id: data.report_id, status: "PROCESSANDO" });
-
-      // Poll na tabela relatorios_gerados (mesmo padrão gerencial)
-      const timeoutMs = 180000; // 3 min
-      const intervalMs = 1500;
-      const t0 = Date.now();
-
-      while (mountedRef.current) {
-        const { data: row, error } = await supabase
-          .from("relatorios_gerados")
-          .select("id, status, arquivo_path, arquivo_nome, mime_type, erro_msg")
-          .eq("id", data.report_id)
-          .single();
-
-        if (error) throw error;
-
-        const st = String(row?.status || "");
-        setProntInfo({ report_id: data.report_id, status: st });
-
-        if (st === "CONCLUIDO") {
-          const path = row?.arquivo_path;
-          if (!path) throw new Error("relatorios_gerados.arquivo_path vazio no prontuário.");
-
-          const res = await makeSignedOrPublicUrl(BUCKET_PRONTUARIO, path, 3600);
-          if (!res?.url) throw new Error("Não foi possível gerar URL do prontuário.");
-
-          setProntUrl(res.url);
-          setProntPathInfo({ path: res.path, mode: res.mode });
-          setProntModalOpen(true);
-          break;
-        }
-
-        if (st === "ERRO") {
-          throw new Error(row?.erro_msg || "Falha ao gerar prontuário.");
-        }
-
-        if (Date.now() - t0 > timeoutMs) {
-          throw new Error("Tempo excedido aguardando a geração do prontuário.");
-        }
-
-        await new Promise((res) => setTimeout(res, intervalMs));
+      const data = await r.json().catch(() => null);
+      if (!r.ok) {
+        const detail = data?.error || data?.detail || `HTTP ${r.status}`;
+        throw new Error(detail);
       }
-    } catch (e) {
-      console.error(e);
+
+      // ✅ precisa existir report_id para buscar no relatorios_gerados e abrir o arquivo
+      if (!data?.report_id) {
+        throw new Error("API não retornou report_id do prontuário.");
+      }
+
+      // busca a linha do relatório gerado
+      const { data: row, error } = await supabase
+        .from("relatorios_gerados")
+        .select(
+          "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
+        )
+        .eq("id", data.report_id)
+        .single();
+
+      if (error || !row) {
+        throw new Error("Não consegui localizar o registro em relatorios_gerados.");
+      }
+
       if (!mountedRef.current) return;
-      setProntErr(e?.message || "Erro ao gerar prontuário.");
+      setProntRow(row);
+
+      // prepara URL do PDF
+      setProntUrlsLoading(true);
+
+      const arquivoPath = normalizePath(row?.arquivo_path || "");
+      let pdfPath = arquivoPath;
+
+      const folder = getFolderFromPath(arquivoPath);
+
+      // ✅ fallback padrão: se não for pdf, tenta padrão no mesmo folder
+      if (!/\.pdf$/i.test(pdfPath)) {
+        // tenta um nome padrão comum de prontuário
+        // 1) se arquivo_path for um html: folder/<chapa>_Prontuario.pdf
+        // 2) senão: folder/Prontuario.pdf
+        pdfPath = folder
+          ? `${folder}/${chapa}_Prontuario.pdf`
+          : `${chapa}_Prontuario.pdf`;
+      }
+
+      // tenta abrir o pdfPath; se falhar, tenta fallback Prontuario.pdf
+      let resPdf = await makeUrlFromPath(BUCKET_RELATORIOS, pdfPath, 3600);
+      if (!resPdf?.url && folder) {
+        const alt = `${folder}/Prontuario.pdf`;
+        resPdf = await makeUrlFromPath(BUCKET_RELATORIOS, alt, 3600);
+      }
+
+      if (!resPdf?.url) {
+        throw new Error(
+          `Não encontrei PDF do prontuário no bucket '${BUCKET_RELATORIOS}'. Path tentado: ${pdfPath}`
+        );
+      }
+
+      if (!mountedRef.current) return;
+      setProntPdfUrl(resPdf.url);
+      setProntPdfPathUsed(resPdf.path);
+      setProntPdfOpen(true);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setProntErr(String(e?.message || e));
     } finally {
-      if (mountedRef.current) setProntLoading(false);
+      if (mountedRef.current) {
+        setProntUrlsLoading(false);
+        setProntLoading(false);
+      }
     }
   }
+
+  const prontoProntuario = useMemo(() => {
+    const chapa = String(motorista?.chapa || "").trim();
+    const ini = String(periodoInicio || "").trim();
+    const fim = String(periodoFim || "").trim();
+    return !!(chapa && ini && fim);
+  }, [motorista?.chapa, periodoInicio, periodoFim]);
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -556,15 +581,49 @@ export default function DesempenhoLancamento() {
         </div>
       )}
 
-      {/* ✅ feedback prontuário */}
-      {prontLoading && (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Carregando prontuário... (processando na API)
-        </div>
-      )}
-      {prontErr && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {prontErr}
+      {/* ✅ PRONTUÁRIO (status UI) */}
+      {(prontLoading || prontErr || prontRow) && (
+        <div className="mb-4 rounded-lg border bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-800">Prontuário</div>
+              <div className="text-xs text-gray-500">
+                Tipo: <span className="font-semibold">{TIPO_PRONTUARIO}</span>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-600">
+              {prontLoading ? "Carregando prontuário..." : prontErr ? "Falhou" : "Pronto"}
+            </div>
+          </div>
+
+          {prontLoading && (
+            <div className="mt-2 text-sm text-gray-700">
+              Gerando prontuário no Python… isso pode levar alguns segundos.
+            </div>
+          )}
+
+          {prontErr && (
+            <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {prontErr}
+            </div>
+          )}
+
+          {!!prontRow && (
+            <div className="mt-2 text-xs text-gray-600">
+              Registro: <span className="font-semibold">{String(prontRow.status || "")}</span>{" "}
+              • {String(prontRow.periodo_inicio || "—")} → {String(prontRow.periodo_fim || "—")}
+              {prontPdfPathUsed ? (
+                <div className="mt-1 text-[11px] text-gray-500 break-all">
+                  PDF path: {prontPdfPathUsed}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {prontUrlsLoading && (
+            <div className="mt-2 text-sm text-gray-700">Preparando arquivo do bucket…</div>
+          )}
         </div>
       )}
 
@@ -652,15 +711,49 @@ export default function DesempenhoLancamento() {
                 className="w-full rounded-md border px-3 py-2"
                 value={periodoInicio}
                 onChange={(e) => setPeriodoInicio(e.target.value)}
-                disabled={saving}
+                disabled={saving || prontLoading}
               />
               <input
                 type="date"
                 className="w-full rounded-md border px-3 py-2"
                 value={periodoFim}
                 onChange={(e) => setPeriodoFim(e.target.value)}
-                disabled={saving}
+                disabled={saving || prontLoading}
               />
+            </div>
+
+            {/* ✅ botão prontuário colado no período (onde faz sentido) */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!prontoProntuario || prontLoading || saving}
+                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                onClick={gerarProntuario}
+                title="Gera e abre o prontuário do motorista (PDF)"
+              >
+                {prontLoading ? "Carregando prontuário..." : "Gerar prontuário (PDF)"}
+              </button>
+
+              {prontPdfUrl && (
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setProntPdfOpen(true)}
+                >
+                  Abrir prontuário
+                </button>
+              )}
+
+              {prontPdfUrl && (
+                <a
+                  href={prontPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Abrir em nova aba
+                </a>
+              )}
             </div>
           </div>
 
@@ -849,7 +942,7 @@ export default function DesempenhoLancamento() {
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+      <div className="flex items-center justify-end gap-3">
         <button
           type="button"
           className="rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
@@ -859,26 +952,9 @@ export default function DesempenhoLancamento() {
           Limpar
         </button>
 
-        {/* ✅ NOVO BOTÃO: PRONTUÁRIO */}
         <button
           type="button"
-          disabled={!podeGerarProntuario}
-          className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-60"
-          onClick={gerarProntuario}
-          title={
-            !String(motorista?.chapa || "").trim()
-              ? "Informe a chapa"
-              : !String(periodoInicio || "").trim() || !String(periodoFim || "").trim()
-              ? "Informe o período"
-              : "Gerar e abrir prontuário"
-          }
-        >
-          {prontLoading ? "Carregando prontuário..." : "Prontuário"}
-        </button>
-
-        <button
-          type="button"
-          disabled={!pronto || saving || prontLoading}
+          disabled={!pronto || saving}
           className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           onClick={lancar}
         >
@@ -886,23 +962,46 @@ export default function DesempenhoLancamento() {
         </button>
       </div>
 
-      {/* ✅ MODAL PRONTUÁRIO: abre direto do bucket */}
+      {/* ✅ MODAL PDF DO PRONTUÁRIO */}
       <Modal
-        open={prontModalOpen}
-        onClose={() => setProntModalOpen(false)}
-        title={`Prontuário — ${String(motorista?.chapa || "").trim()} ${String(motorista?.nome || "").trim()}`}
+        open={prontPdfOpen}
+        onClose={() => setProntPdfOpen(false)}
+        title={
+          motorista?.chapa
+            ? `Prontuário — Motorista ${String(motorista.chapa)}`
+            : "Prontuário — PDF"
+        }
       >
-        {!prontUrl ? (
-          <div className="p-6 text-sm text-slate-600">Nenhum arquivo disponível.</div>
+        {!prontPdfUrl ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
+            Nenhum PDF disponível para exibir.
+          </div>
         ) : (
-          <div className="w-full h-full bg-slate-50">
-            {/* Se for PDF, iframe também funciona */}
-            <iframe title="ProntuarioViewer" src={prontUrl} className="w-full h-full" />
-            {prontPathInfo?.path ? (
-              <div className="px-4 py-2 text-[11px] text-slate-500 border-t bg-white">
-                path: {prontPathInfo.path} ({prontPathInfo.mode})
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Viewer seguro (Signed URL)
               </div>
-            ) : null}
+              <a
+                href={prontPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                title="Abrir em nova aba"
+              >
+                Abrir
+              </a>
+            </div>
+
+            <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
+              <iframe
+                title="ProntuarioPDF"
+                src={prontPdfUrl}
+                className="w-full h-full"
+                style={{ background: "transparent" }}
+              />
+            </div>
           </div>
         )}
       </Modal>
