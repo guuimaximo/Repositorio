@@ -5,22 +5,17 @@ import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
 
-const ALLOWED_REDIRECT_ORIGINS = new Set([
-  "https://faroldemetas.onrender.com",
-]);
+const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 
-function appendFromInove(urlStr) {
-  const u = new URL(urlStr);
-  if (!u.searchParams.get("from")) u.searchParams.set("from", "inove");
-  return u.toString();
-}
-
-function isAllowedRedirect(urlStr) {
+function appendFromInove(url) {
   try {
-    const u = new URL(urlStr);
-    return ALLOWED_REDIRECT_ORIGINS.has(u.origin);
+    const u = new URL(url);
+    if (!u.searchParams.get("from")) u.searchParams.set("from", "inove");
+    return u.toString();
   } catch {
-    return false;
+    // fallback simples (se vier algo não-URL)
+    if (String(url || "").includes("?")) return `${url}&from=inove`;
+    return `${url}?from=inove`;
   }
 }
 
@@ -36,14 +31,21 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // ✅ redirect via query (?redirect=...)
+  // ✅ redirect vem por querystring: /login?redirect=https%3A%2F%2Ffaroldemetas.onrender.com%2F
   const redirectParam = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("redirect");
+    const sp = new URLSearchParams(location.search);
+    const raw = sp.get("redirect");
+    return raw ? decodeURIComponent(raw) : null;
   }, [location.search]);
 
-  // ✅ fallback interno padrão
-  const fallbackNext = location.state?.from?.pathname || "/";
+  // fallback antigo (quando RequireAuth manda state.from)
+  const nextPathState = location.state?.from?.pathname || null;
+
+  // Decide destino padrão (sem redirect)
+  function decideDefaultNext(nivel) {
+    if (NIVEIS_PORTAL.has(nivel)) return "/portal";
+    return "/inove";
+  }
 
   async function handleEntrar(e) {
     e.preventDefault();
@@ -69,31 +71,41 @@ export default function Login() {
       return;
     }
 
-    if (data.nivel === "Pendente") {
+    const nivel = String(data.nivel || "").trim();
+
+    if (nivel === "Pendente") {
       alert("Seu cadastro ainda está pendente de aprovação pelo administrador.");
       return;
     }
 
+    // ✅ Persiste sessão via AuthContext
     doLogin(data);
 
-    const nivel = String(data.nivel || "").trim().toLowerCase();
-    const isGestorOuAdm = nivel === "gestor" || nivel === "administrador";
+    // ✅ ESSENCIAL: PortalSistemas depende disso hoje
+    try {
+      localStorage.setItem("inove_login", data.login || loginTrim);
+      localStorage.setItem("inove_nivel", nivel);
+      localStorage.setItem("inove_nome", data.nome || "");
+    } catch {
+      // ignore
+    }
 
-    // ✅ Se veio redirect do Farol: só devolve se Gestor/Adm
-    if (redirectParam && isGestorOuAdm && isAllowedRedirect(redirectParam)) {
-      const target = appendFromInove(redirectParam);
-      window.location.replace(target);
+    const isGestorAdm = NIVEIS_PORTAL.has(nivel);
+
+    // ✅ 1) Se veio redirect e é Gestor/Adm -> volta pro Farol com from=inove
+    if (redirectParam && isGestorAdm) {
+      window.location.href = appendFromInove(redirectParam);
       return;
     }
 
-    // ✅ Se Gestor/Adm sem redirect -> vai para o Portal
-    if (isGestorOuAdm) {
-      navigate("/portal", { replace: true });
-      return;
-    }
+    // ✅ 2) Se não é Gestor/Adm e veio redirect -> IGNORA (bloqueio pelo nível)
+    // cai no fluxo normal do INOVE
+    const defaultNext = decideDefaultNext(nivel);
 
-    // ✅ Usuário comum -> INOVE normal
-    navigate("/inove", { replace: true });
+    // ✅ 3) Se veio do RequireAuth (state.from), respeita (ex.: voltou pra página interna)
+    const next = nextPathState || defaultNext;
+
+    navigate(next, { replace: true });
   }
 
   async function handleCadastro(e) {
