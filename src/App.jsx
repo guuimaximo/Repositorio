@@ -1,10 +1,11 @@
-// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 
 import Dashboard from "./pages/Dashboard";
+import InicioRapido from "./pages/InicioRapido";
+
 import CentralTratativas from "./pages/CentralTratativas";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
@@ -36,9 +37,23 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
-// ✅ NOVO: Landing (decisor) + InicioBasico
-import Landing from "./pages/Landing";
-import InicioBasico from "./pages/InicioBasico";
+import { useContext } from "react";
+import { AuthContext } from "./context/AuthContext";
+
+/**
+ * ✅ HOME DECIDER:
+ * - Gestor/Adm: abre Dashboard completo
+ * - Qualquer outro: abre InicioRapido
+ */
+function HomeDecider() {
+  const { user } = useContext(AuthContext);
+
+  const isAdmin = user?.nivel === "Administrador";
+  const isGestor = user?.nivel === "Gestor";
+
+  if (isAdmin || isGestor) return <Dashboard />;
+  return <InicioRapido />;
+}
 
 export default function App() {
   return (
@@ -55,14 +70,14 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* ✅ Raiz vira Landing (decide: Gestor/Adm -> /inove | demais -> /inicio-basico) */}
-          <Route path="/" element={<Landing />} />
+          {/* ✅ "/" agora é decidido pelo nível */}
+          <Route path="/" element={<HomeDecider />} />
 
-          {/* ✅ Home real do INOVE (dashboard completo) */}
-          <Route path="/inove" element={<Dashboard />} />
+          {/* ✅ se você quiser manter um link fixo */}
+          <Route path="/inove" element={<HomeDecider />} />
 
-          {/* ✅ Início básico (para não Gestor/Adm) */}
-          <Route path="/inicio-basico" element={<InicioBasico />} />
+          {/* ✅ rota explícita */}
+          <Route path="/inicio-rapido" element={<InicioRapido />} />
 
           {/* ✅ Desempenho Diesel */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
