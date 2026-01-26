@@ -35,12 +35,6 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
-// ✅ Landing (decide Portal vs Inove)
-import Landing from "./pages/Landing";
-
-// ✅ Portal
-import PortalSistemas from "./pages/PortalSistemas";
-
 export default function App() {
   return (
     <AuthProvider>
@@ -56,13 +50,10 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* ✅ Raiz agora é Landing (decisor) */}
-          <Route path="/" element={<Landing />} />
+          {/* ✅ Raiz é o Dashboard (home real do INOVE) */}
+          <Route path="/" element={<Dashboard />} />
 
-          {/* ✅ Portal em rota dedicada */}
-          <Route path="/portal" element={<PortalSistemas />} />
-
-          {/* ✅ INOVE (home real do sistema) */}
+          {/* ✅ (Opcional) mantém um link fixo /inove, mas não é obrigatório */}
           <Route path="/inove" element={<Dashboard />} />
 
           {/* ✅ Desempenho Diesel */}
