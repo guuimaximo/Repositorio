@@ -1,3 +1,4 @@
+// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
@@ -7,9 +8,11 @@ import Dashboard from "./pages/Dashboard";
 import InicioRapido from "./pages/InicioRapido";
 
 import CentralTratativas from "./pages/CentralTratativas";
+import TratativasResumo from "./pages/TratativasResumo"; // ✅ NOVO
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
+
 import LancarAvaria from "./pages/LancarAvaria";
 import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
@@ -94,6 +97,7 @@ export default function App() {
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
+          <Route path="/tratativas-resumo" element={<TratativasResumo />} /> {/* ✅ NOVO */}
           <Route path="/tratar/:id" element={<TratarTratativa />} />
           <Route path="/consultar/:id" element={<ConsultarTratativa />} />
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
