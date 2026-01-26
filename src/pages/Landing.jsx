@@ -1,61 +1,49 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient"; // ajuste se seu client for outro path
+import { useNavigate, useLocation } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 
-const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
+const NIVEIS_PORTAL = new Set(["gestor", "administrador"]);
 
 export default function Landing() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     (async () => {
-      // 1) Identificar usuário logado
-      const { data: auth } = await supabase.auth.getUser();
-      const authUserId = auth?.user?.id || null;
-      const email = auth?.user?.email || null;
+      // ✅ login salvo (mesma lógica do Portal)
+      const loginSalvo =
+        localStorage.getItem("inove_login") ||
+        sessionStorage.getItem("inove_login") ||
+        localStorage.getItem("login") ||
+        sessionStorage.getItem("login") ||
+        "";
 
-      if (!authUserId && !email) {
-        navigate("/login", { replace: true });
+      if (!loginSalvo) {
+        navigate("/login" + location.search, { replace: true });
         return;
       }
 
-      // 2) Buscar nível na tabela que você já usa no login: usuarios_aprovadores
-      // Prioridade: auth_user_id; fallback: email
-      let userRow = null;
-
-      const q1 = await supabase
+      const { data, error } = await supabase
         .from("usuarios_aprovadores")
-        .select("nivel, ativo, status_cadastro, auth_user_id, email")
-        .eq("auth_user_id", authUserId)
+        .select("nivel, ativo")
+        .eq("login", loginSalvo)
+        .eq("ativo", true)
         .maybeSingle();
 
-      if (!q1.error && q1.data) userRow = q1.data;
-
-      if (!userRow && email) {
-        const q2 = await supabase
-          .from("usuarios_aprovadores")
-          .select("nivel, ativo, status_cadastro, auth_user_id, email")
-          .eq("email", email)
-          .maybeSingle();
-        if (!q2.error && q2.data) userRow = q2.data;
-      }
-
-      // Se não achou cadastro, manda para o INOVE padrão
-      if (!userRow) {
-        navigate("/inove", { replace: true });
+      if (error || !data) {
+        navigate("/login" + location.search, { replace: true });
         return;
       }
 
-      const nivel = String(userRow.nivel || "").trim();
+      const nivel = String(data.nivel || "").trim().toLowerCase();
 
-      // Regra solicitada:
       if (NIVEIS_PORTAL.has(nivel)) {
         navigate("/portal", { replace: true });
       } else {
         navigate("/inove", { replace: true });
       }
     })();
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
