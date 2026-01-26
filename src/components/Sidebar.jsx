@@ -1,7 +1,4 @@
-// Sidebar.jsx
-// ✅ Ajuste pedido: "Início" (rota "/") só aparece para Gestor e Administrador.
-// Mantive o resto da lógica igual; apenas controlei a renderização do link de Início.
-
+// src/components/Sidebar.jsx
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -49,11 +46,14 @@ const PCM_ROUTES = {
   diario: "/pcm-diario",
 };
 
-// mapa de acesso por nível
+// ✅ Mapa de acesso por nível
+// Regra: "/" (Landing/Início executivo) é APENAS Gestor/Adm.
+// Para demais, use "/inicio-basico" como landing interno.
 const ACCESS = {
   Administrador: "ALL",
   Gestor: [
-    "/",
+    "/", // ✅ permitido
+    "/inove",
     "/solicitar",
     "/central",
     "/lancar-avaria",
@@ -67,15 +67,16 @@ const ACCESS = {
     "/sos-central",
     "/sos-dashboard",
     "/km-rodado",
+    "/inicio-basico",
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
     ...Object.values(DIESEL_ROUTES),
   ],
-  Tratativa: ["/", "/solicitar", "/central", "/cobrancas"],
 
-  // ✅ AQUI: adiciona PCM para Manutenção
+  // ✅ Ajuste: remove "/" e usa "/inicio-basico"
+  Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
-    "/",
+    "/inicio-basico",
     "/solicitar",
     "/lancar-avaria",
     "/avarias-em-revisao",
@@ -88,8 +89,7 @@ const ACCESS = {
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
   ],
-
-  CCO: ["/", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
+  CCO: ["/inicio-basico", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
 };
 
 // helper de acesso
@@ -115,12 +115,16 @@ export default function Sidebar() {
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
 
-  // ✅ Regra pedida: tela Início ("/") só aparece para Gestor e Adm
-  const showInicio = isAdmin || isGestor;
+  // ✅ Regra pedida: Início (rota "/") só aparece para Gestor e Adm
+  const showInicioExecutivo = isAdmin || isGestor;
 
   const links = useMemo(
     () => ({
-      inicio: { path: "/", label: "Início", icon: <FaHome /> },
+      // ✅ Para Gestor/Adm: "/" (Landing -> /inove)
+      inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
+
+      // ✅ Para demais: se quiser um "início" básico, habilite este link (opcional)
+      // inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
 
       // ✅ PCM
       pcm: { path: PCM_ROUTES.inicio, label: "PCM - Manutenção", icon: <FaClipboardList /> },
@@ -182,7 +186,6 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor;
-  // ✅ AQUI: Manutenção também vê PCM
   const showPCM = isAdmin || isGestor || isManutencao;
 
   const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
@@ -208,14 +211,22 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* ✅ Início só para Gestor/Adm */}
-        {showInicio && canSee(user, links.inicio.path) && (
-          <NavLink to={links.inicio.path} className={navLinkClass}>
-            {links.inicio.icon} <span className="whitespace-nowrap">{links.inicio.label}</span>
+        {/* ✅ Início executivo: apenas Gestor/Adm */}
+        {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
+          <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
+            {links.inicioExecutivo.icon} <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
           </NavLink>
         )}
 
-        {/* ✅ PCM - Manutenção (Admin + Gestor + Manutenção) */}
+        {/* ✅ (Opcional) Se você quiser que NÃO-gestor também tenha "Início" no menu, use isto:
+            {!showInicioExecutivo && canSee(user, "/inicio-basico") && (
+              <NavLink to="/inicio-basico" className={navLinkClass}>
+                <FaHome /> <span className="whitespace-nowrap">Início</span>
+              </NavLink>
+            )}
+        */}
+
+        {/* ✅ PCM */}
         {showPCM && canSee(user, links.pcm.path) && (
           <NavLink to={links.pcm.path} className={navLinkClass}>
             {links.pcm.icon} <span className="whitespace-nowrap">{links.pcm.label}</span>
