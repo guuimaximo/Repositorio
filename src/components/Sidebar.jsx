@@ -1,3 +1,7 @@
+// Sidebar.jsx
+// ✅ Ajuste pedido: "Início" (rota "/") só aparece para Gestor e Administrador.
+// Mantive o resto da lógica igual; apenas controlei a renderização do link de Início.
+
 import { useState, useContext, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -111,6 +115,9 @@ export default function Sidebar() {
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
 
+  // ✅ Regra pedida: tela Início ("/") só aparece para Gestor e Adm
+  const showInicio = isAdmin || isGestor;
+
   const links = useMemo(
     () => ({
       inicio: { path: "/", label: "Início", icon: <FaHome /> },
@@ -192,14 +199,17 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
+            <p className="text-sm font-semibold text-white">
+              Olá, {user.nome?.split(" ")[0]} 👋
+            </p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
           </div>
         )}
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {canSee(user, links.inicio.path) && (
+        {/* ✅ Início só para Gestor/Adm */}
+        {showInicio && canSee(user, links.inicio.path) && (
           <NavLink to={links.inicio.path} className={navLinkClass}>
             {links.inicio.icon} <span className="whitespace-nowrap">{links.inicio.label}</span>
           </NavLink>
@@ -284,6 +294,7 @@ export default function Sidebar() {
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.avarias.map((link) => {
                   if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
+
                   return canSee(user, link.path) || (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
