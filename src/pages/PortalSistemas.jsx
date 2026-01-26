@@ -1,82 +1,161 @@
-import React from "react";
+// src/pages/PortalSistemas.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, ExternalLink, LayoutGrid } from "lucide-react";
+import { supabase } from "../supabaseClient"; // usa o arquivo criado acima
+import { ExternalLink, LayoutGrid, ShieldAlert } from "lucide-react";
 
-function Card({ title, desc, tone = "blue", onClick, href, buttonText = "Acessar" }) {
-  const toneCls = {
-    blue: "border-blue-200 bg-blue-50/40 hover:bg-blue-50",
-    indigo: "border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50",
-  }[tone];
-
-  return (
-    <div className={`rounded-2xl border ${toneCls} p-6 shadow-sm hover:shadow-md transition-all`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-extrabold text-slate-800">{title}</h3>
-          <p className="text-sm text-slate-600 mt-1">{desc}</p>
-        </div>
-        <div className="text-slate-400">
-          <LayoutGrid size={20} />
-        </div>
-      </div>
-
-      <div className="mt-6 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onClick}
-          className="px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-all active:scale-[0.98] bg-slate-900 text-white hover:bg-slate-950"
-        >
-          {buttonText} <ArrowRight size={16} />
-        </button>
-
-        {href ? (
-          <a
-            className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1"
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Abrir em nova aba <ExternalLink size={14} />
-          </a>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+/**
+ * Regras:
+ * - Se nivel ∈ {Gestor, Administrador} -> mostra 2 cards (INOVE / Farol Tático)
+ * - Caso contrário -> redireciona direto para "/dashboard" (ou "/" se seu Dashboard for na raiz)
+ *
+ * Premissas:
+ * - Seu Login já grava o login do usuário em localStorage/sessionStorage.
+ *   Aqui eu leio "inove_login" (ajuste para o que você já usa).
+ */
 
 export default function PortalSistemas() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [nivel, setNivel] = useState(null);
+  const [nome, setNome] = useState(null);
 
-  // Ajuste para a URL real do Farol Tático (deploy)
-  const FAROL_URL = "https://SEU-FAROL-TATICO.onrender.com";
+  const loginSalvo = useMemo(() => {
+    // Ajuste estas chaves para bater com o seu Login real
+    return (
+      localStorage.getItem("inove_login") ||
+      sessionStorage.getItem("inove_login") ||
+      localStorage.getItem("login") ||
+      sessionStorage.getItem("login") ||
+      ""
+    );
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadNivel() {
+      try {
+        // Se não tem login salvo, manda para /login
+        if (!loginSalvo) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("usuarios_aprovadores")
+          .select("nome, nivel, ativo")
+          .eq("login", loginSalvo)
+          .eq("ativo", true)
+          .single();
+
+        if (error || !data) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        if (!mounted) return;
+
+        setNivel(data.nivel || "");
+        setNome(data.nome || "");
+
+        const isGestorOuAdm =
+          String(data.nivel || "").toLowerCase() === "gestor" ||
+          String(data.nivel || "").toLowerCase() === "administrador";
+
+        // Se não é Gestor/Adm -> vai direto para o INOVE
+        if (!isGestorOuAdm) {
+          // Se seu Dashboard é "/" mantenha.
+          // Se seu Dashboard é "/dashboard", troque aqui.
+          navigate("/", { replace: true });
+          return;
+        }
+
+        setLoading(false);
+      } catch {
+        navigate("/login", { replace: true });
+      }
+    }
+
+    loadNivel();
+
+    return () => {
+      mounted = false;
+    };
+  }, [loginSalvo, navigate]);
+
+  function abrirFarol() {
+    // Redireciona para o FAROL com um "from=inove" (guard simples no Farol)
+    window.location.href = "https://faroldemetas.onrender.com/?from=inove";
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-slate-600 text-sm">Carregando acesso...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 bg-slate-50 min-h-[calc(100vh-64px)]">
+    <div className="p-6 md:p-10">
       <div className="max-w-6xl mx-auto">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6">
-          <h1 className="text-2xl font-extrabold text-slate-900">Portal de Sistemas</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Selecione o sistema que deseja acessar.
-          </p>
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+              <LayoutGrid className="w-6 h-6" />
+              Portal de Sistemas
+            </h1>
+            <p className="text-sm text-slate-600 mt-1">
+              Usuário: <span className="font-semibold">{nome || loginSalvo}</span> · Nível:{" "}
+              <span className="font-semibold">{nivel}</span>
+            </p>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
+            <ShieldAlert className="w-4 h-4" />
+            Acesso liberado apenas para Gestor/Administrador
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card
-            title="INOVE"
-            desc="Avarias, Cobranças, Tratativas, SOS, PCM e módulos operacionais."
-            tone="blue"
-            buttonText="Entrar no INOVE"
-            onClick={() => navigate("/inove")}
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Card INOVE */}
+          <button
+            onClick={() => navigate("/", { replace: true })}
+            className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-lg font-extrabold text-slate-900">INOVE</div>
+              <div className="text-slate-400 group-hover:text-slate-700 transition-colors">
+                <ExternalLink className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Avarias, Cobranças, Tratativas, SOS, PCM, Diesel e demais módulos internos.
+            </p>
+            <div className="mt-4 text-xs font-bold uppercase tracking-wider text-blue-600">
+              Entrar no INOVE
+            </div>
+          </button>
 
-          <Card
-            title="Farol Tático"
-            desc="Agenda Tática, Banco de Atas, Projetos e Central de Ações."
-            tone="indigo"
-            buttonText="Abrir Farol Tático"
-            onClick={() => window.open(FAROL_URL, "_blank", "noopener,noreferrer")}
-            href={FAROL_URL}
-          />
+          {/* Card Farol Tático */}
+          <button
+            onClick={abrirFarol}
+            className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-lg font-extrabold text-slate-900">Farol Tático</div>
+              <div className="text-slate-400 group-hover:text-slate-700 transition-colors">
+                <ExternalLink className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Metas, rotinas, reuniões, atas, ações e gestão tática integrada.
+            </p>
+            <div className="mt-4 text-xs font-bold uppercase tracking-wider text-emerald-600">
+              Abrir Farol Tático
+            </div>
+          </button>
         </div>
       </div>
     </div>
