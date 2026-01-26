@@ -1,3 +1,4 @@
+// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
@@ -35,6 +36,10 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
+// ✅ NOVO: Landing (decisor) + InicioBasico
+import Landing from "./pages/Landing";
+import InicioBasico from "./pages/InicioBasico";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -50,11 +55,14 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* ✅ Raiz é o Dashboard (home real do INOVE) */}
-          <Route path="/" element={<Dashboard />} />
+          {/* ✅ Raiz vira Landing (decide: Gestor/Adm -> /inove | demais -> /inicio-basico) */}
+          <Route path="/" element={<Landing />} />
 
-          {/* ✅ (Opcional) mantém um link fixo /inove, mas não é obrigatório */}
+          {/* ✅ Home real do INOVE (dashboard completo) */}
           <Route path="/inove" element={<Dashboard />} />
+
+          {/* ✅ Início básico (para não Gestor/Adm) */}
+          <Route path="/inicio-basico" element={<InicioBasico />} />
 
           {/* ✅ Desempenho Diesel */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
