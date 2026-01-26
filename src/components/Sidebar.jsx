@@ -47,12 +47,12 @@ const PCM_ROUTES = {
 };
 
 // ✅ Mapa de acesso por nível
-// Regra: "/" (Landing/Início executivo) é APENAS Gestor/Adm.
-// Para demais, use "/inicio-basico" como landing interno.
+// Regra: "/" (Início executivo) é APENAS Gestor/Adm.
+// Para demais, use "/inicio-basico".
 const ACCESS = {
   Administrador: "ALL",
   Gestor: [
-    "/", // ✅ permitido
+    "/",
     "/inove",
     "/solicitar",
     "/central",
@@ -73,7 +73,6 @@ const ACCESS = {
     ...Object.values(DIESEL_ROUTES),
   ],
 
-  // ✅ Ajuste: remove "/" e usa "/inicio-basico"
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
   Manutenção: [
     "/inicio-basico",
@@ -115,18 +114,17 @@ export default function Sidebar() {
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
 
-  // ✅ Regra pedida: Início (rota "/") só aparece para Gestor e Adm
+  // ✅ Regra pedida:
+  // - Gestor/Adm vê Início executivo ("/")
+  // - Outros níveis vêem Início básico ("/inicio-basico")
   const showInicioExecutivo = isAdmin || isGestor;
+  const showInicioBasico = !showInicioExecutivo;
 
   const links = useMemo(
     () => ({
-      // ✅ Para Gestor/Adm: "/" (Landing -> /inove)
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
+      inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
 
-      // ✅ Para demais: se quiser um "início" básico, habilite este link (opcional)
-      // inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
-
-      // ✅ PCM
       pcm: { path: PCM_ROUTES.inicio, label: "PCM - Manutenção", icon: <FaClipboardList /> },
 
       desempenhoDiesel: {
@@ -211,20 +209,19 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* ✅ Início executivo: apenas Gestor/Adm */}
+        {/* ✅ Início para Gestor/Adm ("/") */}
         {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon} <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
           </NavLink>
         )}
 
-        {/* ✅ (Opcional) Se você quiser que NÃO-gestor também tenha "Início" no menu, use isto:
-            {!showInicioExecutivo && canSee(user, "/inicio-basico") && (
-              <NavLink to="/inicio-basico" className={navLinkClass}>
-                <FaHome /> <span className="whitespace-nowrap">Início</span>
-              </NavLink>
-            )}
-        */}
+        {/* ✅ Início básico para demais ("/inicio-basico") */}
+        {showInicioBasico && canSee(user, links.inicioBasico.path) && (
+          <NavLink to={links.inicioBasico.path} className={navLinkClass}>
+            {links.inicioBasico.icon} <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
+          </NavLink>
+        )}
 
         {/* ✅ PCM */}
         {showPCM && canSee(user, links.pcm.path) && (
