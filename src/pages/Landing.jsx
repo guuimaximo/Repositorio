@@ -1,60 +1,64 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabase"; // ajuste se seu client for ../supabaseClient
+import { supabase } from "../supabaseClient"; // ajuste se seu client for outro path
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 
 export default function Landing() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-
-      // 1) Pegue quem está logado (no seu padrão atual)
-      // Se você usa Supabase Auth:
+      // 1) Identificar usuário logado
       const { data: auth } = await supabase.auth.getUser();
       const authUserId = auth?.user?.id || null;
+      const email = auth?.user?.email || null;
 
-      // Se você NÃO usa auth.uid(), e sim login próprio,
-      // você deve trocar para o identificador que você já salva no login:
-      // ex: const userId = localStorage.getItem("usuario_id");
-
-      if (!authUserId) {
-        // sem login -> mande para sua tela de login
+      if (!authUserId && !email) {
         navigate("/login", { replace: true });
         return;
       }
 
-      // 2) Buscar o nível na sua tabela usuarios_aprovadores
-      const { data: userRow, error } = await supabase
+      // 2) Buscar nível na tabela que você já usa no login: usuarios_aprovadores
+      // Prioridade: auth_user_id; fallback: email
+      let userRow = null;
+
+      const q1 = await supabase
         .from("usuarios_aprovadores")
-        .select("id, nivel, ativo, status_cadastro")
+        .select("nivel, ativo, status_cadastro, auth_user_id, email")
         .eq("auth_user_id", authUserId)
         .maybeSingle();
 
-      // fallback (caso ainda não esteja migrado para auth_user_id)
-      // -> você pode remover se não fizer sentido no seu INOVE:
-      // if (!userRow) buscar por email/login.
+      if (!q1.error && q1.data) userRow = q1.data;
 
-      if (error || !userRow) {
-        // não achou cadastro -> manda para INOVE padrão (ou onboarding)
+      if (!userRow && email) {
+        const q2 = await supabase
+          .from("usuarios_aprovadores")
+          .select("nivel, ativo, status_cadastro, auth_user_id, email")
+          .eq("email", email)
+          .maybeSingle();
+        if (!q2.error && q2.data) userRow = q2.data;
+      }
+
+      // Se não achou cadastro, manda para o INOVE padrão
+      if (!userRow) {
         navigate("/inove", { replace: true });
         return;
       }
 
-      // 3) Regra de permissão
       const nivel = String(userRow.nivel || "").trim();
-      const podePortal = NIVEIS_PORTAL.has(nivel);
 
-      navigate(podePortal ? "/portal" : "/inove", { replace: true });
-      setLoading(false);
+      // Regra solicitada:
+      if (NIVEIS_PORTAL.has(nivel)) {
+        navigate("/portal", { replace: true });
+      } else {
+        navigate("/inove", { replace: true });
+      }
     })();
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-[70vh] flex items-center justify-center">
       <div className="bg-white border border-slate-200 rounded-2xl px-8 py-6 shadow-sm text-slate-600">
         Carregando...
       </div>
