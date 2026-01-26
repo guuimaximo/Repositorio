@@ -51,7 +51,7 @@ export default function PortalSistemas() {
           String(data.nivel || "").toLowerCase() === "gestor" ||
           String(data.nivel || "").toLowerCase() === "administrador";
 
-        // ✅ IMPORTANTE: usuário comum vai para /inove (não para "/")
+        // ✅ CORREÇÃO CRÍTICA: não-Gestor/Adm não pode ficar no "/"
         if (!isGestorOuAdm) {
           navigate("/inove", { replace: true });
           return;
@@ -104,6 +104,7 @@ export default function PortalSistemas() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Card INOVE */}
           <button
             onClick={() => navigate("/inove", { replace: true })}
             className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
@@ -122,6 +123,7 @@ export default function PortalSistemas() {
             </div>
           </button>
 
+          {/* Card Farol Tático */}
           <button
             onClick={abrirFarol}
             className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
