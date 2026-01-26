@@ -56,6 +56,7 @@ const ACCESS = {
     "/inove",
     "/solicitar",
     "/central",
+    "/tratativas-resumo", // ✅ NOVO (Gestor pode ver)
     "/lancar-avaria",
     "/avarias-em-revisao",
     "/aprovar-avarias",
@@ -73,7 +74,9 @@ const ACCESS = {
     ...Object.values(DIESEL_ROUTES),
   ],
 
+  // ❗ Tratativa NÃO vê resumo (somente Solicitação/Central, conforme você já tinha)
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
+
   Manutenção: [
     "/inicio-basico",
     "/solicitar",
@@ -139,7 +142,10 @@ export default function Sidebar() {
         ],
       },
 
+      // ✅ Tratativas: ordem pedida (Resumo -> Solicitação -> Central)
+      // ✅ Resumo só para Gestor/Adm
       tratativas: [
+        { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/central", label: "Central", icon: <FaListAlt /> },
       ],
@@ -186,11 +192,17 @@ export default function Sidebar() {
   const showDesempenhoDiesel = isAdmin || isGestor;
   const showPCM = isAdmin || isGestor || isManutencao;
 
-  const showTratativas = links.tratativas.some((l) => canSee(user, l.path));
+  // ✅ Tratativas aparecem para quem tiver ao menos 1 item visível
+  const showTratativas = links.tratativas.some((l) => {
+    if (l.onlyAdminGestor) return isAdmin || isGestor;
+    return canSee(user, l.path);
+  });
+
   const showAvarias = links.avarias.some((l) => {
     if (l.path === "/avarias-resumo") return isAdmin || isGestor;
     return canSee(user, l.path);
   });
+
   const showSOS = links.sos.some((l) => canSee(user, l.path));
   const showConfig = isAdmin;
 
@@ -200,9 +212,7 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">
-              Olá, {user.nome?.split(" ")[0]} 👋
-            </p>
+            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
           </div>
         )}
@@ -258,7 +268,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Tratativas */}
+        {/* ✅ Tratativas (Resumo -> Solicitação -> Central) */}
         {showTratativas && (
           <>
             <button
@@ -273,13 +283,19 @@ export default function Sidebar() {
 
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
-                {links.tratativas.map((link) =>
-                  canSee(user, link.path) ? (
+                {links.tratativas.map((link) => {
+                  // ✅ Resumo somente Gestor/Adm
+                  if (link.onlyAdminGestor && !(isAdmin || isGestor)) return null;
+
+                  // ✅ Demais itens seguem ACCESS
+                  if (!link.onlyAdminGestor && !canSee(user, link.path)) return null;
+
+                  return (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
-                  ) : null
-                )}
+                  );
+                })}
               </div>
             )}
           </>
