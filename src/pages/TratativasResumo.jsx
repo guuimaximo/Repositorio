@@ -46,6 +46,7 @@ function Badge({ children, tone = "gray" }) {
       yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
       red: "bg-red-50 text-red-700 border-red-200",
       purple: "bg-purple-50 text-purple-700 border-purple-200",
+      indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
     }[tone] || "bg-gray-100 text-gray-700 border-gray-200";
 
   return <span className={`inline-flex items-center px-2 py-1 text-xs border rounded ${cls}`}>{children}</span>;
@@ -59,6 +60,15 @@ function Card({ title, children, right = null }) {
         {right}
       </div>
       <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+function CardResumo({ titulo, valor, cor }) {
+  return (
+    <div className={`${cor} rounded-xl shadow-sm border border-gray-200 p-6 text-center`}>
+      <h3 className="text-sm font-medium text-gray-700">{titulo}</h3>
+      <p className="text-4xl font-extrabold mt-2 text-gray-900">{valor}</p>
     </div>
   );
 }
@@ -84,23 +94,30 @@ function ListItemButton({ label, value, onClick, active = false, sub = null }) {
 
 export default function TratativasResumo() {
   const [filtros, setFiltros] = useState({
-    dataInicio: "", // yyyy-mm-dd
-    dataFim: "", // yyyy-mm-dd
+    dataInicio: "",
+    dataFim: "",
     busca: "",
     setor: "",
-    status: "", // opcional
+    status: "",
   });
 
   const [loading, setLoading] = useState(false);
   const [tratativas, setTratativas] = useState([]);
   const [detalhes, setDetalhes] = useState([]);
 
-  // Drill-down state
-  const [selOcorrencia, setSelOcorrencia] = useState(""); // tipo_ocorrencia
-  const [selMotorista, setSelMotorista] = useState(""); // motorista_id ou motorista_chapa/nome (usaremos chave composta)
-  const [selAcao, setSelAcao] = useState(""); // acao_aplicada
+  // Drill-down (cliques)
+  const [selOcorrencia, setSelOcorrencia] = useState("");
+  const [selMotorista, setSelMotorista] = useState(""); // chave: chapa|nome
+  const [selAcao, setSelAcao] = useState("");
+  const [selLinha, setSelLinha] = useState(""); // ✅ NOVO
 
-  // default período: mês atual (pode trocar)
+  // Cards (igual Central)
+  const [totalCount, setTotalCount] = useState(0);
+  const [pendentesCount, setPendentesCount] = useState(0);
+  const [concluidasCount, setConcluidasCount] = useState(0);
+  const [atrasadasCount, setAtrasadasCount] = useState(0);
+
+  // default período: mês atual
   useEffect(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -117,6 +134,32 @@ export default function TratativasResumo() {
     setSelOcorrencia("");
     setSelMotorista("");
     setSelAcao("");
+    setSelLinha(""); // ✅ NOVO
+  }
+
+  function computeCardsFromList(list) {
+    const total = list.length;
+
+    const pend = list.filter((t) => ilikeContains(t.status, "pend")).length;
+
+    const conc = list.filter(
+      (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
+    ).length;
+
+    // atrasadas: pendente + created_at < hoje-10d
+    const date10DaysAgo = new Date();
+    date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
+    const atr = list.filter((t) => {
+      if (!ilikeContains(t.status, "pend")) return false;
+      if (!t.created_at) return false;
+      const d = new Date(t.created_at);
+      return !Number.isNaN(d.getTime()) && d < date10DaysAgo;
+    }).length;
+
+    setTotalCount(total);
+    setPendentesCount(pend);
+    setConcluidasCount(conc);
+    setAtrasadasCount(atr);
   }
 
   async function carregar() {
@@ -124,7 +167,9 @@ export default function TratativasResumo() {
     try {
       resetDrill();
 
-      // ===== Tratativas (recorte) =====
+      // ⚠️ Ajuste aqui se o nome da coluna de linha for diferente
+      const LINHA_FIELD = "linha"; // ✅ supõe que existe tratativas.linha
+
       let q = supabase.from("tratativas").select(
         `
           id,
@@ -136,6 +181,7 @@ export default function TratativasResumo() {
           prioridade,
           status,
           descricao,
+          ${LINHA_FIELD},
           created_at
         `
       );
@@ -143,13 +189,12 @@ export default function TratativasResumo() {
       if (filtros.busca) {
         const b = filtros.busca.trim();
         q = q.or(
-          `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%`
+          `motorista_nome.ilike.%${b}%,motorista_chapa.ilike.%${b}%,descricao.ilike.%${b}%,tipo_ocorrencia.ilike.%${b}%,${LINHA_FIELD}.ilike.%${b}%`
         );
       }
       if (filtros.setor) q = q.eq("setor_origem", filtros.setor);
       if (filtros.status) q = q.ilike("status", `%${filtros.status}%`);
 
-      // período (created_at)
       if (filtros.dataInicio) q = q.gte("created_at", filtros.dataInicio);
       if (filtros.dataFim) q = q.lt("created_at", addDays(filtros.dataFim, 1));
 
@@ -158,15 +203,14 @@ export default function TratativasResumo() {
 
       const listTrat = tData || [];
       setTratativas(listTrat);
+      computeCardsFromList(listTrat);
 
-      // ===== Detalhes (somente IDs do recorte) =====
       const ids = listTrat.map((x) => x.id).filter(Boolean);
       if (!ids.length) {
         setDetalhes([]);
         return;
       }
 
-      // Supabase tem limite para IN gigante; chunk seguro:
       const CHUNK = 500;
       const allDet = [];
       for (let i = 0; i < ids.length; i += CHUNK) {
@@ -200,25 +244,22 @@ export default function TratativasResumo() {
     }
   }
 
-  // Recarrega quando período muda manualmente via botão
   async function aplicar() {
     await carregar();
   }
 
-  // ====== dataset base para cálculo (drill) ======
+  // join
   const tratById = useMemo(() => {
     const m = new Map();
     for (const t of tratativas) m.set(t.id, t);
     return m;
   }, [tratativas]);
 
-  // Join lógico: detalhes com lookup da tratativa
   const detalhesJoin = useMemo(() => {
     return (detalhes || []).map((d) => {
       const t = tratById.get(d.tratativa_id);
       return {
         ...d,
-        t_id: t?.id ?? d.tratativa_id,
         motorista_nome: t?.motorista_nome ?? "",
         motorista_chapa: t?.motorista_chapa ?? "",
         motorista_id: t?.motorista_id ?? "",
@@ -226,12 +267,13 @@ export default function TratativasResumo() {
         setor_origem: t?.setor_origem ?? "",
         prioridade: t?.prioridade ?? "",
         status: t?.status ?? "",
+        linha: t?.linha ?? "", // ✅
         tratativa_created_at: t?.created_at ?? "",
       };
     });
   }, [detalhes, tratById]);
 
-  // Filtro drill aplicado em sequência (Ocorrência -> Motorista -> Ação)
+  // recorte drill
   const recorteDrill = useMemo(() => {
     let baseTrat = [...tratativas];
     let baseDet = [...detalhesJoin];
@@ -242,9 +284,16 @@ export default function TratativasResumo() {
       baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
     }
 
+    if (selLinha) {
+      baseTrat = baseTrat.filter((t) => normStr(t.linha) === normStr(selLinha));
+      const ids = new Set(baseTrat.map((t) => t.id));
+      baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
+    }
+
     if (selMotorista) {
-      // chave composta: chapa|nome (pra não depender de motorista_id nulo)
-      baseTrat = baseTrat.filter((t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista);
+      baseTrat = baseTrat.filter(
+        (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}` === selMotorista
+      );
       const ids = new Set(baseTrat.map((t) => t.id));
       baseDet = baseDet.filter((d) => ids.has(d.tratativa_id));
     }
@@ -256,18 +305,23 @@ export default function TratativasResumo() {
     }
 
     return { baseTrat, baseDet };
-  }, [tratativas, detalhesJoin, selOcorrencia, selMotorista, selAcao]);
+  }, [tratativas, detalhesJoin, selOcorrencia, selLinha, selMotorista, selAcao]);
 
-  // ====== TOP LISTS (cliques) ======
+  // TOPs
   const topOcorrencias = useMemo(() => {
     const m = countBy(recorteDrill.baseTrat, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência");
+    return sortMapDesc(m).slice(0, 12);
+  }, [recorteDrill.baseTrat]);
+
+  const topLinhas = useMemo(() => {
+    const m = countBy(recorteDrill.baseTrat, (t) => normStr(t.linha) || "Sem linha");
     return sortMapDesc(m).slice(0, 12);
   }, [recorteDrill.baseTrat]);
 
   const topMotoristas = useMemo(() => {
     const key = (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`.trim() || "Sem motorista";
     const m = countBy(recorteDrill.baseTrat, (t) => key(t));
-    const rows = sortMapDesc(m)
+    return sortMapDesc(m)
       .slice(0, 12)
       .map(([k, total]) => {
         const [chapa, nome] = k.split("|");
@@ -283,8 +337,6 @@ export default function TratativasResumo() {
 
         return { k, chapa, nome, total, pend, conc };
       });
-
-    return rows;
   }, [recorteDrill.baseTrat]);
 
   const topAcoes = useMemo(() => {
@@ -292,46 +344,31 @@ export default function TratativasResumo() {
     return sortMapDesc(m).slice(0, 12);
   }, [recorteDrill.baseDet]);
 
-  // ====== painel BI (conteúdo do clique) ======
-  const painel = useMemo(() => {
-    // quando clicar em ocorrência: queremos ações + motoristas
-    // quando clicar em motorista: queremos ocorrências + ações
-    const actions = sortMapDesc(countBy(recorteDrill.baseDet, (d) => normStr(d.acao_aplicada) || "Não aplicada")).slice(
-      0,
-      20
-    );
+  const headerChips = useMemo(() => {
+    const chips = [];
+    if (selOcorrencia) chips.push({ k: "oc", label: `Ocorrência: ${selOcorrencia}`, tone: "purple" });
+    if (selLinha) chips.push({ k: "li", label: `Linha: ${selLinha}`, tone: "indigo" });
+    if (selMotorista) {
+      const [chapa, nome] = selMotorista.split("|");
+      chips.push({ k: "mo", label: `Motorista: ${nome} (${chapa})`, tone: "blue" });
+    }
+    if (selAcao) chips.push({ k: "ac", label: `Ação: ${selAcao}`, tone: "green" });
+    return chips;
+  }, [selOcorrencia, selLinha, selMotorista, selAcao]);
 
-    const drivers = sortMapDesc(
-      countBy(recorteDrill.baseTrat, (t) => `${normStr(t.motorista_chapa)}|${normStr(t.motorista_nome)}`)
-    )
-      .slice(0, 20)
-      .map(([k, v]) => {
-        const [chapa, nome] = k.split("|");
-        return { k, chapa, nome, total: v };
-      });
-
-    const occs = sortMapDesc(countBy(recorteDrill.baseTrat, (t) => normStr(t.tipo_ocorrencia) || "Sem ocorrência")).slice(
-      0,
-      20
-    );
-
-    return { actions, drivers, occs };
-  }, [recorteDrill.baseDet, recorteDrill.baseTrat]);
-
-  // ====== EXCEL (um arquivo, 3 abas) ======
+  // EXCEL (1 arquivo, 3 abas)
   function baixarExcelUnificado() {
     const { baseTrat } = recorteDrill;
 
-    // Detalhes reais das tratativas filtradas
     const ids = new Set(baseTrat.map((t) => t.id));
     const detFiltrado = detalhesJoin.filter((d) => ids.has(d.tratativa_id));
 
-    // Aba Tratativas
     const sheetTrat = baseTrat.map((t) => ({
       id: t.id,
       created_at: t.created_at,
       motorista_chapa: t.motorista_chapa,
       motorista_nome: t.motorista_nome,
+      linha: t.linha,
       tipo_ocorrencia: t.tipo_ocorrencia,
       setor_origem: t.setor_origem,
       prioridade: t.prioridade,
@@ -339,7 +376,6 @@ export default function TratativasResumo() {
       descricao: t.descricao,
     }));
 
-    // Aba Detalhes
     const sheetDet = detFiltrado.map((d) => ({
       id: d.id,
       created_at: d.created_at,
@@ -350,7 +386,6 @@ export default function TratativasResumo() {
       tratado_por_nome: d.tratado_por_nome,
     }));
 
-    // Aba Unificado (1 linha por detalhe; se não tiver detalhe, 1 linha com ação vazia)
     const detByTrat = new Map();
     for (const d of detFiltrado) {
       if (!detByTrat.has(d.tratativa_id)) detByTrat.set(d.tratativa_id, []);
@@ -366,6 +401,7 @@ export default function TratativasResumo() {
           tratativa_created_at: t.created_at,
           motorista_chapa: t.motorista_chapa,
           motorista_nome: t.motorista_nome,
+          linha: t.linha,
           tipo_ocorrencia: t.tipo_ocorrencia,
           setor_origem: t.setor_origem,
           prioridade: t.prioridade,
@@ -385,6 +421,7 @@ export default function TratativasResumo() {
             tratativa_created_at: t.created_at,
             motorista_chapa: t.motorista_chapa,
             motorista_nome: t.motorista_nome,
+            linha: t.linha,
             tipo_ocorrencia: t.tipo_ocorrencia,
             setor_origem: t.setor_origem,
             prioridade: t.prioridade,
@@ -410,25 +447,13 @@ export default function TratativasResumo() {
     XLSX.writeFile(wb, nome);
   }
 
-  const headerChips = useMemo(() => {
-    const chips = [];
-    if (selOcorrencia) chips.push({ k: "oc", label: `Ocorrência: ${selOcorrencia}`, tone: "purple" });
-    if (selMotorista) {
-      const [chapa, nome] = selMotorista.split("|");
-      chips.push({ k: "mo", label: `Motorista: ${nome} (${chapa})`, tone: "blue" });
-    }
-    if (selAcao) chips.push({ k: "ac", label: `Ação: ${selAcao}`, tone: "green" });
-    return chips;
-  }, [selOcorrencia, selMotorista, selAcao]);
-
   return (
     <div className="max-w-7xl mx-auto p-6">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Resumo de Tratativas</h1>
-          <p className="text-sm text-gray-500">
-            Clique nos TOPs para abrir o drill-down (tipo BI). Exporta um único Excel com as tabelas unificadas.
-          </p>
+          <p className="text-sm text-gray-500">Clique nos TOPs para filtrar como BI e exporte um único Excel unificado.</p>
         </div>
 
         <button
@@ -494,56 +519,55 @@ export default function TratativasResumo() {
                 {c.label}
               </Badge>
             ))}
-            {(selOcorrencia || selMotorista || selAcao) && (
+            {(selOcorrencia || selLinha || selMotorista || selAcao) && (
               <button onClick={resetDrill} className="text-xs px-3 py-1 rounded border border-gray-200 hover:bg-gray-50">
-                Limpar Drill-down
+                Limpar seleção
               </button>
             )}
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={aplicar}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
-            >
-              {loading ? "Carregando..." : "Aplicar"}
-            </button>
-          </div>
+          <button
+            onClick={aplicar}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+          >
+            {loading ? "Carregando..." : "Aplicar"}
+          </button>
         </div>
       </div>
 
-      {/* TOPs (sem lista) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top Motoristas */}
-        <Card
-          title="Top Motoristas (Tratativas)"
-          right={<Badge tone="blue">{recorteDrill.baseTrat.length} tratativas</Badge>}
-        >
+      {/* Cards igual Central */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100" />
+        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100" />
+        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100" />
+        <CardResumo titulo="Atrasadas (>10d)" valor={atrasadasCount} cor="bg-red-100" />
+      </div>
+
+      {/* ✅ 4 tabelas TOP (inclui Linhas) */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        <Card title="Top Motoristas (Tratativas)" right={<Badge tone="blue">{recorteDrill.baseTrat.length} tratativas</Badge>}>
           <div className="space-y-2">
             {topMotoristas.length === 0 ? (
               <div className="text-sm text-gray-500">Sem dados no recorte.</div>
             ) : (
               topMotoristas.map((m) => (
-                <div key={m.k} className="flex flex-col gap-2">
-                  <ListItemButton
-                    label={m.nome || "Sem nome"}
-                    sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
-                    value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
-                    active={selMotorista === m.k}
-                    onClick={() => {
-                      setSelMotorista((cur) => (cur === m.k ? "" : m.k));
-                      // se clicar motorista, mantém ocorrência se já estiver selecionada (BI)
-                      setSelAcao("");
-                    }}
-                  />
-                </div>
+                <ListItemButton
+                  key={m.k}
+                  label={m.nome || "Sem nome"}
+                  sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
+                  value={`Total ${m.total} | Pend ${m.pend} | Conc ${m.conc}`}
+                  active={selMotorista === m.k}
+                  onClick={() => {
+                    setSelMotorista((cur) => (cur === m.k ? "" : m.k));
+                    setSelAcao("");
+                  }}
+                />
               ))
             )}
           </div>
         </Card>
 
-        {/* Top Ocorrências */}
         <Card title="Top Ocorrências" right={<Badge tone="purple">{topOcorrencias.reduce((a, b) => a + b[1], 0)}</Badge>}>
           <div className="space-y-2">
             {topOcorrencias.length === 0 ? (
@@ -566,7 +590,28 @@ export default function TratativasResumo() {
           </div>
         </Card>
 
-        {/* Top Ações */}
+        <Card title="Top Linhas" right={<Badge tone="indigo">{topLinhas.reduce((a, b) => a + b[1], 0)}</Badge>}>
+          <div className="space-y-2">
+            {topLinhas.length === 0 ? (
+              <div className="text-sm text-gray-500">Sem linhas no recorte.</div>
+            ) : (
+              topLinhas.map(([label, qtd]) => (
+                <ListItemButton
+                  key={label}
+                  label={label}
+                  value={qtd}
+                  active={selLinha === label}
+                  onClick={() => {
+                    setSelLinha((cur) => (cur === label ? "" : label));
+                    setSelMotorista("");
+                    setSelAcao("");
+                  }}
+                />
+              ))
+            )}
+          </div>
+        </Card>
+
         <Card title="Top Ações Aplicadas (Detalhes)" right={<Badge tone="green">{recorteDrill.baseDet.length} ações</Badge>}>
           <div className="space-y-2">
             {topAcoes.length === 0 ? (
@@ -580,118 +625,10 @@ export default function TratativasResumo() {
                   label={label}
                   value={qtd}
                   active={selAcao === label}
-                  onClick={() => {
-                    setSelAcao((cur) => (cur === label ? "" : label));
-                  }}
+                  onClick={() => setSelAcao((cur) => (cur === label ? "" : label))}
                 />
               ))
             )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Painel Drill-down (tipo BI) */}
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card
-          title="Drill-down: Ações (no recorte atual)"
-          right={<Badge tone="green">{painel.actions.reduce((a, b) => a + b[1], 0)}</Badge>}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {painel.actions.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem ações para o recorte atual.</div>
-            ) : (
-              painel.actions.map(([acao, qtd]) => (
-                <ListItemButton
-                  key={acao}
-                  label={acao}
-                  value={qtd}
-                  active={selAcao === acao}
-                  onClick={() => setSelAcao((cur) => (cur === acao ? "" : acao))}
-                />
-              ))
-            )}
-          </div>
-        </Card>
-
-        <Card
-          title="Drill-down: Motoristas (no recorte atual)"
-          right={<Badge tone="blue">{painel.drivers.reduce((a, b) => a + b.total, 0)}</Badge>}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {painel.drivers.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem motoristas no recorte atual.</div>
-            ) : (
-              painel.drivers.map((m) => (
-                <ListItemButton
-                  key={m.k}
-                  label={m.nome || "Sem nome"}
-                  sub={m.chapa ? `Chapa ${m.chapa}` : "Chapa -"}
-                  value={m.total}
-                  active={selMotorista === m.k}
-                  onClick={() => {
-                    setSelMotorista((cur) => (cur === m.k ? "" : m.k));
-                    setSelAcao("");
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* Quando seleciona motorista, faz sentido mostrar Ocorrências dele */}
-        <Card title="Drill-down: Ocorrências (no recorte atual)" right={<Badge tone="purple">{painel.occs.length}</Badge>}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {painel.occs.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem ocorrências no recorte atual.</div>
-            ) : (
-              painel.occs.map(([occ, qtd]) => (
-                <ListItemButton
-                  key={occ}
-                  label={occ}
-                  value={qtd}
-                  active={selOcorrencia === occ}
-                  onClick={() => {
-                    setSelOcorrencia((cur) => (cur === occ ? "" : occ));
-                    setSelAcao("");
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* KPIs do recorte atual */}
-        <Card title="KPIs do recorte atual">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg border border-gray-200">
-              <div className="text-xs text-gray-500">Tratativas</div>
-              <div className="text-2xl font-bold text-gray-800">{recorteDrill.baseTrat.length}</div>
-            </div>
-            <div className="p-3 rounded-lg border border-gray-200">
-              <div className="text-xs text-gray-500">Ações (Detalhes)</div>
-              <div className="text-2xl font-bold text-gray-800">{recorteDrill.baseDet.length}</div>
-            </div>
-            <div className="p-3 rounded-lg border border-gray-200">
-              <div className="text-xs text-gray-500">Pendentes</div>
-              <div className="text-2xl font-bold text-yellow-700">
-                {recorteDrill.baseTrat.filter((t) => ilikeContains(t.status, "pend")).length}
-              </div>
-            </div>
-            <div className="p-3 rounded-lg border border-gray-200">
-              <div className="text-xs text-gray-500">Concluídas/Resolvidas</div>
-              <div className="text-2xl font-bold text-green-700">
-                {
-                  recorteDrill.baseTrat.filter(
-                    (t) => ilikeContains(t.status, "conclu") || ilikeContains(t.status, "resolvid")
-                  ).length
-                }
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 text-xs text-gray-500">
-            Observação: “Top Ações” vem de <b>tratativas_detalhes</b>. Se você quiser que “Orientação/Advertência/Suspensão”
-            apareçam mesmo sem detalhes, dá para usar a coluna <b>tipo_acao</b> da tabela <b>tratativas</b>.
           </div>
         </Card>
       </div>
