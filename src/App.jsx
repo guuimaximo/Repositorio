@@ -41,6 +41,10 @@ import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 // ✅ NOVO: Checkpoint do instrutor
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
+// ✅ NOVO: Portal / Landing (decisão Gestor/Adm)
+import Landing from "./pages/Landing";
+import PortalSistemas from "./pages/PortalSistemas";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -56,8 +60,14 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* Dashboard */}
-          <Route path="/" element={<Dashboard />} />
+          {/* ✅ Entrada única: decide Portal vs INOVE */}
+          <Route path="/" element={<Landing />} />
+
+          {/* ✅ Portal (2 cards) */}
+          <Route path="/portal" element={<PortalSistemas />} />
+
+          {/* ✅ INOVE padrão (Dashboard) */}
+          <Route path="/inove" element={<Dashboard />} />
 
           {/* ✅ Desempenho Diesel (rotas novas) */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
