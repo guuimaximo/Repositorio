@@ -12,8 +12,6 @@ import LancarAvaria from "./pages/LancarAvaria";
 import CobrancasAvarias from "./pages/CobrancasAvarias";
 import AprovacaoAvarias from "./pages/AprovacaoAvarias";
 import AvariasEmRevisao from "./pages/AvariasEmRevisao";
-
-// ✅ Resumo Avarias (Interno x Externo)
 import AvariasResumo from "./pages/AvariasResumo";
 
 import SolicitacaoSOS from "./pages/SolicitacaoSOS";
@@ -24,25 +22,20 @@ import SOSDashboard from "./pages/SOSDashboard";
 
 import KMRodado from "./pages/KMRodado";
 
-// ✅ PCM - Manutenção
 import PCMInicio from "./pages/PCMInicio";
 import PCMDiario from "./pages/PCMDiario";
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
 
-// ✅ Desempenho Diesel (PAGES separadas)
 import DesempenhoLancamento from "./pages/DesempenhoLancamento";
 import DesempenhoDieselResumo from "./pages/DesempenhoDieselResumo";
 import DesempenhoDieselAcompanhamento from "./pages/DesempenhoDieselAcompanhamento";
 import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
-
-// ✅ NOVO: Checkpoint do instrutor
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
-// ✅ NOVO: Portal / Landing (decisão Gestor/Adm)
-import Landing from "./pages/Landing";
+// ✅ NOVO: Portal
 import PortalSistemas from "./pages/PortalSistemas";
 
 export default function App() {
@@ -60,32 +53,27 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* ✅ Entrada única: decide Portal vs INOVE */}
-          <Route path="/" element={<Landing />} />
+          {/* ✅ NOVO: Portal como raiz */}
+          <Route path="/" element={<PortalSistemas />} />
 
-          {/* ✅ Portal (2 cards) */}
-          <Route path="/portal" element={<PortalSistemas />} />
-
-          {/* ✅ INOVE padrão (Dashboard) */}
+          {/* ✅ INOVE direto (caso queira link fixo para entrar no Inove) */}
           <Route path="/inove" element={<Dashboard />} />
 
-          {/* ✅ Desempenho Diesel (rotas novas) */}
+          {/* ✅ Desempenho Diesel */}
           <Route path="/desempenho-lancamento" element={<DesempenhoLancamento />} />
           <Route path="/desempenho-diesel-resumo" element={<DesempenhoDieselResumo />} />
           <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
 
-          {/* ✅ NOVO: rota do checkpoint */}
           <Route
             path="/desempenho-diesel-checkpoint/:id"
             element={<DesempenhoDieselCheckpoint />}
           />
 
-          {/* (opcional) mantém /desempenho-diesel vivo, redirecionando pro Resumo */}
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
-          {/* ✅ PCM - Planejamento e Controle de Manutenção */}
+          {/* ✅ PCM */}
           <Route path="/pcm-inicio" element={<PCMInicio />} />
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
 
