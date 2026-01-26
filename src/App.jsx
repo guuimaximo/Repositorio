@@ -35,7 +35,10 @@ import DesempenhoDieselTratativas from "./pages/DesempenhoDieselTratativas";
 import DesempenhoDieselAgente from "./pages/DesempenhoDieselAgente";
 import DesempenhoDieselCheckpoint from "./pages/DesempenhoDieselCheckpoint";
 
-// ✅ NOVO: Portal
+// ✅ Landing (decide Portal vs Inove)
+import Landing from "./pages/Landing";
+
+// ✅ Portal
 import PortalSistemas from "./pages/PortalSistemas";
 
 export default function App() {
@@ -53,10 +56,13 @@ export default function App() {
             </RequireAuth>
           }
         >
-          {/* ✅ NOVO: Portal como raiz */}
-          <Route path="/" element={<PortalSistemas />} />
+          {/* ✅ Raiz agora é Landing (decisor) */}
+          <Route path="/" element={<Landing />} />
 
-          {/* ✅ INOVE direto (caso queira link fixo para entrar no Inove) */}
+          {/* ✅ Portal em rota dedicada */}
+          <Route path="/portal" element={<PortalSistemas />} />
+
+          {/* ✅ INOVE (home real do sistema) */}
           <Route path="/inove" element={<Dashboard />} />
 
           {/* ✅ Desempenho Diesel */}
@@ -65,12 +71,7 @@ export default function App() {
           <Route path="/desempenho-diesel-acompanhamento" element={<DesempenhoDieselAcompanhamento />} />
           <Route path="/desempenho-diesel-tratativas" element={<DesempenhoDieselTratativas />} />
           <Route path="/desempenho-diesel-agente" element={<DesempenhoDieselAgente />} />
-
-          <Route
-            path="/desempenho-diesel-checkpoint/:id"
-            element={<DesempenhoDieselCheckpoint />}
-          />
-
+          <Route path="/desempenho-diesel-checkpoint/:id" element={<DesempenhoDieselCheckpoint />} />
           <Route path="/desempenho-diesel" element={<Navigate to="/desempenho-diesel-resumo" replace />} />
 
           {/* ✅ PCM */}
