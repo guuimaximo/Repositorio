@@ -1,18 +1,8 @@
 // src/pages/PortalSistemas.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient"; // usa o arquivo criado acima
+import { supabase } from "../supabaseClient";
 import { ExternalLink, LayoutGrid, ShieldAlert } from "lucide-react";
-
-/**
- * Regras:
- * - Se nivel ∈ {Gestor, Administrador} -> mostra 2 cards (INOVE / Farol Tático)
- * - Caso contrário -> redireciona direto para "/dashboard" (ou "/" se seu Dashboard for na raiz)
- *
- * Premissas:
- * - Seu Login já grava o login do usuário em localStorage/sessionStorage.
- *   Aqui eu leio "inove_login" (ajuste para o que você já usa).
- */
 
 export default function PortalSistemas() {
   const navigate = useNavigate();
@@ -21,7 +11,6 @@ export default function PortalSistemas() {
   const [nome, setNome] = useState(null);
 
   const loginSalvo = useMemo(() => {
-    // Ajuste estas chaves para bater com o seu Login real
     return (
       localStorage.getItem("inove_login") ||
       sessionStorage.getItem("inove_login") ||
@@ -36,7 +25,6 @@ export default function PortalSistemas() {
 
     async function loadNivel() {
       try {
-        // Se não tem login salvo, manda para /login
         if (!loginSalvo) {
           navigate("/login", { replace: true });
           return;
@@ -63,11 +51,9 @@ export default function PortalSistemas() {
           String(data.nivel || "").toLowerCase() === "gestor" ||
           String(data.nivel || "").toLowerCase() === "administrador";
 
-        // Se não é Gestor/Adm -> vai direto para o INOVE
+        // ✅ IMPORTANTE: usuário comum vai para /inove (não para "/")
         if (!isGestorOuAdm) {
-          // Se seu Dashboard é "/" mantenha.
-          // Se seu Dashboard é "/dashboard", troque aqui.
-          navigate("/", { replace: true });
+          navigate("/inove", { replace: true });
           return;
         }
 
@@ -85,7 +71,6 @@ export default function PortalSistemas() {
   }, [loginSalvo, navigate]);
 
   function abrirFarol() {
-    // Redireciona para o FAROL com um "from=inove" (guard simples no Farol)
     window.location.href = "https://faroldemetas.onrender.com/?from=inove";
   }
 
@@ -119,9 +104,8 @@ export default function PortalSistemas() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Card INOVE */}
           <button
-            onClick={() => navigate("/", { replace: true })}
+            onClick={() => navigate("/inove", { replace: true })}
             className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
           >
             <div className="flex items-center justify-between">
@@ -138,7 +122,6 @@ export default function PortalSistemas() {
             </div>
           </button>
 
-          {/* Card Farol Tático */}
           <button
             onClick={abrirFarol}
             className="group text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
