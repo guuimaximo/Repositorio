@@ -1,9 +1,28 @@
 // src/pages/Login.jsx
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
+
+const ALLOWED_REDIRECT_ORIGINS = new Set([
+  "https://faroldemetas.onrender.com",
+]);
+
+function appendFromInove(urlStr) {
+  const u = new URL(urlStr);
+  if (!u.searchParams.get("from")) u.searchParams.set("from", "inove");
+  return u.toString();
+}
+
+function isAllowedRedirect(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    return ALLOWED_REDIRECT_ORIGINS.has(u.origin);
+  } catch {
+    return false;
+  }
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,9 +36,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  const nextPath = location.state?.from?.pathname || "/";
+  // ✅ redirect via query (?redirect=...)
+  const redirectParam = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("redirect");
+  }, [location.search]);
 
-  // 🔐 LOGIN
+  // ✅ fallback interno padrão
+  const fallbackNext = location.state?.from?.pathname || "/";
+
   async function handleEntrar(e) {
     e.preventDefault();
     const loginTrim = loginInput.trim();
@@ -49,12 +74,28 @@ export default function Login() {
       return;
     }
 
-    // ✅ Persiste sessão via AuthContext (grava no localStorage com lastActivity)
     doLogin(data);
-    navigate(nextPath, { replace: true });
+
+    const nivel = String(data.nivel || "").trim().toLowerCase();
+    const isGestorOuAdm = nivel === "gestor" || nivel === "administrador";
+
+    // ✅ Se veio redirect do Farol: só devolve se Gestor/Adm
+    if (redirectParam && isGestorOuAdm && isAllowedRedirect(redirectParam)) {
+      const target = appendFromInove(redirectParam);
+      window.location.replace(target);
+      return;
+    }
+
+    // ✅ Se Gestor/Adm sem redirect -> vai para o Portal
+    if (isGestorOuAdm) {
+      navigate("/portal", { replace: true });
+      return;
+    }
+
+    // ✅ Usuário comum -> INOVE normal
+    navigate("/inove", { replace: true });
   }
 
-  // 🆕 CADASTRO
   async function handleCadastro(e) {
     e.preventDefault();
     const nomeTrim = nome.trim();
@@ -73,8 +114,8 @@ export default function Login() {
         login: loginTrim,
         senha: senhaTrim,
         email: null,
-        ativo: false,          // aguardará aprovação
-        nivel: "Pendente",     // precisa estar permitido no CHECK da tabela
+        ativo: false,
+        nivel: "Pendente",
       },
     ]);
     setLoading(false);
@@ -163,11 +204,7 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700 transition"
           >
-            {loading
-              ? "Processando..."
-              : isCadastro
-              ? "Cadastrar"
-              : "Entrar"}
+            {loading ? "Processando..." : isCadastro ? "Cadastrar" : "Entrar"}
           </button>
         </form>
 
@@ -192,8 +229,7 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-xs text-gray-400">
-          © {new Date().getFullYear()} InovaQuatai — Todos os direitos
-          reservados.
+          © {new Date().getFullYear()} InovaQuatai — Todos os direitos reservados.
         </p>
       </div>
     </div>
