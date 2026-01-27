@@ -1,8 +1,8 @@
 // src/components/CampoMotorista.jsx
-// (Mesmo comportamento do original, mas lendo funcionarios: nr_cracha, nm_funcionario)
+// (Correção no useMemo + suporte a disabled)
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBCNT } from "../supabaseBCNT";
+import { supabase } from "../supabase";
 
 export default function CampoMotorista({
   value,
@@ -15,17 +15,17 @@ export default function CampoMotorista({
   const [open, setOpen] = useState(false);
   const [errorLoading, setErrorLoading] = useState(null);
 
-  // 1) Carrega lista
+  // 1. Carrega motoristas
   useEffect(() => {
     setErrorLoading(null);
     (async () => {
-      const { data, error } = await supabaseBCNT
-        .from("funcionarios")
-        .select("nr_cracha, nm_funcionario")
-        .order("nm_funcionario", { ascending: true });
+      const { data, error } = await supabase
+        .from("motoristas")
+        .select("chapa, nome")
+        .order("nome", { ascending: true });
 
       if (error) {
-        console.error("Erro ao buscar funcionarios:", error);
+        console.error("Erro ao buscar motoristas:", error);
         setErrorLoading("Falha ao carregar motoristas.");
         setTodos([]);
       } else {
@@ -34,22 +34,22 @@ export default function CampoMotorista({
     })();
   }, []);
 
-  // 2) Filtra
+  // 3. Filtra motoristas
   const filtrados = useMemo(() => {
     const s = String(q || "").trim().toLowerCase();
     if (!s) return [];
     if (!Array.isArray(todos)) return [];
 
     return todos
-      .filter((m) => {
-        const cracha = String(m?.nr_cracha || "").toLowerCase();
-        const nome = String(m?.nm_funcionario || "").toLowerCase();
-        return cracha.startsWith(s) || nome.includes(s);
-      })
+      .filter(
+        (m) =>
+          String(m.chapa || "").toLowerCase().startsWith(s) ||
+          String(m.nome || "").toLowerCase().includes(s)
+      )
       .slice(0, 8);
   }, [q, todos]);
 
-  // 3) Abre dropdown
+  // 2. Abre dropdown (dependendo de q)
   useEffect(() => {
     if (!String(q || "")) {
       setOpen(false);
@@ -58,17 +58,14 @@ export default function CampoMotorista({
     setOpen(!disabled && filtrados.length > 0);
   }, [q, disabled, filtrados.length]);
 
-  // 4) Aplica seleção
+  // 4. Aplica seleção
   function aplicar(m) {
-    onChange?.({
-      chapa: String(m?.nr_cracha ?? ""),
-      nome: String(m?.nm_funcionario ?? ""),
-    });
-    setQ(`${m?.nr_cracha ?? ""} - ${m?.nm_funcionario ?? ""}`);
+    onChange?.({ chapa: String(m.chapa), nome: m.nome });
+    setQ(`${m.chapa} - ${m.nome}`);
     setOpen(false);
   }
 
-  // 5) Sincroniza input
+  // 5. Sincroniza input
   useEffect(() => {
     if (!value || (!value.chapa && !value.nome)) {
       setQ("");
@@ -81,10 +78,9 @@ export default function CampoMotorista({
   return (
     <div className="relative">
       <label className="block text-sm text-gray-600 mb-1">{label}</label>
-
       <input
         className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-        placeholder={errorLoading ? "Erro ao carregar" : "Digite o crachá ou nome…"}
+        placeholder={errorLoading ? "Erro ao carregar" : "Digite a chapa ou nome…"}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => {
@@ -93,20 +89,18 @@ export default function CampoMotorista({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         disabled={!!errorLoading || disabled}
       />
-
       {errorLoading && <div className="text-red-600 text-xs mt-1">{errorLoading}</div>}
-
       {open && filtrados.length > 0 && (
         <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
           {filtrados.map((m) => (
             <button
-              key={String(m?.nr_cracha ?? "")}
+              key={m.chapa}
               type="button"
               onMouseDown={() => aplicar(m)}
               className="block w-full text-left px-3 py-2 hover:bg-gray-100"
             >
-              <div className="text-sm font-medium">{String(m?.nm_funcionario ?? "")}</div>
-              <div className="text-xs text-gray-500">Crachá: {String(m?.nr_cracha ?? "")}</div>
+              <div className="text-sm font-medium">{m.nome}</div>
+              <div className="text-xs text-gray-500">Chapa: {m.chapa}</div>
             </button>
           ))}
         </div>
