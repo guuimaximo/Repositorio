@@ -2,7 +2,7 @@
 // (Mesmo comportamento do original, mas lendo funcionarios: nr_cracha, nm_funcionario)
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabase";
+import { supabaseBCNT } from "../supabaseBCNT";
 
 export default function CampoMotorista({
   value,
@@ -19,7 +19,7 @@ export default function CampoMotorista({
   useEffect(() => {
     setErrorLoading(null);
     (async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseBCNT
         .from("funcionarios")
         .select("nr_cracha, nm_funcionario")
         .order("nm_funcionario", { ascending: true });
