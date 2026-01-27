@@ -42,8 +42,9 @@ const DIESEL_ROUTES = {
 
 // ✅ Rotas PCM
 const PCM_ROUTES = {
-  inicio: "/pcm-inicio",
-  diario: "/pcm-diario",
+  resumo: "/pcm-resumo",
+  inicio: "/pcm-inicio", // "PCM do dia" (tela que abre/cria)
+  diarioPrefix: "/pcm-diario", // rota dinâmica /pcm-diario/:id (não é link fixo)
 };
 
 // ✅ Mapa de acesso por nível
@@ -56,7 +57,7 @@ const ACCESS = {
     "/inove",
     "/solicitar",
     "/central",
-    "/tratativas-resumo", // ✅ NOVO (Gestor pode ver)
+    "/tratativas-resumo",
     "/lancar-avaria",
     "/avarias-em-revisao",
     "/aprovar-avarias",
@@ -69,8 +70,11 @@ const ACCESS = {
     "/sos-dashboard",
     "/km-rodado",
     "/inicio-basico",
+
+    // ✅ PCM
+    PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
-    PCM_ROUTES.diario,
+
     ...Object.values(DIESEL_ROUTES),
   ],
 
@@ -88,9 +92,12 @@ const ACCESS = {
     "/sos-central",
     "/sos-dashboard",
     "/km-rodado",
+
+    // ✅ PCM
+    PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
-    PCM_ROUTES.diario,
   ],
+
   CCO: ["/inicio-basico", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
 };
 
@@ -108,6 +115,7 @@ export default function Sidebar() {
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
+  const [pcmOpen, setPcmOpen] = useState(false); // ✅ NOVO (ABA PCM)
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
@@ -128,7 +136,15 @@ export default function Sidebar() {
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
 
-      pcm: { path: PCM_ROUTES.inicio, label: "PCM - Manutenção", icon: <FaClipboardList /> },
+      // ✅ PCM (agora é menu com 2 itens)
+      pcm: {
+        label: "PCM",
+        icon: <FaClipboardList />,
+        tabs: [
+          { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
+          { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
+        ],
+      },
 
       desempenhoDiesel: {
         label: "Desempenho Diesel",
@@ -190,7 +206,11 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor;
-  const showPCM = isAdmin || isGestor || isManutencao;
+
+  // ✅ PCM aparece p/ Admin/Gestor/Manutenção e se tiver pelo menos 1 item visível
+  const showPCM =
+    (isAdmin || isGestor || isManutencao) &&
+    links.pcm.tabs.some((t) => canSee(user, t.path));
 
   // ✅ Tratativas aparecem para quem tiver ao menos 1 item visível
   const showTratativas = links.tratativas.some((l) => {
@@ -233,11 +253,32 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ PCM */}
-        {showPCM && canSee(user, links.pcm.path) && (
-          <NavLink to={links.pcm.path} className={navLinkClass}>
-            {links.pcm.icon} <span className="whitespace-nowrap">{links.pcm.label}</span>
-          </NavLink>
+        {/* ✅ PCM (ABA com 2 itens: Resumo / PCM do dia) */}
+        {showPCM && (
+          <>
+            <button
+              onClick={() => setPcmOpen(!pcmOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.pcm.icon}
+                <span className="whitespace-nowrap truncate">{links.pcm.label}</span>
+              </div>
+              {pcmOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {pcmOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.pcm.tabs.map((t) =>
+                  canSee(user, t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon} <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* ✅ Desempenho Diesel */}
@@ -284,10 +325,7 @@ export default function Sidebar() {
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) => {
-                  // ✅ Resumo somente Gestor/Adm
                   if (link.onlyAdminGestor && !(isAdmin || isGestor)) return null;
-
-                  // ✅ Demais itens seguem ACCESS
                   if (!link.onlyAdminGestor && !canSee(user, link.path)) return null;
 
                   return (
