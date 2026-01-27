@@ -9,6 +9,9 @@ import {
   FaExclamationTriangle,
   FaChartLine,
   FaRedo,
+  FaFilter,
+  FaChevronDown,
+  FaChevronRight,
 } from "react-icons/fa";
 
 /* =========================
@@ -16,7 +19,6 @@ import {
 ========================= */
 
 function toISODate(d) {
-  // d: Date
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 10);
@@ -30,7 +32,7 @@ function startOfMonthISO(iso) {
 
 function endOfMonthISO(iso) {
   const [y, m] = iso.split("-").map((x) => parseInt(x, 10));
-  const d = new Date(y, m, 0); // último dia do mês
+  const d = new Date(y, m, 0);
   return toISODate(d);
 }
 
@@ -60,10 +62,6 @@ function fmtBRDateTime(iso) {
   }
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
 function safeNum(n, dec = 2) {
   const v = Number(n);
   if (Number.isNaN(v)) return 0;
@@ -71,7 +69,6 @@ function safeNum(n, dec = 2) {
 }
 
 function daysDiff(d1, d2) {
-  // d2 - d1 (em dias inteiros)
   try {
     const a = new Date(d1).getTime();
     const b = new Date(d2).getTime();
@@ -82,8 +79,24 @@ function daysDiff(d1, d2) {
 }
 
 function monthKeyFromISODate(isoDate) {
-  // isoDate: YYYY-MM-DD
   return String(isoDate || "").slice(0, 7);
+}
+
+// ✅ Tipo de dia (filtro)
+function dayTypeFromISO(iso) {
+  if (!iso) return "DESCONHECIDO";
+  const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
+  const dow = d.getDay(); // 0=Dom, 6=Sab
+  if (dow === 0) return "DOMINGO";
+  if (dow === 6) return "SABADO";
+  return "UTIL";
+}
+
+function bestBaseDateISO(v) {
+  return (
+    v?.data_entrada ||
+    (v?.data_referencia ? `${v.data_referencia}T00:00:00` : null)
+  );
 }
 
 /* =========================
@@ -167,27 +180,58 @@ function AgingBar({ buckets }) {
 }
 
 /* =========================
+   SECTION (collapse)
+========================= */
+
+function Section({ title, subtitle, open, onToggle, children, right }) {
+  return (
+    <div className="bg-white border rounded-2xl shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full px-4 py-4 flex items-center justify-between gap-3 hover:bg-gray-50 rounded-2xl"
+      >
+        <div className="min-w-0 text-left">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            {title}
+          </div>
+          {subtitle ? (
+            <div className="text-sm font-black text-gray-900 truncate">
+              {subtitle}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3">
+          {right}
+          {open ? <FaChevronDown /> : <FaChevronRight />}
+        </div>
+      </button>
+      {open ? <div className="px-4 pb-4">{children}</div> : null}
+    </div>
+  );
+}
+
+/* =========================
    MODAL: DETALHE FROTA
 ========================= */
 
 function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
   if (!open) return null;
 
-  const sorted = [...(rows || [])].sort((a, b) => {
-    const ta = new Date(a.data_entrada || 0).getTime();
-    const tb = new Date(b.data_entrada || 0).getTime();
-    return ta - tb;
-  });
+  const parseDT = (v) => {
+    const base =
+      v?.data_entrada ||
+      (v?.data_referencia ? `${v.data_referencia}T00:00:00` : null);
+    return base ? new Date(base).getTime() : 0;
+  };
 
-  // monta "ciclos" (entrada -> saída)
+  const sorted = [...(rows || [])].sort((a, b) => parseDT(a) - parseDT(b));
+
   const ciclos = sorted.map((r) => {
-    const dtIn = r.data_entrada;
+    const dtIn = r.data_entrada || (r.data_referencia ? `${r.data_referencia}T00:00:00` : null);
     const dtOut = r.data_saida || null;
     const dias = dtIn
-      ? daysDiff(
-          dtIn,
-          dtOut ? dtOut : new Date().toISOString()
-        )
+      ? daysDiff(dtIn, dtOut ? dtOut : new Date().toISOString())
       : 0;
     return { ...r, _dias: dias };
   });
@@ -198,7 +242,7 @@ function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <div>
             <div className="text-[10px] font-black text-gray-500 uppercase">
-              Detalhe da frota (reincidência)
+              Detalhe da frota (ciclos / reincidência)
             </div>
             <div className="text-xl font-black text-gray-900 flex items-center gap-2">
               <FaCar />
@@ -222,7 +266,7 @@ function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="bg-gray-900 text-white rounded-xl p-4">
               <div className="text-[10px] font-black text-gray-300 uppercase">
-                Entradas no período
+                Registros no período
               </div>
               <div className="text-3xl font-black mt-1">{sorted.length}</div>
             </div>
@@ -288,8 +332,12 @@ function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
                       <td className="p-3 border-r font-black text-[11px]">
                         {fmtBRDate(r.data_referencia)}
                       </td>
-                      <td className="p-3 border-r">{fmtBRDateTime(r.data_entrada)}</td>
-                      <td className="p-3 border-r">{fmtBRDateTime(r.data_saida)}</td>
+                      <td className="p-3 border-r">
+                        {fmtBRDateTime(r.data_entrada)}
+                      </td>
+                      <td className="p-3 border-r">
+                        {fmtBRDateTime(r.data_saida)}
+                      </td>
                       <td className="p-3 border-r text-center font-black">
                         {r._dias}
                       </td>
@@ -312,7 +360,10 @@ function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
                   ))}
                   {ciclos.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="p-6 text-center text-gray-500 font-bold">
+                      <td
+                        colSpan={9}
+                        className="p-6 text-center text-gray-500 font-bold"
+                      >
                         Sem registros para esta frota.
                       </td>
                     </tr>
@@ -322,7 +373,8 @@ function FrotaDetalheModal({ open, onClose, frota, rows, periodo }) {
             </div>
 
             <div className="mt-3 text-[11px] text-gray-500 font-semibold">
-              Observação: este detalhe considera as entradas dentro do período selecionado (por data_entrada).
+              Observação: este detalhe considera registros dentro do período
+              selecionado (base por data_entrada; fallback por data_referencia).
             </div>
           </div>
         </div>
@@ -341,6 +393,13 @@ const QUICK_PERIODS = [
   { key: "INTERVALO", label: "Intervalo" },
 ];
 
+const DAY_FILTERS = [
+  { key: "ALL", label: "Todos" },
+  { key: "UTIL", label: "Dia útil" },
+  { key: "SABADO", label: "Sábado" },
+  { key: "DOMINGO", label: "Domingo" },
+];
+
 export default function PCMResumo() {
   // período
   const hojeISO = useMemo(() => toISODate(new Date()), []);
@@ -351,6 +410,15 @@ export default function PCMResumo() {
   const [inicio, setInicio] = useState(mesAtualIni);
   const [fim, setFim] = useState(mesAtualFim);
 
+  // filtro tipo de dia
+  const [dayFilter, setDayFilter] = useState("ALL");
+
+  // UI (reduzir informação)
+  const [compact, setCompact] = useState(true);
+  const [secParetoOpen, setSecParetoOpen] = useState(false);
+  const [secSerieOpen, setSecSerieOpen] = useState(false);
+  const [secTopsOpen, setSecTopsOpen] = useState(false);
+
   // dados
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
@@ -359,11 +427,11 @@ export default function PCMResumo() {
   const [serieMensal, setSerieMensal] = useState([]);
 
   // base do período
-  const [diasPCM, setDiasPCM] = useState([]); // pcm_diario do período (datas)
-  const [veiculosPeriodo, setVeiculosPeriodo] = useState([]); // veiculos_pcm no período
+  const [diasPCM, setDiasPCM] = useState([]);
+  const [veiculosPeriodo, setVeiculosPeriodo] = useState([]);
 
   // reincidência
-  const [reincidencias, setReincidencias] = useState([]); // tabela
+  const [reincidencias, setReincidencias] = useState([]);
   const [reincQuery, setReincQuery] = useState("");
 
   // top 5
@@ -387,7 +455,6 @@ export default function PCMResumo() {
       setInicio(ini);
       setFim(hojeISO);
     }
-    // INTERVALO mantém o que já está
   }, [periodMode, hojeISO, mesAtualIni, mesAtualFim]);
 
   // =========================
@@ -395,9 +462,7 @@ export default function PCMResumo() {
   // =========================
 
   const carregarSerieMensal = useCallback(async () => {
-    // série com: mes, dias_com_pcm, total_gns, media_gns_dia
-    // Vamos fazer em 2 queries e consolidar em JS (mais robusto no supabase-js).
-    // (1) dias com PCM por mês
+    // ⚠️ série mensal é histórica (não aplica filtro de tipo de dia)
     const { data: pcms, error: e1 } = await supabase
       .from("pcm_diario")
       .select("data_referencia")
@@ -411,8 +476,6 @@ export default function PCMResumo() {
       diasPorMes.set(mk, (diasPorMes.get(mk) || 0) + 1);
     });
 
-    // (2) GNS por mês (por data_entrada, fallback data_referencia se precisar)
-    // Aqui usamos veiculos_pcm + join “manual”: buscamos data_entrada, pcm_id, categoria
     const { data: veics, error: e2 } = await supabase
       .from("veiculos_pcm")
       .select("categoria, data_entrada, pcm_id")
@@ -420,7 +483,6 @@ export default function PCMResumo() {
 
     if (e2) throw e2;
 
-    // Precisamos do data_referencia do pcm_id se data_entrada não existir
     const needsPcm = (veics || []).some((v) => !v.data_entrada);
     let pcmMap = new Map();
 
@@ -429,7 +491,6 @@ export default function PCMResumo() {
         new Set((veics || []).map((v) => v.pcm_id).filter(Boolean))
       );
 
-      // chunk para não estourar URL/headers
       const chunkSize = 500;
       for (let i = 0; i < pcmIds.length; i += chunkSize) {
         const chunk = pcmIds.slice(i, i + chunkSize);
@@ -453,25 +514,27 @@ export default function PCMResumo() {
       gnsPorMes.set(mk, (gnsPorMes.get(mk) || 0) + 1);
     });
 
-    // consolidar meses presentes em diasPorMes (PCM existente)
     const meses = Array.from(diasPorMes.keys()).sort();
     const out = meses
       .map((mk) => {
         const dias = diasPorMes.get(mk) || 0;
         const total = gnsPorMes.get(mk) || 0;
         const media = dias ? safeNum(total / dias, 2) : 0;
-        return { mes: mk, dias_com_pcm: dias, total_gns: total, media_gns_dia: media };
+        return {
+          mes: mk,
+          dias_com_pcm: dias,
+          total_gns: total,
+          media_gns_dia: media,
+        };
       })
-      .reverse(); // últimos meses primeiro
+      .reverse();
 
-    // opcional: limitar para 18 meses pra não ficar gigante
     setSerieMensal(out.slice(0, 18));
   }, []);
 
   const carregarPeriodo = useCallback(async () => {
-    // Período inclusivo: inicio..fim
-    // 1) Dias com PCM no período
-    const { data: pcms, error: e1 } = await supabase
+    // 1) Dias com PCM no período (e aplica filtro de tipo de dia)
+    const { data: pcmsRaw, error: e1 } = await supabase
       .from("pcm_diario")
       .select("id, data_referencia, criado_por")
       .gte("data_referencia", inicio)
@@ -480,15 +543,18 @@ export default function PCMResumo() {
 
     if (e1) throw e1;
 
-    setDiasPCM(pcms || []);
+    const pcms =
+      dayFilter === "ALL"
+        ? pcmsRaw || []
+        : (pcmsRaw || []).filter(
+            (p) => dayTypeFromISO(p.data_referencia) === dayFilter
+          );
 
-    // 2) Veículos do período: por data_entrada dentro do período
-    // Para garantir: buscamos por data_entrada, mas alguns podem ser nulos.
-    // Então fazemos:
-    // (a) linhas com data_entrada no período
-    // (b) linhas sem data_entrada cujo pcm_diario.data_referencia está no período (join via pcm_id)
-    // Para (b), simplificamos: puxar por pcm_id in pcmsIds.
+    setDiasPCM(pcms);
+
+    // 2) Veículos do período
     const pcmIds = (pcms || []).map((p) => p.id);
+
     const [qA, qB] = await Promise.all([
       supabase
         .from("veiculos_pcm")
@@ -513,7 +579,6 @@ export default function PCMResumo() {
 
     const all = [...(qA.data || []), ...(qB.data || [])];
 
-    // map pcm_id -> data_referencia (para exibir no modal)
     const pcmIdToRef = new Map((pcms || []).map((p) => [p.id, p.data_referencia]));
 
     const normalized = all.map((v) => ({
@@ -521,47 +586,62 @@ export default function PCMResumo() {
       data_referencia: pcmIdToRef.get(v.pcm_id) || null,
     }));
 
-    setVeiculosPeriodo(normalized);
+    const normalizedFiltered =
+      dayFilter === "ALL"
+        ? normalized
+        : normalized.filter((v) => dayTypeFromISO(bestBaseDateISO(v)) === dayFilter);
 
-    // 3) Reincidências no período (por frota com 2+ entradas)
-    // Definição de "entrada": linha existente no período (normalized).
+    setVeiculosPeriodo(normalizedFiltered);
+
+    // 3) Reincidências (✅ regra: entrou -> saiu -> entrou novamente)
     const byFrota = new Map();
-    normalized.forEach((v) => {
+    normalizedFiltered.forEach((v) => {
       const f = String(v.frota || "").trim();
       if (!f) return;
-
-      // se quiser ignorar herança: descomente a linha abaixo
-      // if (String(v.lancado_por || "").includes("Virada PCM")) return;
-
       const arr = byFrota.get(f) || [];
       arr.push(v);
       byFrota.set(f, arr);
     });
 
+    const parseIn = (v) => {
+      const base =
+        v.data_entrada ||
+        (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
+      return base ? new Date(base).getTime() : 0;
+    };
+    const parseOut = (v) => (v.data_saida ? new Date(v.data_saida).getTime() : null);
+
     const reinc = [];
     byFrota.forEach((arr, frota) => {
-      const entradas = arr.length;
-      if (entradas < 2) return;
+      const sorted = [...arr].sort((a, b) => parseIn(a) - parseIn(b));
 
-      const sorted = [...arr].sort((a, b) => new Date(a.data_entrada || 0) - new Date(b.data_entrada || 0));
+      let reentradas = 0;
+      for (let i = 1; i < sorted.length; i++) {
+        const prevOut = parseOut(sorted[i - 1]);
+        const currIn = parseIn(sorted[i]);
+        if (prevOut && currIn && currIn > prevOut) reentradas += 1;
+      }
+
+      if (reentradas < 1) return;
+
       const ultimaEntrada = sorted[sorted.length - 1]?.data_entrada || null;
 
-      // dias parado acumulado no período (somatório de cada ciclo)
       const diasParadoTotal = sorted.reduce((acc, r) => {
-        const dtIn = r.data_entrada || (r.data_referencia ? `${r.data_referencia}T00:00:00` : null);
+        const dtIn =
+          r.data_entrada || (r.data_referencia ? `${r.data_referencia}T00:00:00` : null);
         const dtOut = r.data_saida || new Date().toISOString();
         if (!dtIn) return acc;
         return acc + daysDiff(dtIn, dtOut);
       }, 0);
 
-      // top descrições (as 3 primeiras)
       const descricoes = sorted
         .map((x) => (x.descricao ? String(x.descricao).trim().toUpperCase() : ""))
         .filter(Boolean);
 
       reinc.push({
         frota,
-        entradas,
+        entradas: sorted.length,
+        reentradas,
         ultimaEntrada,
         diasParadoTotal,
         descricoesPreview: descricoes.slice(0, 3),
@@ -569,23 +649,22 @@ export default function PCMResumo() {
     });
 
     reinc.sort((a, b) => {
-      // prioridade: mais entradas, depois mais dias parado
-      if (b.entradas !== a.entradas) return b.entradas - a.entradas;
+      if (b.reentradas !== a.reentradas) return b.reentradas - a.reentradas;
       return b.diasParadoTotal - a.diasParadoTotal;
     });
 
     setReincidencias(reinc);
 
-    // 4) Top 5 por dias parado (acumulado)
+    // 4) Top 5 por dias parado
     const topPar = [...reinc]
       .sort((a, b) => b.diasParadoTotal - a.diasParadoTotal)
       .slice(0, 5);
     setTopParado(topPar);
 
-    // 5) Top 5 por reincidência (entradas)
-    const topRe = [...reinc].sort((a, b) => b.entradas - a.entradas).slice(0, 5);
+    // 5) Top 5 por reentradas
+    const topRe = [...reinc].sort((a, b) => b.reentradas - a.reentradas).slice(0, 5);
     setTopReinc(topRe);
-  }, [inicio, fim]);
+  }, [inicio, fim, dayFilter]);
 
   const recarregarTudo = useCallback(async () => {
     setLoading(true);
@@ -621,13 +700,14 @@ export default function PCMResumo() {
 
     const frotasReincidentes = (reincidencias || []).length;
 
-    // aging buckets (apenas abertos)
     const buckets = { "0-1": 0, "2-3": 0, "4-7": 0, "8-15": 0, "16+": 0 };
     const now = new Date().toISOString();
+
     (veiculosPeriodo || [])
       .filter((v) => !v.data_saida)
       .forEach((v) => {
-        const dtIn = v.data_entrada || (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
+        const dtIn =
+          v.data_entrada || (v.data_referencia ? `${v.data_referencia}T00:00:00` : null);
         const dias = dtIn ? daysDiff(dtIn, now) : 0;
         if (dias <= 1) buckets["0-1"] += 1;
         else if (dias <= 3) buckets["2-3"] += 1;
@@ -636,7 +716,6 @@ export default function PCMResumo() {
         else buckets["16+"] += 1;
       });
 
-    // Pareto setor/categoria (para melhoria)
     const bySetor = {};
     const byCategoria = {};
     (veiculosPeriodo || []).forEach((v) => {
@@ -647,11 +726,19 @@ export default function PCMResumo() {
     });
 
     const setores = Object.entries(bySetor)
-      .map(([k, v]) => ({ setor: k, total: v, pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0 }))
+      .map(([k, v]) => ({
+        setor: k,
+        total: v,
+        pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0,
+      }))
       .sort((a, b) => b.total - a.total);
 
     const categorias = Object.entries(byCategoria)
-      .map(([k, v]) => ({ categoria: k, total: v, pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0 }))
+      .map(([k, v]) => ({
+        categoria: k,
+        total: v,
+        pct: totalPeriodo ? safeNum((v / totalPeriodo) * 100, 1) : 0,
+      }))
       .sort((a, b) => b.total - a.total);
 
     return {
@@ -668,15 +755,12 @@ export default function PCMResumo() {
     };
   }, [diasPCM, veiculosPeriodo, reincidencias]);
 
-  const serieParaTabela = useMemo(() => {
-    // já vem com meses recentes primeiro, ok.
-    return serieMensal || [];
-  }, [serieMensal]);
-
   const reincFiltradas = useMemo(() => {
     const q = reincQuery.trim().toLowerCase();
     if (!q) return reincidencias || [];
-    return (reincidencias || []).filter((r) => String(r.frota).toLowerCase().includes(q));
+    return (reincidencias || []).filter((r) =>
+      String(r.frota).toLowerCase().includes(q)
+    );
   }, [reincidencias, reincQuery]);
 
   // =========================
@@ -702,390 +786,496 @@ export default function PCMResumo() {
   }, []);
 
   return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        {/* HEADER */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black text-gray-500 uppercase">
-                PCM • Resumo tático
-              </div>
-              <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-                <FaChartLine />
-                PCMResumo
-              </h1>
-              <div className="text-xs text-gray-600 font-semibold mt-1 flex items-center gap-2">
-                <FaCalendarAlt />
-                Período:{" "}
-                <span className="font-black">
-                  {fmtBRDate(inicio)} → {fmtBRDate(fim)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-2 md:items-center">
-              <div className="flex flex-wrap gap-2">
-                {QUICK_PERIODS.map((p) => (
-                  <Chip
-                    key={p.key}
-                    active={periodMode === p.key}
-                    onClick={() => setPeriodMode(p.key)}
-                    title="Trocar período"
-                  >
-                    {p.label}
-                  </Chip>
-                ))}
-              </div>
-
-              {periodMode === "INTERVALO" && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-xs font-black"
-                    value={inicio}
-                    onChange={(e) => setInicio(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-xs font-black"
-                    value={fim}
-                    onChange={(e) => setFim(e.target.value)}
-                  />
-                </div>
-              )}
-
-              <button
-                onClick={recarregarTudo}
-                className="px-4 py-2 rounded-lg font-black text-xs bg-gray-900 text-white hover:bg-black flex items-center gap-2"
-                title="Recarregar"
-              >
-                <FaRedo />
-                Atualizar
-              </button>
-            </div>
-          </div>
-
-          {errMsg ? (
-            <div className="mt-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm font-bold flex items-center gap-2">
-              <FaExclamationTriangle />
-              {errMsg}
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="mt-4 text-sm font-bold text-gray-500">
-              Carregando resumo…
-            </div>
-          ) : null}
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
+    <div className="min-h-screen bg-gray-50 p-4">
+      {/* HEADER */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
             <div className="text-[10px] font-black text-gray-500 uppercase">
-              Dias com PCM
+              PCM • Resumo tático
             </div>
-            <div className="text-3xl font-black mt-1">{kpis.diasComPCM}</div>
-          </div>
-
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Registros no período
-            </div>
-            <div className="text-3xl font-black mt-1">{kpis.totalPeriodo}</div>
-          </div>
-
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Em aberto
-            </div>
-            <div className="text-3xl font-black mt-1 text-red-600">
-              {kpis.totalAbertos}
-            </div>
-          </div>
-
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Total GNS
-            </div>
-            <div className="text-3xl font-black mt-1">{kpis.totalGNS}</div>
-            <div className="text-[10px] font-black text-gray-500 uppercase mt-1">
-              {kpis.pctGNS}% do período
+            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+              <FaChartLine />
+              PCMResumo
+            </h1>
+            <div className="text-xs text-gray-600 font-semibold mt-1 flex items-center gap-2">
+              <FaCalendarAlt />
+              Período:{" "}
+              <span className="font-black">
+                {fmtBRDate(inicio)} → {fmtBRDate(fim)}
+              </span>
+              <span className="ml-2 px-2 py-1 rounded-full bg-gray-100 text-[10px] font-black uppercase">
+                {dayFilter === "ALL"
+                  ? "Todos os dias"
+                  : dayFilter === "UTIL"
+                  ? "Dia útil"
+                  : dayFilter === "SABADO"
+                  ? "Sábado"
+                  : "Domingo"}
+              </span>
             </div>
           </div>
 
-          <div className="bg-gray-900 text-white rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-300 uppercase">
-              Média GNS/dia
-            </div>
-            <div className="text-4xl font-black mt-1">{kpis.mediaGNSDia}</div>
-          </div>
-
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Frotas reincidentes
-            </div>
-            <div className="text-3xl font-black mt-1">{kpis.frotasReincidentes}</div>
-          </div>
-        </div>
-
-        {/* Aging + Pareto */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-4">
-          <div className="bg-white border rounded-2xl p-4 shadow-sm lg:col-span-2">
-            <AgingBar buckets={kpis.aging} />
-          </div>
-
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Pareto rápido (Setor)
-            </div>
-            <div className="mt-2 space-y-2">
-              {(kpis.setores || []).slice(0, 6).map((s) => (
-                <div
-                  key={s.setor}
-                  className="flex items-center justify-between bg-gray-50 border rounded-lg px-3 py-2"
+          <div className="flex flex-col md:flex-row gap-2 md:items-center">
+            <div className="flex flex-wrap gap-2">
+              {QUICK_PERIODS.map((p) => (
+                <Chip
+                  key={p.key}
+                  active={periodMode === p.key}
+                  onClick={() => setPeriodMode(p.key)}
+                  title="Trocar período"
                 >
-                  <div className="text-xs font-black">{s.setor}</div>
-                  <div className="text-xs font-black text-gray-700">
-                    {s.total} <span className="text-[10px] text-gray-500">({s.pct}%)</span>
-                  </div>
-                </div>
+                  {p.label}
+                </Chip>
               ))}
-              {(kpis.setores || []).length === 0 ? (
-                <div className="text-sm font-bold text-gray-500">
-                  Sem dados no período.
-                </div>
-              ) : null}
             </div>
+
+            {periodMode === "INTERVALO" && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="date"
+                  className="border rounded-lg px-3 py-2 text-xs font-black"
+                  value={inicio}
+                  onChange={(e) => setInicio(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="border rounded-lg px-3 py-2 text-xs font-black"
+                  value={fim}
+                  onChange={(e) => setFim(e.target.value)}
+                />
+              </div>
+            )}
+
+            <button
+              onClick={() => setCompact((v) => !v)}
+              className="px-4 py-2 rounded-lg font-black text-xs bg-white border hover:bg-gray-50 flex items-center gap-2"
+              title="Alternar modo compacto"
+            >
+              <FaFilter />
+              {compact ? "Ver detalhes" : "Modo compacto"}
+            </button>
+
+            <button
+              onClick={recarregarTudo}
+              className="px-4 py-2 rounded-lg font-black text-xs bg-gray-900 text-white hover:bg-black flex items-center gap-2"
+              title="Recarregar"
+            >
+              <FaRedo />
+              Atualizar
+            </button>
           </div>
         </div>
 
-        {/* Série mensal: média GNS/dia */}
-        <div className="bg-white border rounded-2xl p-4 shadow-sm mt-4">
-          <div className="flex items-end justify-between gap-2">
-            <div>
-              <div className="text-[10px] font-black text-gray-500 uppercase">
-                Média de GNS por dia (mês a mês)
-              </div>
-              <div className="text-lg font-black text-gray-900">
-                Histórico (até 18 meses)
-              </div>
-            </div>
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Base: total GNS / dias com PCM no mês
-            </div>
-          </div>
-
-          <div className="mt-3 overflow-x-auto border rounded-xl">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                  <th className="p-3 border-r whitespace-nowrap">Mês</th>
-                  <th className="p-3 border-r text-center whitespace-nowrap">Dias PCM</th>
-                  <th className="p-3 border-r text-center whitespace-nowrap">Total GNS</th>
-                  <th className="p-3 text-center whitespace-nowrap">Média GNS/dia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {serieParaTabela.map((r) => (
-                  <tr key={r.mes} className="border-b">
-                    <td className="p-3 border-r font-black">{r.mes}</td>
-                    <td className="p-3 border-r text-center font-black">{r.dias_com_pcm}</td>
-                    <td className="p-3 border-r text-center font-black">{r.total_gns}</td>
-                    <td className="p-3 text-center font-black">
-                      <span className="px-2 py-1 rounded-full bg-gray-900 text-white text-xs font-black">
-                        {r.media_gns_dia}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {serieParaTabela.length === 0 && !loading ? (
-                  <tr>
-                    <td colSpan={4} className="p-6 text-center text-gray-500 font-bold">
-                      Sem histórico suficiente.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+        {/* Filtro por tipo de dia */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {DAY_FILTERS.map((p) => (
+            <Chip
+              key={p.key}
+              active={dayFilter === p.key}
+              onClick={() => setDayFilter(p.key)}
+              title="Filtrar por tipo de dia"
+            >
+              {p.label}
+            </Chip>
+          ))}
         </div>
 
-        {/* TOP 5s */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Top 5 — dias parado (reincidentes)
-            </div>
-            <div className="mt-3 overflow-x-auto border rounded-xl">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                    <th className="p-3 border-r">Frota</th>
-                    <th className="p-3 border-r text-center">Entradas</th>
-                    <th className="p-3 text-center">Dias parado (soma)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topParado.map((r) => (
-                    <tr
-                      key={r.frota}
-                      className="border-b hover:bg-gray-50 cursor-pointer"
-                      onClick={() => abrirDetalheFrota(r.frota)}
-                      title="Clique para ver detalhes"
-                    >
-                      <td className="p-3 border-r font-black">{r.frota}</td>
-                      <td className="p-3 border-r text-center font-black">{r.entradas}</td>
-                      <td className="p-3 text-center font-black">{r.diasParadoTotal}</td>
-                    </tr>
-                  ))}
-                  {topParado.length === 0 && !loading ? (
-                    <tr>
-                      <td colSpan={3} className="p-6 text-center text-gray-500 font-bold">
-                        Nenhuma reincidência no período.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+        {errMsg ? (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm font-bold flex items-center gap-2">
+            <FaExclamationTriangle />
+            {errMsg}
           </div>
+        ) : null}
 
-          <div className="bg-white border rounded-2xl p-4 shadow-sm">
-            <div className="text-[10px] font-black text-gray-500 uppercase">
-              Top 5 — reincidência (entradas)
-            </div>
-            <div className="mt-3 overflow-x-auto border rounded-xl">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                    <th className="p-3 border-r">Frota</th>
-                    <th className="p-3 border-r text-center">Entradas</th>
-                    <th className="p-3 text-center">Última entrada</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topReinc.map((r) => (
-                    <tr
-                      key={r.frota}
-                      className="border-b hover:bg-gray-50 cursor-pointer"
-                      onClick={() => abrirDetalheFrota(r.frota)}
-                      title="Clique para ver detalhes"
-                    >
-                      <td className="p-3 border-r font-black">{r.frota}</td>
-                      <td className="p-3 border-r text-center font-black">{r.entradas}</td>
-                      <td className="p-3 text-center font-black">
-                        {fmtBRDateTime(r.ultimaEntrada)}
-                      </td>
-                    </tr>
-                  ))}
-                  {topReinc.length === 0 && !loading ? (
-                    <tr>
-                      <td colSpan={3} className="p-6 text-center text-gray-500 font-bold">
-                        Nenhuma reincidência no período.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+        {loading ? (
+          <div className="mt-4 text-sm font-bold text-gray-500">
+            Carregando resumo…
           </div>
-        </div>
-
-        {/* REINCIDÊNCIAS (tabela + search) */}
-        <div className="bg-white border rounded-2xl p-4 shadow-sm mt-4">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black text-gray-500 uppercase">
-                Reincidências no período
-              </div>
-              <div className="text-lg font-black text-gray-900">
-                Clique na frota para ver descrições e ciclos
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <FaSearch className="text-gray-500" />
-              <input
-                className="w-full md:w-[320px] border rounded-lg px-3 py-2 text-sm font-semibold"
-                value={reincQuery}
-                onChange={(e) => setReincQuery(e.target.value)}
-                placeholder="Buscar frota…"
-              />
-              {reincQuery ? (
-                <button
-                  onClick={() => setReincQuery("")}
-                  className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-                  title="Limpar"
-                >
-                  <FaTimes />
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="mt-3 overflow-x-auto border rounded-xl">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
-                  <th className="p-3 border-r whitespace-nowrap">Frota</th>
-                  <th className="p-3 border-r text-center whitespace-nowrap">Entradas</th>
-                  <th className="p-3 border-r text-center whitespace-nowrap">Dias parado (soma)</th>
-                  <th className="p-3 border-r whitespace-nowrap">Última entrada</th>
-                  <th className="p-3 whitespace-nowrap">Preview descrições (últimas)</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {reincFiltradas.map((r) => (
-                  <tr
-                    key={r.frota}
-                    className="border-b hover:bg-gray-50 cursor-pointer"
-                    onClick={() => abrirDetalheFrota(r.frota)}
-                    title="Clique para abrir detalhes"
-                  >
-                    <td className="p-3 border-r font-black">{r.frota}</td>
-                    <td className="p-3 border-r text-center font-black">
-                      <span className="px-2 py-1 rounded-full bg-gray-900 text-white text-xs font-black">
-                        {r.entradas}
-                      </span>
-                    </td>
-                    <td className="p-3 border-r text-center font-black">
-                      {r.diasParadoTotal}
-                    </td>
-                    <td className="p-3 border-r font-black text-[11px]">
-                      {fmtBRDateTime(r.ultimaEntrada)}
-                    </td>
-                    <td className="p-3 text-[11px] font-semibold uppercase">
-                      {(r.descricoesPreview || []).join(" • ") || "—"}
-                    </td>
-                  </tr>
-                ))}
-
-                {(!reincFiltradas.length && !loading) ? (
-                  <tr>
-                    <td colSpan={5} className="p-6 text-center text-gray-500 font-bold">
-                      Nenhuma reincidência encontrada no período.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-3 text-[11px] text-gray-600 font-semibold">
-            Regra usada: frota com <span className="font-black">2+ entradas</span> no período selecionado (base por data_entrada; fallback por data_referencia quando data_entrada é nula).
-          </div>
-        </div>
-
-        {/* MODAL */}
-        <FrotaDetalheModal
-          open={modalOpen}
-          onClose={fecharModal}
-          frota={modalFrota}
-          rows={modalRows}
-          periodo={periodoAtual}
-        />
+        ) : null}
       </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            Dias com PCM
+          </div>
+          <div className="text-3xl font-black mt-1">{kpis.diasComPCM}</div>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            Registros no período
+          </div>
+          <div className="text-3xl font-black mt-1">{kpis.totalPeriodo}</div>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            Em aberto
+          </div>
+          <div className="text-3xl font-black mt-1 text-red-600">
+            {kpis.totalAbertos}
+          </div>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            Total GNS
+          </div>
+          <div className="text-3xl font-black mt-1">{kpis.totalGNS}</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase mt-1">
+            {kpis.pctGNS}% do período
+          </div>
+        </div>
+
+        <div className="bg-gray-900 text-white rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-300 uppercase">
+            Média GNS/dia
+          </div>
+          <div className="text-4xl font-black mt-1">{kpis.mediaGNSDia}</div>
+        </div>
+
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-black text-gray-500 uppercase">
+            Frotas reincidentes
+          </div>
+          <div className="text-3xl font-black mt-1">{kpis.frotasReincidentes}</div>
+          <div className="text-[10px] font-black text-gray-500 uppercase mt-1">
+            Regra: entrou → saiu → entrou
+          </div>
+        </div>
+      </div>
+
+      {/* Aging sempre visível */}
+      <div className="mt-4">
+        <div className="bg-white border rounded-2xl p-4 shadow-sm">
+          <AgingBar buckets={kpis.aging} />
+        </div>
+      </div>
+
+      {/* Reincidências (principal) */}
+      <div className="bg-white border rounded-2xl p-4 shadow-sm mt-4">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-black text-gray-500 uppercase">
+              Reincidências no período
+            </div>
+            <div className="text-lg font-black text-gray-900">
+              (Reentrada real) — clique na frota para ver ciclos e descrições
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <FaSearch className="text-gray-500" />
+            <input
+              className="w-full md:w-[320px] border rounded-lg px-3 py-2 text-sm font-semibold"
+              value={reincQuery}
+              onChange={(e) => setReincQuery(e.target.value)}
+              placeholder="Buscar frota…"
+            />
+            {reincQuery ? (
+              <button
+                onClick={() => setReincQuery("")}
+                className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+                title="Limpar"
+              >
+                <FaTimes />
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 overflow-x-auto border rounded-xl">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                <th className="p-3 border-r whitespace-nowrap">Frota</th>
+                <th className="p-3 border-r text-center whitespace-nowrap">Reentradas</th>
+                <th className="p-3 border-r text-center whitespace-nowrap">Entradas</th>
+                <th className="p-3 border-r text-center whitespace-nowrap">Dias parado (soma)</th>
+                <th className="p-3 border-r whitespace-nowrap">Última entrada</th>
+                <th className="p-3 whitespace-nowrap">Preview descrições</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {reincFiltradas.slice(0, 80).map((r) => (
+                <tr
+                  key={r.frota}
+                  className="border-b hover:bg-gray-50 cursor-pointer"
+                  onClick={() => abrirDetalheFrota(r.frota)}
+                  title="Clique para abrir detalhes"
+                >
+                  <td className="p-3 border-r font-black">{r.frota}</td>
+                  <td className="p-3 border-r text-center font-black">
+                    <span className="px-2 py-1 rounded-full bg-gray-900 text-white text-xs font-black">
+                      {r.reentradas}
+                    </span>
+                  </td>
+                  <td className="p-3 border-r text-center font-black">{r.entradas}</td>
+                  <td className="p-3 border-r text-center font-black">
+                    {r.diasParadoTotal}
+                  </td>
+                  <td className="p-3 border-r font-black text-[11px]">
+                    {fmtBRDateTime(r.ultimaEntrada)}
+                  </td>
+                  <td className="p-3 text-[11px] font-semibold uppercase">
+                    {(r.descricoesPreview || []).join(" • ") || "—"}
+                  </td>
+                </tr>
+              ))}
+
+              {(!reincFiltradas.length && !loading) ? (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-gray-500 font-bold">
+                    Nenhuma reincidência encontrada no período.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 text-[11px] text-gray-600 font-semibold">
+          Regra usada: frota com <span className="font-black">reentrada real</span>{" "}
+          (entrada anterior precisa ter <span className="font-black">data_saida</span>{" "}
+          e a próxima entrada ocorre depois da saída).
+        </div>
+      </div>
+
+      {/* Extras (reduz informação com compact) */}
+      {!compact ? (
+        <div className="mt-4 grid grid-cols-1 gap-3">
+          <Section
+            title="Pareto"
+            subtitle="Setor e Categoria (Top 6)"
+            open={secParetoOpen}
+            onToggle={() => setSecParetoOpen((v) => !v)}
+            right={<span className="text-[10px] font-black text-gray-500 uppercase">Impacto</span>}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="bg-white border rounded-xl p-3">
+                <div className="text-[10px] font-black text-gray-500 uppercase">
+                  Setor
+                </div>
+                <div className="mt-2 space-y-2">
+                  {(kpis.setores || []).slice(0, 6).map((s) => (
+                    <div
+                      key={s.setor}
+                      className="flex items-center justify-between bg-gray-50 border rounded-lg px-3 py-2"
+                    >
+                      <div className="text-xs font-black">{s.setor}</div>
+                      <div className="text-xs font-black text-gray-700">
+                        {s.total}{" "}
+                        <span className="text-[10px] text-gray-500">
+                          ({s.pct}%)
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {(kpis.setores || []).length === 0 ? (
+                    <div className="text-sm font-bold text-gray-500">
+                      Sem dados no período.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="bg-white border rounded-xl p-3">
+                <div className="text-[10px] font-black text-gray-500 uppercase">
+                  Categoria
+                </div>
+                <div className="mt-2 space-y-2">
+                  {(kpis.categorias || []).slice(0, 6).map((c) => (
+                    <div
+                      key={c.categoria}
+                      className="flex items-center justify-between bg-gray-50 border rounded-lg px-3 py-2"
+                    >
+                      <div className="text-xs font-black">{c.categoria}</div>
+                      <div className="text-xs font-black text-gray-700">
+                        {c.total}{" "}
+                        <span className="text-[10px] text-gray-500">
+                          ({c.pct}%)
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {(kpis.categorias || []).length === 0 ? (
+                    <div className="text-sm font-bold text-gray-500">
+                      Sem dados no período.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            title="Histórico"
+            subtitle="Média de GNS por dia (mês a mês)"
+            open={secSerieOpen}
+            onToggle={() => setSecSerieOpen((v) => !v)}
+            right={<span className="text-[10px] font-black text-gray-500 uppercase">Até 18 meses</span>}
+          >
+            <div className="overflow-x-auto border rounded-xl">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                    <th className="p-3 border-r whitespace-nowrap">Mês</th>
+                    <th className="p-3 border-r text-center whitespace-nowrap">Dias PCM</th>
+                    <th className="p-3 border-r text-center whitespace-nowrap">Total GNS</th>
+                    <th className="p-3 text-center whitespace-nowrap">Média GNS/dia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(serieMensal || []).map((r) => (
+                    <tr key={r.mes} className="border-b">
+                      <td className="p-3 border-r font-black">{r.mes}</td>
+                      <td className="p-3 border-r text-center font-black">
+                        {r.dias_com_pcm}
+                      </td>
+                      <td className="p-3 border-r text-center font-black">
+                        {r.total_gns}
+                      </td>
+                      <td className="p-3 text-center font-black">
+                        <span className="px-2 py-1 rounded-full bg-gray-900 text-white text-xs font-black">
+                          {r.media_gns_dia}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {(serieMensal || []).length === 0 && !loading ? (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="p-6 text-center text-gray-500 font-bold"
+                      >
+                        Sem histórico suficiente.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 text-[11px] text-gray-600 font-semibold">
+              Base: total GNS / dias com PCM no mês.
+            </div>
+          </Section>
+
+          <Section
+            title="Top 5"
+            subtitle="Dias parado e Reentradas"
+            open={secTopsOpen}
+            onToggle={() => setSecTopsOpen((v) => !v)}
+            right={<span className="text-[10px] font-black text-gray-500 uppercase">Prioridades</span>}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="bg-white border rounded-xl p-3">
+                <div className="text-[10px] font-black text-gray-500 uppercase">
+                  Top 5 — dias parado (reincidentes)
+                </div>
+                <div className="mt-3 overflow-x-auto border rounded-xl">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                        <th className="p-3 border-r">Frota</th>
+                        <th className="p-3 border-r text-center">Reentradas</th>
+                        <th className="p-3 text-center">Dias parado (soma)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topParado.map((r) => (
+                        <tr
+                          key={r.frota}
+                          className="border-b hover:bg-gray-50 cursor-pointer"
+                          onClick={() => abrirDetalheFrota(r.frota)}
+                          title="Clique para ver detalhes"
+                        >
+                          <td className="p-3 border-r font-black">{r.frota}</td>
+                          <td className="p-3 border-r text-center font-black">
+                            {r.reentradas}
+                          </td>
+                          <td className="p-3 text-center font-black">
+                            {r.diasParadoTotal}
+                          </td>
+                        </tr>
+                      ))}
+                      {topParado.length === 0 && !loading ? (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="p-6 text-center text-gray-500 font-bold"
+                          >
+                            Nenhuma reincidência no período.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white border rounded-xl p-3">
+                <div className="text-[10px] font-black text-gray-500 uppercase">
+                  Top 5 — reentradas
+                </div>
+                <div className="mt-3 overflow-x-auto border rounded-xl">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-600 border-b font-black">
+                        <th className="p-3 border-r">Frota</th>
+                        <th className="p-3 border-r text-center">Reentradas</th>
+                        <th className="p-3 text-center">Última entrada</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topReinc.map((r) => (
+                        <tr
+                          key={r.frota}
+                          className="border-b hover:bg-gray-50 cursor-pointer"
+                          onClick={() => abrirDetalheFrota(r.frota)}
+                          title="Clique para ver detalhes"
+                        >
+                          <td className="p-3 border-r font-black">{r.frota}</td>
+                          <td className="p-3 border-r text-center font-black">
+                            <span className="px-2 py-1 rounded-full bg-gray-900 text-white text-xs font-black">
+                              {r.reentradas}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center font-black">
+                            {fmtBRDateTime(r.ultimaEntrada)}
+                          </td>
+                        </tr>
+                      ))}
+                      {topReinc.length === 0 && !loading ? (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="p-6 text-center text-gray-500 font-bold"
+                          >
+                            Nenhuma reincidência no período.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </Section>
+        </div>
+      ) : null}
+
+      {/* MODAL */}
+      <FrotaDetalheModal
+        open={modalOpen}
+        onClose={fecharModal}
+        frota={modalFrota}
+        rows={modalRows}
+        periodo={periodoAtual}
+      />
+    </div>
   );
 }
