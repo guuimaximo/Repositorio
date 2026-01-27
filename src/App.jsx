@@ -8,7 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import InicioRapido from "./pages/InicioRapido";
 
 import CentralTratativas from "./pages/CentralTratativas";
-import TratativasResumo from "./pages/TratativasResumo"; // ✅ NOVO
+import TratativasResumo from "./pages/TratativasResumo";
 import TratarTratativa from "./pages/TratarTratativa";
 import ConsultarTratativa from "./pages/ConsultarTratativa";
 import SolicitacaoTratativa from "./pages/SolicitacaoTratativa";
@@ -29,6 +29,7 @@ import KMRodado from "./pages/KMRodado";
 
 import PCMInicio from "./pages/PCMInicio";
 import PCMDiario from "./pages/PCMDiario";
+import PCMResumo from "./pages/PCMResumo"; // ✅ NOVO
 
 import Usuarios from "./pages/Usuarios";
 import RequireAuth from "./routes/RequireAuth";
@@ -93,11 +94,12 @@ export default function App() {
 
           {/* ✅ PCM */}
           <Route path="/pcm-inicio" element={<PCMInicio />} />
+          <Route path="/pcm-resumo" element={<PCMResumo />} /> {/* ✅ NOVO */}
           <Route path="/pcm-diario/:id" element={<PCMDiario />} />
 
           {/* Tratativas */}
           <Route path="/central" element={<CentralTratativas />} />
-          <Route path="/tratativas-resumo" element={<TratativasResumo />} /> {/* ✅ NOVO */}
+          <Route path="/tratativas-resumo" element={<TratativasResumo />} />
           <Route path="/tratar/:id" element={<TratarTratativa />} />
           <Route path="/consultar/:id" element={<ConsultarTratativa />} />
           <Route path="/solicitar" element={<SolicitacaoTratativa />} />
