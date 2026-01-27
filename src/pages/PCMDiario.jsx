@@ -84,6 +84,27 @@ function buildDiff(before, after, keys) {
   return diff;
 }
 
+/**
+ * PCM editável até 10:00 do dia seguinte (horário local do navegador)
+ * Ex:
+ * dataRef = 2026-01-20
+ * deadline = 2026-01-21 10:00:00
+ */
+function canEditPCM(dataRefISO) {
+  try {
+    if (!dataRefISO) return false;
+
+    const ref = new Date(`${dataRefISO}T00:00:00`);
+    const deadline = new Date(ref);
+    deadline.setDate(deadline.getDate() + 1);
+    deadline.setHours(10, 0, 0, 0);
+
+    return Date.now() <= deadline.getTime();
+  } catch {
+    return false;
+  }
+}
+
 /* ============================
    UI: MULTISELECT (CHIPS)
 ============================ */
@@ -401,6 +422,9 @@ export default function PCMDiario() {
     observacao: "",
   });
 
+  // ✅ regra de bloqueio (até 10:00 do dia seguinte)
+  const pcmEditavel = useMemo(() => canEditPCM(pcmInfo?.data_referencia), [pcmInfo?.data_referencia]);
+
   const buscarDados = useCallback(async () => {
     setLoading(true);
 
@@ -457,6 +481,10 @@ export default function PCMDiario() {
   }
 
   async function lancarVeiculo() {
+    if (!pcmEditavel) {
+      return alert("PCM fechado: permitido editar somente até 10:00 do dia seguinte.");
+    }
+
     const os = String(form.ordem_servico || "").trim();
 
     if (!form.frota || !form.descricao) return alert("Preencha Frota e Descrição.");
@@ -520,6 +548,10 @@ export default function PCMDiario() {
   }
 
   async function liberarVeiculo(v) {
+    if (!pcmEditavel) {
+      return alert("PCM fechado: não é permitido liberar veículos após 10:00 do dia seguinte.");
+    }
+
     if (!confirm(`Confirmar liberação da frota ${v.frota}?`)) return;
 
     const { error } = await supabase
@@ -549,6 +581,10 @@ export default function PCMDiario() {
   }
 
   async function salvarEdicaoVeiculo(payloadUpdate, acao, deCat, paraCat, diff) {
+    if (!pcmEditavel) {
+      return alert("PCM fechado: não é permitido editar/mover veículos após 10:00 do dia seguinte.");
+    }
+
     const v = editVeiculo;
     if (!v?.id) return;
 
@@ -745,6 +781,15 @@ export default function PCMDiario() {
             </h1>
             <p className="text-xs text-gray-500 font-semibold">
               Referência: <span className="font-black">{pcmInfo?.data_referencia || "-"}</span>
+              {!pcmEditavel ? (
+                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-gray-200 text-gray-700 text-[10px] font-black">
+                  SOMENTE CONSULTA (fechado)
+                </span>
+              ) : (
+                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 text-[10px] font-black">
+                  EDITÁVEL (até 10:00 do dia seguinte)
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -811,6 +856,7 @@ export default function PCMDiario() {
               className="p-2 rounded text-black text-sm font-bold"
               value={form.frota}
               onChange={(e) => setForm({ ...form, frota: e.target.value })}
+              disabled={!pcmEditavel}
             >
               <option value="">Selecione...</option>
               {prefixos.map((p) => (
@@ -827,6 +873,7 @@ export default function PCMDiario() {
               className="p-2 rounded text-black text-sm font-bold"
               value={form.categoria}
               onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+              disabled={!pcmEditavel}
             >
               <option value="GNS">GNS (Vermelho)</option>
               <option value="NOITE">Liberação Noturno (Branco)</option>
@@ -841,6 +888,7 @@ export default function PCMDiario() {
               className="p-2 rounded text-black text-sm font-bold"
               value={form.setor}
               onChange={(e) => setForm({ ...form, setor: e.target.value })}
+              disabled={!pcmEditavel}
             >
               {SETORES.map((s) => (
                 <option key={s} value={s}>
@@ -861,6 +909,7 @@ export default function PCMDiario() {
               onChange={(e) => setForm({ ...form, ordem_servico: e.target.value.replace(/\D/g, "") })}
               placeholder="Somente números"
               required
+              disabled={!pcmEditavel}
             />
           </div>
 
@@ -872,12 +921,19 @@ export default function PCMDiario() {
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               placeholder="Defeito relatado..."
+              disabled={!pcmEditavel}
             />
           </div>
 
           <button
             onClick={lancarVeiculo}
-            className="bg-green-600 hover:bg-green-500 text-white p-2 rounded font-black flex items-center justify-center gap-2 h-[40px]"
+            disabled={!pcmEditavel}
+            className={`p-2 rounded font-black flex items-center justify-center gap-2 h-[40px] ${
+              !pcmEditavel
+                ? "bg-gray-600 text-white opacity-60 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-500 text-white"
+            }`}
+            title={!pcmEditavel ? "PCM fechado" : "Lançar"}
           >
             <FaTruckLoading size={18} /> LANÇAR
           </button>
@@ -890,6 +946,7 @@ export default function PCMDiario() {
               className="p-2 rounded text-black text-sm font-bold"
               value={form.observacao}
               onChange={(e) => setForm({ ...form, observacao: e.target.value })}
+              disabled={!pcmEditavel}
             >
               <option value="">Selecione...</option>
               {OBS_OPCOES.map((o) => (
@@ -1084,19 +1141,30 @@ export default function PCMDiario() {
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => liberarVeiculo(v)}
-                            className="bg-green-500 hover:bg-green-400 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
-                            title="Liberar veículo"
+                            disabled={!pcmEditavel}
+                            className={`p-2 rounded-full shadow-lg transition-transform ${
+                              !pcmEditavel
+                                ? "bg-gray-400 text-white opacity-60 cursor-not-allowed"
+                                : "bg-green-500 hover:bg-green-400 text-white hover:scale-110"
+                            }`}
+                            title={!pcmEditavel ? "PCM fechado" : "Liberar veículo"}
                           >
                             <FaCheckCircle size={16} />
                           </button>
 
                           <button
                             onClick={() => {
+                              if (!pcmEditavel) return alert("PCM fechado: não é permitido editar/mover após 10:00 do dia seguinte.");
                               setEditVeiculo(v);
                               setEditOpen(true);
                             }}
-                            className="bg-black/20 hover:bg-black/30 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110"
-                            title="Editar / Mover"
+                            disabled={!pcmEditavel}
+                            className={`p-2 rounded-full shadow-lg transition-transform ${
+                              !pcmEditavel
+                                ? "bg-gray-400 text-white opacity-60 cursor-not-allowed"
+                                : "bg-black/20 hover:bg-black/30 text-white hover:scale-110"
+                            }`}
+                            title={!pcmEditavel ? "PCM fechado" : "Editar / Mover"}
                           >
                             <FaEdit size={16} />
                           </button>
