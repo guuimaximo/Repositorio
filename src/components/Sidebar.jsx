@@ -31,6 +31,10 @@ import {
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
+/* =========================
+   ROTAS
+========================= */
+
 // ✅ Rotas Diesel
 const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
@@ -40,41 +44,51 @@ const DIESEL_ROUTES = {
   agente: "/desempenho-diesel-agente",
 };
 
-// ✅ Rotas PCM
+// ✅ Rotas PCM (ABA)
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
-  inicio: "/pcm-inicio", // "PCM do dia" (tela que abre/cria)
-  diarioPrefix: "/pcm-diario", // rota dinâmica /pcm-diario/:id (não é link fixo)
+  inicio: "/pcm-inicio", // ✅ PCM do dia (abre PCMInicio)
+  diario: "/pcm-diario", // base (com :id)
 };
 
-// ✅ Mapa de acesso por nível
+/* =========================
+   ACESSO POR NÍVEL
+========================= */
+
 // Regra: "/" (Início executivo) é APENAS Gestor/Adm.
 // Para demais, use "/inicio-basico".
 const ACCESS = {
   Administrador: "ALL",
+
   Gestor: [
     "/",
     "/inove",
+    "/inicio-basico",
+
     "/solicitar",
     "/central",
     "/tratativas-resumo",
+
     "/lancar-avaria",
     "/avarias-em-revisao",
     "/aprovar-avarias",
     "/cobrancas",
     "/avarias-resumo",
+
     "/sos-solicitacao",
     "/sos-fechamento",
     "/sos-tratamento",
     "/sos-central",
     "/sos-dashboard",
+
     "/km-rodado",
-    "/inicio-basico",
 
     // ✅ PCM
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
+    PCM_ROUTES.diario,
 
+    // ✅ Diesel
     ...Object.values(DIESEL_ROUTES),
   ],
 
@@ -84,21 +98,32 @@ const ACCESS = {
   Manutenção: [
     "/inicio-basico",
     "/solicitar",
+
     "/lancar-avaria",
     "/avarias-em-revisao",
     "/aprovar-avarias",
+
     "/sos-fechamento",
     "/sos-tratamento",
     "/sos-central",
     "/sos-dashboard",
+
     "/km-rodado",
 
     // ✅ PCM
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
+    PCM_ROUTES.diario,
   ],
 
-  CCO: ["/inicio-basico", "/solicitar", "/sos-solicitacao", "/sos-fechamento", "/sos-dashboard", "/km-rodado"],
+  CCO: [
+    "/inicio-basico",
+    "/solicitar",
+    "/sos-solicitacao",
+    "/sos-fechamento",
+    "/sos-dashboard",
+    "/km-rodado",
+  ],
 };
 
 // helper de acesso
@@ -111,11 +136,11 @@ function canSee(user, path) {
 }
 
 export default function Sidebar() {
+  const [pcmOpen, setPcmOpen] = useState(false); // ✅ NOVO (ABA PCM)
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
   const [intervencoesOpen, setIntervencoesOpen] = useState(false);
-  const [pcmOpen, setPcmOpen] = useState(false); // ✅ NOVO (ABA PCM)
   const [configOpen, setConfigOpen] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
@@ -136,13 +161,13 @@ export default function Sidebar() {
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
 
-      // ✅ PCM (agora é menu com 2 itens)
+      // ✅ PCM como ABA com 2 itens
       pcm: {
         label: "PCM",
         icon: <FaClipboardList />,
         tabs: [
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
-          { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
+          { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> }, // ✅ PCMInicio
         ],
       },
 
@@ -207,10 +232,8 @@ export default function Sidebar() {
 
   const showDesempenhoDiesel = isAdmin || isGestor;
 
-  // ✅ PCM aparece p/ Admin/Gestor/Manutenção e se tiver pelo menos 1 item visível
-  const showPCM =
-    (isAdmin || isGestor || isManutencao) &&
-    links.pcm.tabs.some((t) => canSee(user, t.path));
+  // ✅ PCM: aparece para Adm/Gestor/Manutenção
+  const showPCM = isAdmin || isGestor || isManutencao;
 
   // ✅ Tratativas aparecem para quem tiver ao menos 1 item visível
   const showTratativas = links.tratativas.some((l) => {
@@ -232,7 +255,9 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center">
-            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
+            <p className="text-sm font-semibold text-white">
+              Olá, {user.nome?.split(" ")[0]} 👋
+            </p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
           </div>
         )}
@@ -242,23 +267,26 @@ export default function Sidebar() {
         {/* ✅ Início para Gestor/Adm ("/") */}
         {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
-            {links.inicioExecutivo.icon} <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
+            {links.inicioExecutivo.icon}
+            <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
           </NavLink>
         )}
 
         {/* ✅ Início básico para demais ("/inicio-basico") */}
         {showInicioBasico && canSee(user, links.inicioBasico.path) && (
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
-            {links.inicioBasico.icon} <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
+            {links.inicioBasico.icon}
+            <span className="whitespace-nowrap">{links.inicioBasico.label}</span>
           </NavLink>
         )}
 
-        {/* ✅ PCM (ABA com 2 itens: Resumo / PCM do dia) */}
+        {/* ✅ PCM (ABA) */}
         {showPCM && (
           <>
             <button
               onClick={() => setPcmOpen(!pcmOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
                 {links.pcm.icon}
@@ -272,7 +300,8 @@ export default function Sidebar() {
                 {links.pcm.tabs.map((t) =>
                   canSee(user, t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
-                      {t.icon} <span className="whitespace-nowrap">{t.label}</span>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
                     </NavLink>
                   ) : null
                 )}
@@ -287,6 +316,7 @@ export default function Sidebar() {
             <button
               onClick={() => setDesempenhoDieselOpen(!desempenhoDieselOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
                 {links.desempenhoDiesel.icon}
@@ -300,7 +330,8 @@ export default function Sidebar() {
                 {links.desempenhoDiesel.tabs.map((t) =>
                   canSee(user, t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
-                      {t.icon} <span className="whitespace-nowrap">{t.label}</span>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
                     </NavLink>
                   ) : null
                 )}
@@ -309,12 +340,13 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Tratativas (Resumo -> Solicitação -> Central) */}
+        {/* ✅ Tratativas */}
         {showTratativas && (
           <>
             <button
               onClick={() => setTratativasOpen(!tratativasOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3">
                 <FaClipboardList /> <span>Tratativas</span>
@@ -345,6 +377,7 @@ export default function Sidebar() {
             <button
               onClick={() => setAvariasOpen(!avariasOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3">
                 <FaTools /> <span>Avarias</span>
@@ -374,6 +407,7 @@ export default function Sidebar() {
             <button
               onClick={() => setIntervencoesOpen(!intervencoesOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3">
                 <FaCogs /> <span>Intervenções</span>
@@ -402,6 +436,7 @@ export default function Sidebar() {
             <button
               onClick={() => setConfigOpen(!configOpen)}
               className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
             >
               <div className="flex items-center gap-3">
                 <FaUserCog /> <span>Configurações</span>
@@ -424,6 +459,7 @@ export default function Sidebar() {
         <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-sm"
+          type="button"
         >
           <FaSignOutAlt /> <span>Sair</span>
         </button>
