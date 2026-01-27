@@ -1,6 +1,5 @@
 // src/pages/PCMResumo.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import Layout from "../components/tatico/Layout";
 import { supabase } from "../supabase";
 import {
   FaSearch,
@@ -703,7 +702,6 @@ export default function PCMResumo() {
   }, []);
 
   return (
-    <Layout>
       <div className="min-h-screen bg-gray-50 p-4">
         {/* HEADER */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border">
@@ -1089,6 +1087,5 @@ export default function PCMResumo() {
           periodo={periodoAtual}
         />
       </div>
-    </Layout>
   );
 }
