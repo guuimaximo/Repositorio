@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
-import logoInova from "../assets/logoInovaQuatai.png";
+import logoInova from "../assets/logoInovaQuatai.png"; // Certifique-se que o caminho está certo
 import { useAuth } from "../context/AuthContext";
 import { 
   User, Lock, LogIn, UserPlus, Eye, EyeOff, 
@@ -37,14 +37,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Estados do Formulário
-  const [loginInput, setLoginInput] = useState(""); // Serve para Login OU Email no login
+  const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState(""); // Apenas cadastro
+  const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
 
-  // Estado de Força da Senha
   const [passwordMetrics, setPasswordMetrics] = useState({
     score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false
   });
@@ -75,7 +73,6 @@ export default function Login() {
     setPasswordMetrics({ ...metrics, score });
   }, [senha, isCadastro]);
 
-  // --- LÓGICA DE LOGIN (USUÁRIO OU EMAIL) ---
   async function handleEntrar(e) {
     e.preventDefault();
     const inputTrim = loginInput.trim();
@@ -88,19 +85,17 @@ export default function Login() {
 
     setLoading(true);
 
-    // Consulta otimizada: Verifica se 'login' OU 'email' batem com o input
     const { data, error } = await supabase
       .from("usuarios_aprovadores")
       .select("*")
-      .or(`login.eq.${inputTrim},email.eq.${inputTrim}`) // <--- MUDANÇA PRINCIPAL AQUI
+      .or(`login.eq.${inputTrim},email.eq.${inputTrim}`)
       .eq("senha", senhaTrim)
       .eq("ativo", true)
-      .maybeSingle(); // maybeSingle evita erro se não achar, retorna null
+      .maybeSingle();
 
     setLoading(false);
 
     if (error) {
-      console.error(error);
       alert("Erro ao tentar fazer login. Tente novamente.");
       return;
     }
@@ -135,7 +130,6 @@ export default function Login() {
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
-  // --- LÓGICA DE CADASTRO (EVITAR DUPLICIDADE) ---
   async function handleCadastro(e) {
     e.preventDefault();
     const nomeTrim = nome.trim();
@@ -160,7 +154,6 @@ export default function Login() {
 
     setLoading(true);
 
-    // 1. Verificar Duplicidade (Login ou Email já existem?)
     const { data: existingUser, error: checkError } = await supabase
       .from("usuarios_aprovadores")
       .select("id")
@@ -169,17 +162,16 @@ export default function Login() {
 
     if (checkError) {
       setLoading(false);
-      alert("Erro ao verificar disponibilidade de dados.");
+      alert("Erro ao verificar dados.");
       return;
     }
 
     if (existingUser) {
       setLoading(false);
-      alert("Este Usuário ou E-mail já estão cadastrados no sistema.");
+      alert("Este Usuário ou E-mail já estão cadastrados.");
       return;
     }
     
-    // 2. Inserir Novo Usuário
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome: nomeTrim,
@@ -197,7 +189,7 @@ export default function Login() {
 
     if (error) {
       if (error.message.includes('column "setor"')) {
-        alert("Erro técnico: Coluna 'setor' ausente no banco. Contate o suporte.");
+        alert("Erro técnico: Coluna 'setor' ausente no banco.");
       } else {
         alert("Erro ao cadastrar: " + error.message);
       }
@@ -228,7 +220,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
       
-      {/* Coluna Esquerda (Branding) */}
+      {/* --- LADO ESQUERDO: Branding (Desktop) --- */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
@@ -246,10 +238,19 @@ export default function Login() {
         <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
-      {/* Coluna Direita (Formulário) */}
+      {/* --- LADO DIREITO: Formulário --- */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           
+          {/* ✅ CORREÇÃO: LOGO MOBILE (Visível apenas em telas menores < lg) */}
+          <div className="lg:hidden flex justify-center mb-6">
+             <img 
+               src={logoInova} 
+               alt="Logo Inova" 
+               className="w-32 h-auto" // Tamanho ajustado para mobile
+             />
+          </div>
+
           <div className="text-center lg:text-left">
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
               {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
@@ -311,7 +312,6 @@ export default function Login() {
                 <LogIn className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="text"
-                  // Mudei o placeholder para indicar que aceita os dois
                   placeholder={isCadastro ? "Usuário (Login) *" : "Usuário ou E-mail *"}
                   value={loginInput}
                   onChange={(e) => setLoginInput(e.target.value)}
