@@ -19,6 +19,9 @@ const SETORES = [
   "Ouvidoria"
 ];
 
+// Regex para validar formato de e-mail (ex: usuario@dominio.com)
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function appendFromInove(url) {
   try {
     const u = new URL(url);
@@ -56,7 +59,6 @@ export default function Login() {
     minChar: false
   });
 
-  // Lógica de Redirecionamento (Preservada)
   const redirectParam = useMemo(() => {
     const sp = new URLSearchParams(location.search);
     const raw = sp.get("redirect");
@@ -146,27 +148,33 @@ export default function Login() {
     const senhaTrim = senha.trim();
     const emailTrim = email.trim();
     
-    // Validações
-    if (!nomeTrim || !loginTrim || !senhaTrim || !setor) {
-      alert("Preencha todos os campos obrigatórios!");
+    // 1. Validação de Campos Vazios
+    if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
+      alert("Todos os campos são obrigatórios. Por favor, preencha tudo.");
       return;
     }
 
+    // 2. Validação de Formato de Email (Rigidez)
+    if (!EMAIL_REGEX.test(emailTrim)) {
+      alert("Por favor, insira um endereço de e-mail válido (ex: nome@empresa.com).");
+      return;
+    }
+
+    // 3. Validação de Força de Senha
     if (passwordMetrics.score < 3) {
-      alert("A senha é muito fraca. Utilize letras maiúsculas, números e caracteres especiais.");
+      alert("Sua senha é muito fraca. Reforce-a com letras maiúsculas, números e símbolos.");
       return;
     }
 
     setLoading(true);
     
-    // Insert com novos campos (setor, email)
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome: nomeTrim,
         login: loginTrim,
         senha: senhaTrim,
-        email: emailTrim || null, // Opcional se vazio
-        setor: setor,
+        email: emailTrim,
+        setor: setor,     // Certifique-se de ter rodado o SQL no Supabase!
         ativo: false,
         nivel: "Pendente",
         criado_em: new Date().toISOString()
@@ -175,11 +183,16 @@ export default function Login() {
     setLoading(false);
 
     if (error) {
-      alert("Erro ao cadastrar: " + error.message);
+      // Tratamento amigável se o erro for a coluna setor faltando
+      if (error.message.includes('column "setor"')) {
+        alert("Erro técnico: Coluna 'setor' não encontrada no banco de dados. Contate o suporte.");
+      } else {
+        alert("Erro ao cadastrar: " + error.message);
+      }
       return;
     }
 
-    alert("Cadastro enviado! Aguarde aprovação do administrador.");
+    alert("Cadastro enviado com sucesso! Aguarde a aprovação.");
     // Reset do form
     setIsCadastro(false);
     setNome("");
@@ -206,10 +219,10 @@ export default function Login() {
         <div className="relative z-10 flex flex-col items-center">
           <img
             src={logoInova}
-            alt="Logo InovaQuatai"
+            alt="Logo Portal Inove"
             className="w-48 mb-8 brightness-0 invert drop-shadow-xl"
           />
-          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">Portal InovaQuatá</h2>
+          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
             Gestão integrada e inteligência de dados para performance industrial.
           </p>
@@ -229,7 +242,7 @@ export default function Login() {
             </h1>
             <p className="mt-2 text-slate-500">
               {isCadastro 
-                ? "Preencha seus dados profissionais para solicitar acesso." 
+                ? "Preencha todos os dados abaixo para solicitar acesso." 
                 : "Entre com suas credenciais para continuar."}
             </p>
           </div>
@@ -245,7 +258,7 @@ export default function Login() {
                     <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                     <input
                       type="text"
-                      placeholder="Nome Completo"
+                      placeholder="Nome Completo *"
                       value={nome}
                       onChange={(e) => setNome(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -253,12 +266,12 @@ export default function Login() {
                     />
                   </div>
 
-                  {/* Email */}
+                  {/* Email com Validação */}
                   <div className="relative group">
                     <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                     <input
                       type="email"
-                      placeholder="Email Corporativo"
+                      placeholder="Email Corporativo *"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -272,11 +285,11 @@ export default function Login() {
                     <select
                       value={setor}
                       onChange={(e) => setSetor(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all appearance-none text-slate-600"
+                      className={`w-full pl-10 pr-10 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all appearance-none ${!setor ? 'text-slate-400' : 'text-slate-900'}`}
                     >
-                      <option value="" disabled>Selecione seu Setor</option>
+                      <option value="" disabled>Selecione seu Setor *</option>
                       {SETORES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
+                        <option key={s} value={s} className="text-slate-900">{s}</option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-3 top-3.5 text-slate-400 pointer-events-none" size={20} />
@@ -291,7 +304,7 @@ export default function Login() {
                 <LogIn className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="text"
-                  placeholder="Usuário / Login"
+                  placeholder="Usuário / Login *"
                   value={loginInput}
                   onChange={(e) => setLoginInput(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -303,7 +316,7 @@ export default function Login() {
                 <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type={mostrarSenha ? "text" : "password"}
-                  placeholder="Senha"
+                  placeholder="Senha *"
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
                   className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -365,7 +378,6 @@ export default function Login() {
               <button
                 onClick={() => {
                   setIsCadastro(!isCadastro);
-                  // Limpa erros visuais ou estados ao trocar
                   setSenha("");
                   setPasswordMetrics({ score: 0 });
                 }}
@@ -378,7 +390,7 @@ export default function Login() {
           
           <div className="text-center mt-8">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} InovaQuatá — Todos os direitos reservados.
+              © {new Date().getFullYear()} PORTAL INOVE — Todos os direitos reservados.
             </p>
           </div>
 
