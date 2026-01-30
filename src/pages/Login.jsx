@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
-import logoInova from "../assets/logoInovaQuatai.png"; // Certifique-se que o caminho está certo
+import logoInova from "../assets/logoInovaQuatai.png"; 
 import { useAuth } from "../context/AuthContext";
 import { 
   User, Lock, LogIn, UserPlus, Eye, EyeOff, 
@@ -37,12 +37,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
+  // Estados do Formulário
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [setor, setSetor] = useState("");
 
+  // Estado de Força da Senha
   const [passwordMetrics, setPasswordMetrics] = useState({
     score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false
   });
@@ -224,14 +226,17 @@ export default function Login() {
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
+          
+          {/* ✅ LOGO DESKTOP: Removido filtros para garantir visibilidade */}
           <img
             src={logoInova}
             alt="Logo Portal Inove"
-            className="w-48 mb-8 brightness-0 invert drop-shadow-xl"
+            className="w-48 mb-8 drop-shadow-xl" 
           />
+          
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
+            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um...”
           </p>
         </div>
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
@@ -242,13 +247,13 @@ export default function Login() {
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           
-          {/* ✅ CORREÇÃO: LOGO MOBILE (Visível apenas em telas menores < lg) */}
-          <div className="lg:hidden flex justify-center mb-6">
-             <img 
-               src={logoInova} 
-               alt="Logo Inova" 
-               className="w-32 h-auto" // Tamanho ajustado para mobile
-             />
+          {/* ✅ LOGO MOBILE: Restaurada exatamente como no código antigo */}
+          <div className="lg:hidden text-center">
+            <img 
+              src={logoInova} 
+              alt="Logo InovaQuatai" 
+              className="mx-auto mb-4 w-32 h-auto" 
+            />
           </div>
 
           <div className="text-center lg:text-left">
