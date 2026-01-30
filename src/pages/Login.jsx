@@ -11,15 +11,10 @@ import {
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
-  "Manutenção",
-  "Recursos humanos",
-  "Departamento Pessoal",
-  "SESMT",
-  "Operação",
-  "Ouvidoria"
+  "Manutenção", "Recursos humanos", "Departamento Pessoal", 
+  "SESMT", "Operação", "Ouvidoria"
 ];
 
-// Regex para validar formato de e-mail (ex: usuario@dominio.com)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function appendFromInove(url) {
@@ -38,25 +33,20 @@ export default function Login() {
   const location = useLocation();
   const { login: doLogin } = useAuth();
 
-  // Estados de Controle
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   // Estados do Formulário
-  const [loginInput, setLoginInput] = useState("");
+  const [loginInput, setLoginInput] = useState(""); // Serve para Login OU Email no login
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(""); // Apenas cadastro
   const [setor, setSetor] = useState("");
 
   // Estado de Força da Senha
   const [passwordMetrics, setPasswordMetrics] = useState({
-    score: 0,
-    hasUpper: false,
-    hasNumber: false,
-    hasSpecial: false,
-    minChar: false
+    score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false
   });
 
   const redirectParam = useMemo(() => {
@@ -72,7 +62,6 @@ export default function Login() {
     return "/inove";
   }
 
-  // Monitora força da senha em tempo real
   useEffect(() => {
     if (!isCadastro) return;
     const s = senha;
@@ -86,47 +75,55 @@ export default function Login() {
     setPasswordMetrics({ ...metrics, score });
   }, [senha, isCadastro]);
 
+  // --- LÓGICA DE LOGIN (USUÁRIO OU EMAIL) ---
   async function handleEntrar(e) {
     e.preventDefault();
-    const loginTrim = loginInput.trim();
+    const inputTrim = loginInput.trim();
     const senhaTrim = senha.trim();
 
-    if (!loginTrim || !senhaTrim) {
-      alert("Informe login e senha.");
+    if (!inputTrim || !senhaTrim) {
+      alert("Informe seu usuário/e-mail e senha.");
       return;
     }
 
     setLoading(true);
+
+    // Consulta otimizada: Verifica se 'login' OU 'email' batem com o input
     const { data, error } = await supabase
       .from("usuarios_aprovadores")
       .select("*")
-      .eq("login", loginTrim)
+      .or(`login.eq.${inputTrim},email.eq.${inputTrim}`) // <--- MUDANÇA PRINCIPAL AQUI
       .eq("senha", senhaTrim)
       .eq("ativo", true)
-      .single();
+      .maybeSingle(); // maybeSingle evita erro se não achar, retorna null
+
     setLoading(false);
 
-    if (error || !data) {
-      alert("Login ou senha incorretos, ou conta inativa.");
+    if (error) {
+      console.error(error);
+      alert("Erro ao tentar fazer login. Tente novamente.");
+      return;
+    }
+
+    if (!data) {
+      alert("Credenciais incorretas ou conta inativa.");
       return;
     }
 
     const nivel = String(data.nivel || "").trim();
 
     if (nivel === "Pendente") {
-      alert("Seu cadastro ainda está pendente de aprovação pelo administrador.");
+      alert("Seu cadastro ainda está em análise pelo administrador.");
       return;
     }
 
     doLogin(data);
 
     try {
-      localStorage.setItem("inove_login", data.login || loginTrim);
+      localStorage.setItem("inove_login", data.login);
       localStorage.setItem("inove_nivel", nivel);
       localStorage.setItem("inove_nome", data.nome || "");
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
@@ -135,12 +132,10 @@ export default function Login() {
       return;
     }
 
-    const defaultNext = decideDefaultNext(nivel);
-    const next = nextPathState || defaultNext;
-
-    navigate(next, { replace: true });
+    navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
+  // --- LÓGICA DE CADASTRO (EVITAR DUPLICIDADE) ---
   async function handleCadastro(e) {
     e.preventDefault();
     const nomeTrim = nome.trim();
@@ -148,61 +143,81 @@ export default function Login() {
     const senhaTrim = senha.trim();
     const emailTrim = email.trim();
     
-    // 1. Validação de Campos Vazios
     if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
-      alert("Todos os campos são obrigatórios. Por favor, preencha tudo.");
+      alert("Preencha todos os campos obrigatórios.");
       return;
     }
 
-    // 2. Validação de Formato de Email (Rigidez)
     if (!EMAIL_REGEX.test(emailTrim)) {
-      alert("Por favor, insira um endereço de e-mail válido (ex: nome@empresa.com).");
+      alert("Insira um e-mail válido.");
       return;
     }
 
-    // 3. Validação de Força de Senha
     if (passwordMetrics.score < 3) {
-      alert("Sua senha é muito fraca. Reforce-a com letras maiúsculas, números e símbolos.");
+      alert("Senha muito fraca. Reforce com letras maiúsculas, números e símbolos.");
       return;
     }
 
     setLoading(true);
+
+    // 1. Verificar Duplicidade (Login ou Email já existem?)
+    const { data: existingUser, error: checkError } = await supabase
+      .from("usuarios_aprovadores")
+      .select("id")
+      .or(`login.eq.${loginTrim},email.eq.${emailTrim}`)
+      .maybeSingle();
+
+    if (checkError) {
+      setLoading(false);
+      alert("Erro ao verificar disponibilidade de dados.");
+      return;
+    }
+
+    if (existingUser) {
+      setLoading(false);
+      alert("Este Usuário ou E-mail já estão cadastrados no sistema.");
+      return;
+    }
     
+    // 2. Inserir Novo Usuário
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome: nomeTrim,
         login: loginTrim,
         senha: senhaTrim,
         email: emailTrim,
-        setor: setor,     // Certifique-se de ter rodado o SQL no Supabase!
+        setor: setor,
         ativo: false,
         nivel: "Pendente",
         criado_em: new Date().toISOString()
       },
     ]);
+    
     setLoading(false);
 
     if (error) {
-      // Tratamento amigável se o erro for a coluna setor faltando
       if (error.message.includes('column "setor"')) {
-        alert("Erro técnico: Coluna 'setor' não encontrada no banco de dados. Contate o suporte.");
+        alert("Erro técnico: Coluna 'setor' ausente no banco. Contate o suporte.");
       } else {
         alert("Erro ao cadastrar: " + error.message);
       }
       return;
     }
 
-    alert("Cadastro enviado com sucesso! Aguarde a aprovação.");
-    // Reset do form
+    alert("Cadastro solicitado! Aguarde a aprovação.");
     setIsCadastro(false);
+    resetForm();
+  }
+
+  function resetForm() {
     setNome("");
     setLoginInput("");
     setSenha("");
     setEmail("");
     setSetor("");
+    setPasswordMetrics({ score: 0 });
   }
 
-  // Componente Visual de Checklist de Senha
   const PasswordCheck = ({ label, met }) => (
     <div className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600 font-medium" : "text-slate-400"}`}>
       {met ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
@@ -213,7 +228,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
       
-      {/* LADO ESQUERDO: Branding (Oculto em mobile) */}
+      {/* Coluna Esquerda (Branding) */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
@@ -227,12 +242,11 @@ export default function Login() {
             Gestão integrada e inteligência de dados para performance industrial.
           </p>
         </div>
-        {/* Elemento decorativo de fundo */}
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
         <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
-      {/* LADO DIREITO: Formulário */}
+      {/* Coluna Direita (Formulário) */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           
@@ -249,11 +263,9 @@ export default function Login() {
 
           <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
             
-            {/* CAMPOS DE CADASTRO */}
             {isCadastro && (
               <>
                 <div className="space-y-4">
-                  {/* Nome */}
                   <div className="relative group">
                     <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                     <input
@@ -262,11 +274,9 @@ export default function Login() {
                       value={nome}
                       onChange={(e) => setNome(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
-                      autoComplete="name"
                     />
                   </div>
 
-                  {/* Email com Validação */}
                   <div className="relative group">
                     <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                     <input
@@ -275,11 +285,9 @@ export default function Login() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
-                      autoComplete="email"
                     />
                   </div>
 
-                  {/* Setor Dropdown */}
                   <div className="relative group">
                     <Briefcase className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                     <select
@@ -298,13 +306,13 @@ export default function Login() {
               </>
             )}
 
-            {/* CAMPOS COMUNS (Login/Senha) */}
             <div className="space-y-4">
               <div className="relative group">
                 <LogIn className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="text"
-                  placeholder="Usuário / Login *"
+                  // Mudei o placeholder para indicar que aceita os dois
+                  placeholder={isCadastro ? "Usuário (Login) *" : "Usuário ou E-mail *"}
                   value={loginInput}
                   onChange={(e) => setLoginInput(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
@@ -331,7 +339,6 @@ export default function Login() {
                 </button>
               </div>
 
-              {/* MEDIDOR DE FORÇA DE SENHA (Apenas Cadastro) */}
               {isCadastro && senha.length > 0 && (
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-top-2">
                   <div className="flex gap-1 h-1.5 mb-2">
@@ -371,15 +378,13 @@ export default function Login() {
             </button>
           </form>
 
-          {/* RODAPÉ DO FORMULÁRIO */}
           <div className="mt-8 pt-6 border-t border-slate-100 text-center">
             <p className="text-slate-600">
               {isCadastro ? "Já possui cadastro?" : "Não tem uma conta?"}{" "}
               <button
                 onClick={() => {
                   setIsCadastro(!isCadastro);
-                  setSenha("");
-                  setPasswordMetrics({ score: 0 });
+                  resetForm();
                 }}
                 className="text-blue-600 font-bold hover:text-blue-800 hover:underline transition-colors"
               >
@@ -393,7 +398,6 @@ export default function Login() {
               © {new Date().getFullYear()} PORTAL INOVE — Todos os direitos reservados.
             </p>
           </div>
-
         </div>
       </div>
     </div>
