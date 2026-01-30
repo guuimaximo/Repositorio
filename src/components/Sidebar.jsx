@@ -169,7 +169,25 @@ export default function Sidebar() {
     return NIVEIS_LIBERADOS_FAROL.has(nivel);
   }, [user?.nivel]);
 
+  // ✅ PASSO 1: salvar usuário do INOVE no localStorage antes de abrir o Farol
   function abrirFarol() {
+    try {
+      if (user) {
+        const payload = {
+          origem: "INOVE",
+          login: user.login || null,
+          nome: user.nome || null,
+          nivel: user.nivel || null,
+          auth_user_id: user.auth_user_id || null, // se existir no seu contexto
+          email: user.email || null, // se existir no seu contexto
+          timestamp: new Date().toISOString(),
+        };
+        localStorage.setItem("farol_user", JSON.stringify(payload));
+      }
+    } catch (e) {
+      console.warn("Falha ao salvar farol_user:", e);
+    }
+
     window.location.href = FAROL_URL;
   }
 
@@ -272,9 +290,7 @@ export default function Sidebar() {
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
           <div className="text-center w-full">
-            <p className="text-sm font-semibold text-white">
-              Olá, {user.nome?.split(" ")[0]} 👋
-            </p>
+            <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
 
             {/* ✅ BOTÃO FAROL TÁTICO (somente Gestor/Adm) */}
