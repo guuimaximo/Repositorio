@@ -28,6 +28,7 @@ import {
   FaRobot,
   FaChartPie,
 } from "react-icons/fa";
+import { ExternalLink } from "lucide-react"; // ✅ NOVO
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
@@ -50,6 +51,12 @@ const PCM_ROUTES = {
   inicio: "/pcm-inicio", // ✅ PCM do dia (abre PCMInicio)
   diario: "/pcm-diario", // base (com :id)
 };
+
+/* =========================
+   FAROL TÁTICO (BOTÃO)
+========================= */
+const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador"]);
+const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
 /* =========================
    ACESSO POR NÍVEL
@@ -156,6 +163,16 @@ export default function Sidebar() {
   const showInicioExecutivo = isAdmin || isGestor;
   const showInicioBasico = !showInicioExecutivo;
 
+  // ✅ Botão Farol: apenas Gestor/Adm
+  const podeVerFarol = useMemo(() => {
+    const nivel = String(user?.nivel || "").trim();
+    return NIVEIS_LIBERADOS_FAROL.has(nivel);
+  }, [user?.nivel]);
+
+  function abrirFarol() {
+    window.location.href = FAROL_URL;
+  }
+
   const links = useMemo(
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
@@ -254,11 +271,24 @@ export default function Sidebar() {
       <div className="p-4 border-b border-blue-600 flex flex-col items-center">
         <img src={logoInova} alt="Logo InovaQuatai" className="h-10 w-auto mb-3" />
         {user && (
-          <div className="text-center">
+          <div className="text-center w-full">
             <p className="text-sm font-semibold text-white">
               Olá, {user.nome?.split(" ")[0]} 👋
             </p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
+
+            {/* ✅ BOTÃO FAROL TÁTICO (somente Gestor/Adm) */}
+            {podeVerFarol && (
+              <button
+                onClick={abrirFarol}
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 text-sm font-semibold shadow-sm transition"
+                type="button"
+                title="Abrir Farol Tático"
+              >
+                Ir para Farol Tático
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -390,7 +420,8 @@ export default function Sidebar() {
                 {links.avarias.map((link) => {
                   if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
 
-                  return canSee(user, link.path) || (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
+                  return canSee(user, link.path) ||
+                    (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
