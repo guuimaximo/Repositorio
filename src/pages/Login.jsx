@@ -236,7 +236,7 @@ export default function Login() {
           
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um...”
+            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
           </p>
         </div>
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
