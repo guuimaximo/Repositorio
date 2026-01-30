@@ -1,11 +1,23 @@
 // src/pages/Login.jsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
+import { 
+  User, Lock, LogIn, UserPlus, Eye, EyeOff, 
+  Briefcase, Mail, Check, X, Loader2, ChevronDown 
+} from "lucide-react";
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
+const SETORES = [
+  "Manutenção",
+  "Recursos humanos",
+  "Departamento Pessoal",
+  "SESMT",
+  "Operação",
+  "Ouvidoria"
+];
 
 function appendFromInove(url) {
   try {
@@ -13,7 +25,6 @@ function appendFromInove(url) {
     if (!u.searchParams.get("from")) u.searchParams.set("from", "inove");
     return u.toString();
   } catch {
-    // fallback simples (se vier algo não-URL)
     if (String(url || "").includes("?")) return `${url}&from=inove`;
     return `${url}?from=inove`;
   }
@@ -24,33 +35,60 @@ export default function Login() {
   const location = useLocation();
   const { login: doLogin } = useAuth();
 
+  // Estados de Controle
   const [isCadastro, setIsCadastro] = useState(false);
-  const [loginInput, setLoginInput] = useState("");
-  const [senha, setSenha] = useState("");
-  const [nome, setNome] = useState("");
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // ✅ redirect vem por querystring: /login?redirect=https%3A%2F%2Ffaroldemetas.onrender.com%2F
+  // Estados do Formulário
+  const [loginInput, setLoginInput] = useState("");
+  const [senha, setSenha] = useState("");
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [setor, setSetor] = useState("");
+
+  // Estado de Força da Senha
+  const [passwordMetrics, setPasswordMetrics] = useState({
+    score: 0,
+    hasUpper: false,
+    hasNumber: false,
+    hasSpecial: false,
+    minChar: false
+  });
+
+  // Lógica de Redirecionamento (Preservada)
   const redirectParam = useMemo(() => {
     const sp = new URLSearchParams(location.search);
     const raw = sp.get("redirect");
     return raw ? decodeURIComponent(raw) : null;
   }, [location.search]);
 
-  // fallback antigo (quando RequireAuth manda state.from)
   const nextPathState = location.state?.from?.pathname || null;
 
-  // Decide destino padrão (sem redirect)
   function decideDefaultNext(nivel) {
     if (NIVEIS_PORTAL.has(nivel)) return "/portal";
     return "/inove";
   }
 
+  // Monitora força da senha em tempo real
+  useEffect(() => {
+    if (!isCadastro) return;
+    const s = senha;
+    const metrics = {
+      hasUpper: /[A-Z]/.test(s),
+      hasNumber: /[0-9]/.test(s),
+      hasSpecial: /[!@#$%^&*]/.test(s),
+      minChar: s.length >= 8
+    };
+    const score = Object.values(metrics).filter(Boolean).length;
+    setPasswordMetrics({ ...metrics, score });
+  }, [senha, isCadastro]);
+
   async function handleEntrar(e) {
     e.preventDefault();
     const loginTrim = loginInput.trim();
     const senhaTrim = senha.trim();
+
     if (!loginTrim || !senhaTrim) {
       alert("Informe login e senha.");
       return;
@@ -78,10 +116,8 @@ export default function Login() {
       return;
     }
 
-    // ✅ Persiste sessão via AuthContext
     doLogin(data);
 
-    // ✅ ESSENCIAL: PortalSistemas depende disso hoje
     try {
       localStorage.setItem("inove_login", data.login || loginTrim);
       localStorage.setItem("inove_nivel", nivel);
@@ -92,17 +128,12 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ 1) Se veio redirect e é Gestor/Adm -> volta pro Farol com from=inove
     if (redirectParam && isGestorAdm) {
       window.location.href = appendFromInove(redirectParam);
       return;
     }
 
-    // ✅ 2) Se não é Gestor/Adm e veio redirect -> IGNORA (bloqueio pelo nível)
-    // cai no fluxo normal do INOVE
     const defaultNext = decideDefaultNext(nivel);
-
-    // ✅ 3) Se veio do RequireAuth (state.from), respeita (ex.: voltou pra página interna)
     const next = nextPathState || defaultNext;
 
     navigate(next, { replace: true });
@@ -113,21 +144,32 @@ export default function Login() {
     const nomeTrim = nome.trim();
     const loginTrim = loginInput.trim();
     const senhaTrim = senha.trim();
+    const emailTrim = email.trim();
+    
+    // Validações
+    if (!nomeTrim || !loginTrim || !senhaTrim || !setor) {
+      alert("Preencha todos os campos obrigatórios!");
+      return;
+    }
 
-    if (!nomeTrim || !loginTrim || !senhaTrim) {
-      alert("Preencha todos os campos!");
+    if (passwordMetrics.score < 3) {
+      alert("A senha é muito fraca. Utilize letras maiúsculas, números e caracteres especiais.");
       return;
     }
 
     setLoading(true);
+    
+    // Insert com novos campos (setor, email)
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome: nomeTrim,
         login: loginTrim,
         senha: senhaTrim,
-        email: null,
+        email: emailTrim || null, // Opcional se vazio
+        setor: setor,
         ativo: false,
         nivel: "Pendente",
+        criado_em: new Date().toISOString()
       },
     ]);
     setLoading(false);
@@ -138,111 +180,209 @@ export default function Login() {
     }
 
     alert("Cadastro enviado! Aguarde aprovação do administrador.");
+    // Reset do form
     setIsCadastro(false);
     setNome("");
     setLoginInput("");
     setSenha("");
+    setEmail("");
+    setSetor("");
   }
 
+  // Componente Visual de Checklist de Senha
+  const PasswordCheck = ({ label, met }) => (
+    <div className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600 font-medium" : "text-slate-400"}`}>
+      {met ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
+      <span>{label}</span>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-blue-100">
-      <div className="bg-white shadow-lg rounded-xl p-8 w-full max-w-md text-center">
-        <img
-          src={logoInova}
-          alt="Logo InovaQuatai"
-          className="mx-auto mb-4 w-32 h-auto"
-        />
-        <h1 className="text-2xl font-bold text-gray-700 mb-6">
-          {isCadastro ? "Cadastro de Usuário" : "Acesso ao Sistema"}
-        </h1>
-
-        <form
-          onSubmit={isCadastro ? handleCadastro : handleEntrar}
-          className="space-y-4 text-left"
-        >
-          {isCadastro && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600">
-                Nome Completo
-              </label>
-              <input
-                type="text"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
-                autoComplete="name"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600">
-              Login
-            </label>
-            <input
-              type="text"
-              value={loginInput}
-              onChange={(e) => setLoginInput(e.target.value)}
-              className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
-              autoComplete="username"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600">
-              Senha
-            </label>
-            <div className="flex gap-2">
-              <input
-                type={mostrarSenha ? "text" : "password"}
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                className="w-full p-2 border rounded-md focus:ring focus:ring-blue-300"
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarSenha((v) => !v)}
-                className="px-3 py-2 border rounded-md text-sm text-gray-600 hover:bg-gray-50"
-                title={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
-              >
-                {mostrarSenha ? "Ocultar" : "Mostrar"}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700 transition"
-          >
-            {loading ? "Processando..." : isCadastro ? "Cadastrar" : "Entrar"}
-          </button>
-        </form>
-
-        <div className="mt-4 text-sm">
-          {isCadastro ? (
-            <button
-              onClick={() => setIsCadastro(false)}
-              className="text-blue-600 hover:underline"
-              type="button"
-            >
-              Já possui conta? Faça login
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsCadastro(true)}
-              className="text-blue-600 hover:underline"
-              type="button"
-            >
-              Não possui conta? Cadastre-se
-            </button>
-          )}
+    <div className="min-h-screen flex bg-slate-50 font-sans">
+      
+      {/* LADO ESQUERDO: Branding (Oculto em mobile) */}
+      <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
+        <div className="relative z-10 flex flex-col items-center">
+          <img
+            src={logoInova}
+            alt="Logo InovaQuatai"
+            className="w-48 mb-8 brightness-0 invert drop-shadow-xl"
+          />
+          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">Portal InovaQuatá</h2>
+          <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
+            Gestão integrada e inteligência de dados para performance industrial.
+          </p>
         </div>
+        {/* Elemento decorativo de fundo */}
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      </div>
 
-        <p className="mt-6 text-xs text-gray-400">
-          © {new Date().getFullYear()} InovaQuatai — Todos os direitos reservados.
-        </p>
+      {/* LADO DIREITO: Formulário */}
+      <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
+        <div className="w-full max-w-md space-y-8">
+          
+          <div className="text-center lg:text-left">
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
+            </h1>
+            <p className="mt-2 text-slate-500">
+              {isCadastro 
+                ? "Preencha seus dados profissionais para solicitar acesso." 
+                : "Entre com suas credenciais para continuar."}
+            </p>
+          </div>
+
+          <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
+            
+            {/* CAMPOS DE CADASTRO */}
+            {isCadastro && (
+              <>
+                <div className="space-y-4">
+                  {/* Nome */}
+                  <div className="relative group">
+                    <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                    <input
+                      type="text"
+                      placeholder="Nome Completo"
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                      autoComplete="name"
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div className="relative group">
+                    <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                    <input
+                      type="email"
+                      placeholder="Email Corporativo"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                      autoComplete="email"
+                    />
+                  </div>
+
+                  {/* Setor Dropdown */}
+                  <div className="relative group">
+                    <Briefcase className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                    <select
+                      value={setor}
+                      onChange={(e) => setSetor(e.target.value)}
+                      className="w-full pl-10 pr-10 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all appearance-none text-slate-600"
+                    >
+                      <option value="" disabled>Selecione seu Setor</option>
+                      {SETORES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-3.5 text-slate-400 pointer-events-none" size={20} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* CAMPOS COMUNS (Login/Senha) */}
+            <div className="space-y-4">
+              <div className="relative group">
+                <LogIn className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                <input
+                  type="text"
+                  placeholder="Usuário / Login"
+                  value={loginInput}
+                  onChange={(e) => setLoginInput(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                  autoComplete="username"
+                />
+              </div>
+
+              <div className="relative group">
+                <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                <input
+                  type={mostrarSenha ? "text" : "password"}
+                  placeholder="Senha"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha(!mostrarSenha)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-blue-600 transition p-1"
+                >
+                  {mostrarSenha ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+
+              {/* MEDIDOR DE FORÇA DE SENHA (Apenas Cadastro) */}
+              {isCadastro && senha.length > 0 && (
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex gap-1 h-1.5 mb-2">
+                    {[1, 2, 3, 4].map((step) => (
+                      <div
+                        key={step}
+                        className={`flex-1 rounded-full transition-all duration-500 ${
+                          passwordMetrics.score >= step
+                            ? passwordMetrics.score < 3 ? "bg-orange-400" : "bg-green-500"
+                            : "bg-slate-200"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <PasswordCheck label="8+ Caracteres" met={passwordMetrics.minChar} />
+                    <PasswordCheck label="Maiúscula" met={passwordMetrics.hasUpper} />
+                    <PasswordCheck label="Número" met={passwordMetrics.hasNumber} />
+                    <PasswordCheck label="Símbolo (!@#)" met={passwordMetrics.hasSpecial} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={22} />
+              ) : isCadastro ? (
+                <> <UserPlus size={22} /> Solicitar Cadastro </>
+              ) : (
+                <> <LogIn size={22} /> Entrar no Sistema </>
+              )}
+            </button>
+          </form>
+
+          {/* RODAPÉ DO FORMULÁRIO */}
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <p className="text-slate-600">
+              {isCadastro ? "Já possui cadastro?" : "Não tem uma conta?"}{" "}
+              <button
+                onClick={() => {
+                  setIsCadastro(!isCadastro);
+                  // Limpa erros visuais ou estados ao trocar
+                  setSenha("");
+                  setPasswordMetrics({ score: 0 });
+                }}
+                className="text-blue-600 font-bold hover:text-blue-800 hover:underline transition-colors"
+              >
+                {isCadastro ? "Fazer Login" : "Cadastre-se aqui"}
+              </button>
+            </p>
+          </div>
+          
+          <div className="text-center mt-8">
+            <p className="text-xs text-slate-400">
+              © {new Date().getFullYear()} InovaQuatá — Todos os direitos reservados.
+            </p>
+          </div>
+
+        </div>
       </div>
     </div>
   );
