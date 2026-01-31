@@ -124,8 +124,25 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
+    // ✅ LÓGICA DE REDIRECIONAMENTO CORRIGIDA (ENVIA DADOS DO USUÁRIO)
     if (redirectParam && isGestorAdm) {
-      window.location.href = appendFromInove(redirectParam);
+      // 1. Prepara os dados para auditoria no sistema externo (Farol)
+      const dadosUsuario = {
+        id: data.id,
+        nome: data.nome,
+        email: data.email,
+        nivel: data.nivel,
+        login: data.login
+      };
+      
+      const dadosString = encodeURIComponent(JSON.stringify(dadosUsuario));
+      
+      // 2. Garante a flag 'from=inove' na URL base
+      const urlBase = appendFromInove(redirectParam);
+      
+      // 3. Adiciona os dados do usuário na URL
+      const separator = urlBase.includes("?") ? "&" : "?";
+      window.location.href = `${urlBase}${separator}userData=${dadosString}`;
       return;
     }
 
@@ -138,7 +155,7 @@ export default function Login() {
     const loginTrim = loginInput.trim();
     const senhaTrim = senha.trim();
     const emailTrim = email.trim();
-    
+     
     if (!nomeTrim || !loginTrim || !senhaTrim || !setor || !emailTrim) {
       alert("Preencha todos os campos obrigatórios.");
       return;
@@ -173,7 +190,7 @@ export default function Login() {
       alert("Este Usuário ou E-mail já estão cadastrados.");
       return;
     }
-    
+     
     const { error } = await supabase.from("usuarios_aprovadores").insert([
       {
         nome: nomeTrim,
@@ -186,7 +203,7 @@ export default function Login() {
         criado_em: new Date().toISOString()
       },
     ]);
-    
+     
     setLoading(false);
 
     if (error) {
@@ -227,7 +244,7 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
           
-          {/* ✅ LOGO DESKTOP: Removido filtros para garantir visibilidade */}
+          {/* ✅ LOGO DESKTOP */}
           <img
             src={logoInova}
             alt="Logo Portal Inove"
@@ -247,7 +264,7 @@ export default function Login() {
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           
-          {/* ✅ LOGO MOBILE: Restaurada exatamente como no código antigo */}
+          {/* ✅ LOGO MOBILE */}
           <div className="lg:hidden text-center">
             <img 
               src={logoInova} 
