@@ -1,4 +1,4 @@
-// src/pages/Login.jsx
+// src/pages/Login.jsx (PROJETO INOVE)
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabase";
@@ -31,7 +31,7 @@ function appendFromInove(url) {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login: doLogin } = useAuth();
+  const { login: doLogin, user: userContext } = useAuth(); // Tenta pegar o user do contexto se disponível
 
   const [isCadastro, setIsCadastro] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,6 +61,52 @@ export default function Login() {
     if (NIVEIS_PORTAL.has(nivel)) return "/portal";
     return "/inove";
   }
+
+  // ✅ NOVO: Redirecionamento Automático se já estiver logado (evita travar no Login)
+  useEffect(() => {
+    const verificarSessaoAtiva = async () => {
+      // Verifica se temos dados no localStorage (login persistente)
+      const storedLogin = localStorage.getItem("inove_login");
+      const storedNivel = localStorage.getItem("inove_nivel");
+      const storedNome = localStorage.getItem("inove_nome");
+      
+      // Se tem redirect E dados salvos, tenta reenviar para o Farol automaticamente
+      if (redirectParam && storedLogin && storedNivel && storedNome) {
+        console.log("Sessão ativa detectada. Redirecionando para Farol...");
+        
+        // Simula busca rápida ou usa dados locais para agilizar
+        // O ideal é buscar o ID e email frescos, mas para UX imediato:
+        const { data } = await supabase
+          .from("usuarios_aprovadores")
+          .select("*")
+          .eq("login", storedLogin)
+          .maybeSingle();
+
+        if (data) {
+           enviarParaFarol(data, redirectParam);
+        }
+      }
+    };
+
+    verificarSessaoAtiva();
+  }, [redirectParam]);
+
+  // Função auxiliar para enviar dados ao Farol
+  const enviarParaFarol = (dadosUsuario, urlDestino) => {
+    const pacote = {
+      id: dadosUsuario.id,
+      nome: dadosUsuario.nome,
+      email: dadosUsuario.email,
+      nivel: dadosUsuario.nivel,
+      login: dadosUsuario.login
+    };
+    
+    const dadosString = encodeURIComponent(JSON.stringify(pacote));
+    const urlBase = appendFromInove(urlDestino);
+    const separator = urlBase.includes("?") ? "&" : "?";
+    
+    window.location.href = `${urlBase}${separator}userData=${dadosString}`;
+  };
 
   useEffect(() => {
     if (!isCadastro) return;
@@ -124,25 +170,9 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ LÓGICA DE REDIRECIONAMENTO CORRIGIDA (ENVIA DADOS DO USUÁRIO)
+    // ✅ Se tem redirect, usa a função unificada de envio
     if (redirectParam && isGestorAdm) {
-      // 1. Prepara os dados para auditoria no sistema externo (Farol)
-      const dadosUsuario = {
-        id: data.id,
-        nome: data.nome,
-        email: data.email,
-        nivel: data.nivel,
-        login: data.login
-      };
-      
-      const dadosString = encodeURIComponent(JSON.stringify(dadosUsuario));
-      
-      // 2. Garante a flag 'from=inove' na URL base
-      const urlBase = appendFromInove(redirectParam);
-      
-      // 3. Adiciona os dados do usuário na URL
-      const separator = urlBase.includes("?") ? "&" : "?";
-      window.location.href = `${urlBase}${separator}userData=${dadosString}`;
+      enviarParaFarol(data, redirectParam);
       return;
     }
 
@@ -244,7 +274,6 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
           
-          {/* ✅ LOGO DESKTOP */}
           <img
             src={logoInova}
             alt="Logo Portal Inove"
@@ -253,7 +282,7 @@ export default function Login() {
           
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
+            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento...”
           </p>
         </div>
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
@@ -264,7 +293,6 @@ export default function Login() {
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           
-          {/* ✅ LOGO MOBILE */}
           <div className="lg:hidden text-center">
             <img 
               src={logoInova} 
@@ -285,7 +313,7 @@ export default function Login() {
           </div>
 
           <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
-            
+            {/* ... Campos de Login/Cadastro (Igual ao seu original) ... */}
             {isCadastro && (
               <>
                 <div className="space-y-4">
