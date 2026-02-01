@@ -5,31 +5,19 @@ import { supabase } from "../supabase";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { useAuth } from "../context/AuthContext";
 import {
-  User,
-  Lock,
-  LogIn,
-  Eye,
-  EyeOff,
-  Briefcase,
-  Mail,
-  Check,
-  X,
-  Loader2,
-  ChevronDown,
+  User, Lock, LogIn, UserPlus, Eye, EyeOff,
+  Briefcase, Mail, Check, X, Loader2, ChevronDown
 } from "lucide-react";
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
-  "Manutenção",
-  "Recursos humanos",
-  "Departamento Pessoal",
-  "SESMT",
-  "Operação",
-  "Ouvidoria",
+  "Manutenção", "Recursos humanos", "Departamento Pessoal",
+  "SESMT", "Operação", "Ouvidoria"
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ✅ Garante que o parâmetro de origem exista
 function appendFromInove(url) {
   try {
     const u = new URL(url);
@@ -41,10 +29,11 @@ function appendFromInove(url) {
   }
 }
 
+// ✅ IMPORTANTE: Remove rotas como /inicio para garantir que caia no LandingFarol (Raiz)
 function getBaseUrl(url) {
   try {
     const u = new URL(url);
-    return u.origin + "/"; // sempre raiz do Farol
+    return u.origin + "/"; // sempre raiz
   } catch {
     return "https://faroldemetas.onrender.com/";
   }
@@ -59,6 +48,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
+  // Estados do Formulário
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
@@ -66,11 +56,7 @@ export default function Login() {
   const [setor, setSetor] = useState("");
 
   const [passwordMetrics, setPasswordMetrics] = useState({
-    score: 0,
-    hasUpper: false,
-    hasNumber: false,
-    hasSpecial: false,
-    minChar: false,
+    score: 0, hasUpper: false, hasNumber: false, hasSpecial: false, minChar: false
   });
 
   const redirectParam = useMemo(() => {
@@ -86,7 +72,10 @@ export default function Login() {
     return "/inove";
   }
 
+  // --- FUNÇÃO DE ENVIO PARA O FAROL (DADOS COMPLETOS) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
+    console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
+
     const pacote = {
       id: dadosUsuario.id,
       nome: dadosUsuario.nome || dadosUsuario.login,
@@ -94,59 +83,27 @@ export default function Login() {
       nivel: dadosUsuario.nivel,
       login: dadosUsuario.login,
       setor: dadosUsuario.setor || "N/A",
-      origem: "Portal Inove",
+      origem: "Portal Inove"
     };
 
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
     const baseUrl = getBaseUrl(urlDestino);
-    const baseUrlWithFrom = appendFromInove(baseUrl);
+    const urlFinal = `${baseUrl}?from=inove&userData=${dadosString}`;
 
-    // baseUrlWithFrom já tem ?from=inove, então adiciona &userData
-    const urlFinal = `${baseUrlWithFrom}&userData=${dadosString}`;
-
-    console.log("🚀 Redirecionando para Farol:", urlFinal);
-
-    // ✅ replace evita empilhar histórico e diminui loop por back/forward
-    window.location.replace(urlFinal);
+    console.log("🚀 Redirecionando para:", urlFinal);
+    window.location.href = urlFinal;
   };
 
-  // --- AUTO-REDIRECT (Se já estiver logado no Inove) ---
+  // ✅ ANTES: AUTO-REDIRECT (causava “grudar” no último login salvo)
+  // ✅ AGORA: apenas preenche o login se houver redirect, mas NÃO redireciona sozinho
   useEffect(() => {
-    const verificarSessaoAtiva = async () => {
-      const storedLogin = localStorage.getItem("inove_login");
+    if (!redirectParam) return;
 
-      // ✅ se não há redirect, libera a flag (para não travar em estado de redirect)
-      if (!redirectParam) {
-        sessionStorage.removeItem("inove_redirecting");
-        return;
-      }
-
-      const alreadyRedirecting =
-        sessionStorage.getItem("inove_redirecting") === "1";
-
-      if (redirectParam && storedLogin && !alreadyRedirecting) {
-        sessionStorage.setItem("inove_redirecting", "1");
-
-        const { data } = await supabase
-          .from("usuarios_aprovadores")
-          .select("*")
-          .eq("login", storedLogin)
-          .eq("ativo", true)
-          .maybeSingle();
-
-        if (data) {
-          localStorage.setItem("inove_nome", data.nome || "");
-          localStorage.setItem("inove_nivel", data.nivel || "");
-
-          enviarParaFarol(data, redirectParam);
-        } else {
-          sessionStorage.removeItem("inove_redirecting");
-        }
-      }
-    };
-
-    verificarSessaoAtiva();
-  }, [redirectParam]);
+    const storedLogin = localStorage.getItem("inove_login");
+    if (storedLogin && !loginInput) {
+      setLoginInput(storedLogin); // só prefill
+    }
+  }, [redirectParam]); // intencionalmente sem loginInput aqui para não ficar “brigando”
 
   // Monitor de Senha
   useEffect(() => {
@@ -156,14 +113,12 @@ export default function Login() {
       hasUpper: /[A-Z]/.test(s),
       hasNumber: /[0-9]/.test(s),
       hasSpecial: /[!@#$%^&*]/.test(s),
-      minChar: s.length >= 8,
+      minChar: s.length >= 8
     };
-    setPasswordMetrics({
-      ...metrics,
-      score: Object.values(metrics).filter(Boolean).length,
-    });
+    setPasswordMetrics({ ...metrics, score: Object.values(metrics).filter(Boolean).length });
   }, [senha, isCadastro]);
 
+  // --- LOGIN MANUAL ---
   async function handleEntrar(e) {
     e.preventDefault();
     const inputTrim = loginInput.trim();
@@ -190,12 +145,14 @@ export default function Login() {
       alert("Erro de conexão. Tente novamente.");
       return;
     }
+
     if (!data) {
       alert("Credenciais incorretas ou conta inativa.");
       return;
     }
 
     const nivel = String(data.nivel || "").trim();
+
     if (nivel === "Pendente") {
       alert("Seu cadastro ainda está em análise pelo administrador.");
       return;
@@ -211,18 +168,19 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
+    // ✅ redirect para Farol: envia dados do usuário LOGADO AGORA (sem auto-redirect antigo)
     if (redirectParam && isGestorAdm) {
-      sessionStorage.setItem("inove_redirecting", "1");
       enviarParaFarol(data, redirectParam);
       return;
     }
 
+    // Fluxo normal (sem redirect)
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
+  // --- CADASTRO ---
   async function handleCadastro(e) {
     e.preventDefault();
-
     const nomeTrim = nome.trim();
     const loginTrim = loginInput.trim();
     const senhaTrim = senha.trim();
@@ -232,10 +190,12 @@ export default function Login() {
       alert("Preencha todos os campos obrigatórios.");
       return;
     }
+
     if (!EMAIL_REGEX.test(emailTrim)) {
       alert("Insira um e-mail válido.");
       return;
     }
+
     if (passwordMetrics.score < 3) {
       alert("Senha muito fraca.");
       return;
@@ -254,6 +214,7 @@ export default function Login() {
       alert("Erro ao verificar dados.");
       return;
     }
+
     if (existingUser) {
       setLoading(false);
       alert("Este Usuário ou E-mail já estão cadastrados.");
@@ -269,7 +230,7 @@ export default function Login() {
         setor: setor,
         ativo: false,
         nivel: "Pendente",
-        criado_em: new Date().toISOString(),
+        criado_em: new Date().toISOString()
       },
     ]);
 
@@ -299,11 +260,7 @@ export default function Login() {
   }
 
   const PasswordCheck = ({ label, met }) => (
-    <div
-      className={`flex items-center gap-1.5 text-xs ${
-        met ? "text-green-600 font-medium" : "text-slate-400"
-      }`}
-    >
+    <div className={`flex items-center gap-1.5 text-xs ${met ? "text-green-600 font-medium" : "text-slate-400"}`}>
       {met ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
       <span>{label}</span>
     </div>
@@ -311,6 +268,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
+      {/* --- LADO ESQUERDO: Branding (Desktop) --- */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
@@ -319,38 +277,35 @@ export default function Login() {
             alt="Logo Portal Inove"
             className="w-48 mb-8 drop-shadow-xl"
           />
-          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">
-            PORTAL INOVE
-          </h2>
+          <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
+
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas,
-            entendendo a individualidade de cada um, com disciplina e
-            comprometimento, gerando resiliência e coragem para influenciar,
-            quebrar barreiras, melhorar processos e entregar resultados com foco
-            na segurança, na satisfação do cliente e na otimização de custos”
+            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
           </p>
         </div>
+
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
+      {/* --- LADO DIREITO: Formulário --- */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           <div className="lg:hidden text-center">
-            <img
-              src={logoInova}
-              alt="Logo InovaQuatai"
-              className="mx-auto mb-4 w-32 h-auto"
-            />
+            <img src={logoInova} alt="Logo InovaQuatai" className="mx-auto mb-4 w-32 h-auto" />
           </div>
 
           <div className="text-center lg:text-left">
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
               {isCadastro ? "Criar nova conta" : "Acesse sua conta"}
             </h1>
+
             {redirectParam && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium animate-pulse">
-                Conectando ao Farol Tático...
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium">
+                Conectando ao Farol Tático... (faça login para continuar)
               </div>
             )}
+
             <p className="mt-2 text-slate-500">
               {isCadastro
                 ? "Preencha todos os dados abaixo para solicitar acesso."
@@ -358,17 +313,12 @@ export default function Login() {
             </p>
           </div>
 
-          <form
-            onSubmit={isCadastro ? handleCadastro : handleEntrar}
-            className="space-y-5"
-          >
+          <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
+            {/* Campos de Login */}
             {!isCadastro && (
               <>
                 <div className="relative group">
-                  <User
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
+                  <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type="text"
                     placeholder="Usuário ou E-mail"
@@ -379,10 +329,7 @@ export default function Login() {
                 </div>
 
                 <div className="relative group">
-                  <Lock
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
+                  <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
                   <input
                     type={mostrarSenha ? "text" : "password"}
                     placeholder="Senha"
@@ -402,99 +349,39 @@ export default function Login() {
               </>
             )}
 
+            {/* Campos de Cadastro */}
             {isCadastro && (
               <div className="space-y-4">
                 <div className="relative group">
-                  <User
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Nome Completo *"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    className="w-full pl-10 py-3 bg-white border rounded-xl"
-                  />
+                  <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input type="text" placeholder="Nome Completo *" value={nome} onChange={e => setNome(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
                 </div>
-
                 <div className="relative group">
-                  <Mail
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
-                  <input
-                    type="email"
-                    placeholder="Email Corporativo *"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 py-3 bg-white border rounded-xl"
-                  />
+                  <Mail className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input type="email" placeholder="Email Corporativo *" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
                 </div>
-
                 <div className="relative group">
-                  <Briefcase
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
-                  <select
-                    value={setor}
-                    onChange={(e) => setSetor(e.target.value)}
-                    className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none"
-                  >
+                  <Briefcase className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <select value={setor} onChange={e => setSetor(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none">
                     <option value="">Selecione seu Setor *</option>
-                    {SETORES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    {SETORES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
-                  <ChevronDown
-                    className="absolute right-3 top-3.5 pointer-events-none text-slate-400"
-                    size={20}
-                  />
+                  <ChevronDown className="absolute right-3 top-3.5 pointer-events-none text-slate-400" size={20} />
                 </div>
-
                 <div className="relative group">
-                  <LogIn
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Usuário (Login) *"
-                    value={loginInput}
-                    onChange={(e) => setLoginInput(e.target.value)}
-                    className="w-full pl-10 py-3 bg-white border rounded-xl"
-                  />
+                  <LogIn className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input type="text" placeholder="Usuário (Login) *" value={loginInput} onChange={e => setLoginInput(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
                 </div>
-
                 <div className="relative group">
-                  <Lock
-                    className="absolute left-3 top-3.5 text-slate-400"
-                    size={20}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Senha *"
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    className="w-full pl-10 py-3 bg-white border rounded-xl"
-                  />
+                  <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input type="password" placeholder="Senha *" value={senha} onChange={e => setSenha(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
                 </div>
 
                 {senha.length > 0 && (
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex gap-1 h-1.5 mb-2">
-                      {[1, 2, 3, 4].map((s) => (
-                        <div
-                          key={s}
-                          className={`flex-1 rounded-full ${
-                            passwordMetrics.score >= s
-                              ? "bg-green-500"
-                              : "bg-slate-200"
-                          }`}
-                        />
+                      {[1, 2, 3, 4].map(s => (
+                        <div key={s} className={`flex-1 rounded-full ${passwordMetrics.score >= s ? "bg-green-500" : "bg-slate-200"}`} />
                       ))}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -513,36 +400,21 @@ export default function Login() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
             >
-              {loading ? (
-                <Loader2 className="animate-spin" size={22} />
-              ) : isCadastro ? (
-                "Solicitar Cadastro"
-              ) : (
-                "Entrar no Sistema"
-              )}
+              {loading ? <Loader2 className="animate-spin" size={22} /> : (isCadastro ? "Solicitar Cadastro" : "Entrar no Sistema")}
             </button>
           </form>
 
           <div className="mt-8 text-center">
             <p className="text-slate-600">
               {isCadastro ? "Já possui cadastro?" : "Não tem uma conta?"}{" "}
-              <button
-                onClick={() => {
-                  setIsCadastro(!isCadastro);
-                  resetForm();
-                  sessionStorage.removeItem("inove_redirecting");
-                }}
-                className="text-blue-600 font-bold hover:underline"
-              >
+              <button onClick={() => { setIsCadastro(!isCadastro); resetForm(); }} className="text-blue-600 font-bold hover:underline">
                 {isCadastro ? "Fazer Login" : "Cadastre-se aqui"}
               </button>
             </p>
           </div>
 
           <div className="text-center mt-8">
-            <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} PORTAL INOVE
-            </p>
+            <p className="text-xs text-slate-400">© {new Date().getFullYear()} PORTAL INOVE</p>
           </div>
         </div>
       </div>
