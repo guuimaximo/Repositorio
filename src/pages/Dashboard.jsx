@@ -1,12 +1,9 @@
 // src/pages/Dashboard.jsx
-// (Versão final consolidada — com filtro de datas, alinhamento, lógica de atrasadas e card de Pendentes de Cobrança)
-// ✅ Ajuste pedido: Botão "Ir para Farol Tático" no topo, visível APENAS para Gestor/Administrador
+// (Versão final consolidada — sem botão do Farol)
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { useAuth } from "../context/AuthContext"; // ✅ usa o mesmo contexto do Login
-import { ExternalLink } from "lucide-react";
-
+import { useAuth } from "../context/AuthContext";
 import {
   LineChart,
   Line,
@@ -16,12 +13,6 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-
-// ==========================
-// CONFIG
-// ==========================
-const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador"]);
-const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
 // ==========================
 // COMPONENTE CARD RESUMO
@@ -41,7 +32,7 @@ function CardResumo({ titulo, valor, cor, subValor = null, subValor2 = null }) {
 // COMPONENTE PRINCIPAL
 // ==========================
 export default function Dashboard() {
-  const { user } = useAuth(); // ✅ deve vir do doLogin(data) no Login.jsx
+  const { user } = useAuth(); 
 
   const [resumo, setResumo] = useState({
     tratativasTotal: 0,
@@ -61,12 +52,6 @@ export default function Dashboard() {
   const [evolucao, setEvolucao] = useState([]);
   const [topMotoristas, setTopMotoristas] = useState([]);
   const [dataFiltro, setDataFiltro] = useState({ dataInicio: "", dataFim: "" });
-
-  // ✅ Regra do botão do Farol (apenas Gestor/Adm)
-  const podeVerFarol = useMemo(() => {
-    const nivel = String(user?.nivel || "").trim();
-    return NIVEIS_LIBERADOS_FAROL.has(nivel);
-  }, [user]);
 
   useEffect(() => {
     const timeoutId = setTimeout(carregarTudo, 0);
@@ -252,17 +237,12 @@ export default function Dashboard() {
     carregarTopMotoristas();
   };
 
-  function abrirFarol() {
-    // ✅ abre o Farol já com o marcador solicitado
-    window.location.href = FAROL_URL;
-  }
-
   // ==========================
   // INTERFACE
   // ==========================
   return (
     <div className="p-6">
-      {/* ✅ Cabeçalho + botão do Farol (somente Gestor/Adm) */}
+      {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-700">Painel de Gestão Integrada</h1>
@@ -271,18 +251,6 @@ export default function Dashboard() {
             · Nível: <span className="font-semibold">{user?.nivel || "-"}</span>
           </p>
         </div>
-
-        {podeVerFarol && (
-          <button
-            onClick={abrirFarol}
-            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 font-semibold shadow-sm transition"
-            title="Abrir Farol Tático"
-            type="button"
-          >
-            Ir para Farol Tático
-            <ExternalLink className="w-4 h-4" />
-          </button>
-        )}
       </div>
 
       {/* FILTROS DE DATA */}
