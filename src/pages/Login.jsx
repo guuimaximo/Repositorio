@@ -50,45 +50,29 @@ export default function Login() {
     return "/inove";
   }
 
-  // --- FUNÇÃO DE ENVIO PARA O FAROL (ATUALIZADA E BLINDADA) ---
-  const enviarParaFarol = (dadosUsuario, urlDestino) => {
-    console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
-
-    const pacote = {
-      id: dadosUsuario.id,
-      nome: dadosUsuario.nome || dadosUsuario.login,
-      email: dadosUsuario.email,
-      nivel: dadosUsuario.nivel,
-      login: dadosUsuario.login,
-      setor: dadosUsuario.setor || "N/A",
-      origem: "Portal Inove"
-    };
-
-    const dadosString = encodeURIComponent(JSON.stringify(pacote));
+  // =================================================================
+  // FUNÇÃO ATUALIZADA: REDIRECIONAMENTO LIMPO
+  // =================================================================
+  // Não envia mais 'userData' para evitar confusão de cache.
+  // Apenas manda o usuário para a tela de login do Farol.
+  const enviarParaFarol = (urlDestino) => {
+    console.log("🚀 Redirecionando para Login Manual no Farol...");
 
     // 1. Define a origem base (Domínio do Farol)
     let origin;
     try {
-        // Tenta pegar a base da URL que veio no redirect (ex: https://farol.com)
         origin = new URL(urlDestino).origin;
     } catch {
-        // Fallback de segurança se vier vazio ou inválido
+        // Fallback de segurança se o link estiver quebrado
         origin = "https://faroldemetas.onrender.com";
     }
 
-    // 2. Adiciona timestamp para evitar cache do navegador (Cache Buster)
-    const timestamp = new Date().getTime();
-
-    // 3. Monta a URL forçando a rota /receber-acesso
-    const urlFinal = `${origin}/receber-acesso?t=${timestamp}&userData=${dadosString}`;
-
-    console.log("🚀 Redirecionando para rota de limpeza:", urlFinal);
-    
-    // 4. Usa replace para não deixar voltar no histórico
-    window.location.replace(urlFinal);
+    // 2. Redireciona para a raiz do Farol.
+    // Lá, o LandingFarol vai limpar o cache e pedir login novamente.
+    window.location.href = origin;
   };
 
-  // Preenche login se vier de um redirect
+  // Preenche o login se já houver um salvo no navegador
   useEffect(() => {
     if (!redirectParam) return;
 
@@ -161,13 +145,15 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ CHECKPOINT CRÍTICO: Se tiver redirect para o Farol, usa a nova lógica
+    // ✅ LÓGICA DE REDIRECT ATUALIZADA
+    // Se veio do Farol, autenticamos aqui só para validar, mas
+    // mandamos ele de volta para logar lá e criar a sessão correta.
     if (redirectParam && isGestorAdm) {
-      enviarParaFarol(data, redirectParam);
+      enviarParaFarol(redirectParam);
       return;
     }
 
-    // Fluxo normal (sem redirect, navegação interna do Inove)
+    // Fluxo normal (Navegação dentro do Inove)
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
