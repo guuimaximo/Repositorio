@@ -29,16 +29,6 @@ function appendFromInove(url) {
   }
 }
 
-// ✅ IMPORTANTE: Remove rotas como /inicio para garantir que caia no LandingFarol (Raiz)
-function getBaseUrl(url) {
-  try {
-    const u = new URL(url);
-    return u.origin + "/"; // sempre raiz
-  } catch {
-    return "https://faroldemetas.onrender.com/";
-  }
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,7 +62,7 @@ export default function Login() {
     return "/inove";
   }
 
-  // --- FUNÇÃO DE ENVIO PARA O FAROL (DADOS COMPLETOS) ---
+  // --- FUNÇÃO DE ENVIO PARA O FAROL (ATUALIZADA) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
     console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
 
@@ -87,10 +77,19 @@ export default function Login() {
     };
 
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
-    const baseUrl = getBaseUrl(urlDestino);
-    const urlFinal = `${baseUrl}?from=inove&userData=${dadosString}`;
 
-    console.log("🚀 Redirecionando para:", urlFinal);
+    // ⚠️ MUDANÇA CRÍTICA AQUI:
+    // Em vez de mandar para a raiz, mandamos para a rota de LIMPEZA "/receber-acesso"
+    let origin;
+    try {
+        origin = new URL(urlDestino).origin;
+    } catch {
+        origin = "https://faroldemetas.onrender.com";
+    }
+
+    const urlFinal = `${origin}/receber-acesso?userData=${dadosString}`;
+
+    console.log("🚀 Redirecionando para rota de limpeza:", urlFinal);
     window.location.href = urlFinal;
   };
 
