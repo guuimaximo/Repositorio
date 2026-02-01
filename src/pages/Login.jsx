@@ -8,7 +8,6 @@ import {
   User,
   Lock,
   LogIn,
-  UserPlus,
   Eye,
   EyeOff,
   Briefcase,
@@ -31,7 +30,6 @@ const SETORES = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ✅ Garante que o parâmetro de origem exista
 function appendFromInove(url) {
   try {
     const u = new URL(url);
@@ -43,11 +41,10 @@ function appendFromInove(url) {
   }
 }
 
-// ✅ IMPORTANTE: Remove rotas como /inicio para garantir que caia no LandingFarol (Raiz)
 function getBaseUrl(url) {
   try {
     const u = new URL(url);
-    return u.origin + "/"; // Retorna sempre a raiz (ex: https://farol.com/)
+    return u.origin + "/"; // sempre raiz do Farol
   } catch {
     return "https://faroldemetas.onrender.com/";
   }
@@ -62,7 +59,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Estados do Formulário
   const [loginInput, setLoginInput] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
@@ -90,10 +86,7 @@ export default function Login() {
     return "/inove";
   }
 
-  // --- FUNÇÃO DE ENVIO PARA O FAROL (DADOS COMPLETOS) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
-    console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
-
     const pacote = {
       id: dadosUsuario.id,
       nome: dadosUsuario.nome || dadosUsuario.login,
@@ -105,18 +98,16 @@ export default function Login() {
     };
 
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
-
-    // ✅ GARANTE QUE VAI PARA A RAIZ DO FAROL
     const baseUrl = getBaseUrl(urlDestino);
-
-    // ✅ GARANTE from=inove
     const baseUrlWithFrom = appendFromInove(baseUrl);
 
-    // ✅ MONTA URL FINAL
+    // baseUrlWithFrom já tem ?from=inove, então adiciona &userData
     const urlFinal = `${baseUrlWithFrom}&userData=${dadosString}`;
-    console.log("🚀 Redirecionando para:", urlFinal);
 
-    window.location.href = urlFinal;
+    console.log("🚀 Redirecionando para Farol:", urlFinal);
+
+    // ✅ replace evita empilhar histórico e diminui loop por back/forward
+    window.location.replace(urlFinal);
   };
 
   // --- AUTO-REDIRECT (Se já estiver logado no Inove) ---
@@ -124,12 +115,16 @@ export default function Login() {
     const verificarSessaoAtiva = async () => {
       const storedLogin = localStorage.getItem("inove_login");
 
-      // ✅ ANTI-LOOP: se já estamos no meio de um redirect, não repete
-      const alreadyRedirecting = sessionStorage.getItem("inove_redirecting") === "1";
+      // ✅ se não há redirect, libera a flag (para não travar em estado de redirect)
+      if (!redirectParam) {
+        sessionStorage.removeItem("inove_redirecting");
+        return;
+      }
 
-      // Só executa se tiver redirect E login salvo E não estiver redirecionando já
+      const alreadyRedirecting =
+        sessionStorage.getItem("inove_redirecting") === "1";
+
       if (redirectParam && storedLogin && !alreadyRedirecting) {
-        console.log("🔄 Sessão ativa detectada. Buscando dados frescos...");
         sessionStorage.setItem("inove_redirecting", "1");
 
         const { data } = await supabase
@@ -140,14 +135,11 @@ export default function Login() {
           .maybeSingle();
 
         if (data) {
-          // Atualiza cache local
           localStorage.setItem("inove_nome", data.nome || "");
           localStorage.setItem("inove_nivel", data.nivel || "");
 
-          // Dispara envio
           enviarParaFarol(data, redirectParam);
         } else {
-          // Se não achou, libera flag para não travar
           sessionStorage.removeItem("inove_redirecting");
         }
       }
@@ -172,7 +164,6 @@ export default function Login() {
     });
   }, [senha, isCadastro]);
 
-  // --- LOGIN MANUAL ---
   async function handleEntrar(e) {
     e.preventDefault();
     const inputTrim = loginInput.trim();
@@ -199,14 +190,12 @@ export default function Login() {
       alert("Erro de conexão. Tente novamente.");
       return;
     }
-
     if (!data) {
       alert("Credenciais incorretas ou conta inativa.");
       return;
     }
 
     const nivel = String(data.nivel || "").trim();
-
     if (nivel === "Pendente") {
       alert("Seu cadastro ainda está em análise pelo administrador.");
       return;
@@ -222,21 +211,18 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ DETECTA REDIRECT DO FAROL: Envia todos os dados
     if (redirectParam && isGestorAdm) {
-      // ✅ ANTI-LOOP: marca que estamos redirecionando agora
       sessionStorage.setItem("inove_redirecting", "1");
       enviarParaFarol(data, redirectParam);
       return;
     }
 
-    // Fluxo normal (sem redirect)
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
-  // --- CADASTRO ---
   async function handleCadastro(e) {
     e.preventDefault();
+
     const nomeTrim = nome.trim();
     const loginTrim = loginInput.trim();
     const senhaTrim = senha.trim();
@@ -246,12 +232,10 @@ export default function Login() {
       alert("Preencha todos os campos obrigatórios.");
       return;
     }
-
     if (!EMAIL_REGEX.test(emailTrim)) {
       alert("Insira um e-mail válido.");
       return;
     }
-
     if (passwordMetrics.score < 3) {
       alert("Senha muito fraca.");
       return;
@@ -270,7 +254,6 @@ export default function Login() {
       alert("Erro ao verificar dados.");
       return;
     }
-
     if (existingUser) {
       setLoading(false);
       alert("Este Usuário ou E-mail já estão cadastrados.");
@@ -328,7 +311,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
-      {/* --- LADO ESQUERDO: Branding (Desktop) --- */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
@@ -337,11 +319,9 @@ export default function Login() {
             alt="Logo Portal Inove"
             className="w-48 mb-8 drop-shadow-xl"
           />
-
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">
             PORTAL INOVE
           </h2>
-
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
             “O papel da liderança no Grupo CSC é motivar e capacitar pessoas,
             entendendo a individualidade de cada um, com disciplina e
@@ -350,11 +330,8 @@ export default function Login() {
             na segurança, na satisfação do cliente e na otimização de custos”
           </p>
         </div>
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
-      {/* --- LADO DIREITO: Formulário --- */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
           <div className="lg:hidden text-center">
@@ -385,7 +362,6 @@ export default function Login() {
             onSubmit={isCadastro ? handleCadastro : handleEntrar}
             className="space-y-5"
           >
-            {/* Campos de Login */}
             {!isCadastro && (
               <>
                 <div className="relative group">
@@ -401,6 +377,7 @@ export default function Login() {
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
+
                 <div className="relative group">
                   <Lock
                     className="absolute left-3 top-3.5 text-slate-400"
@@ -425,7 +402,6 @@ export default function Login() {
               </>
             )}
 
-            {/* Campos de Cadastro */}
             {isCadastro && (
               <div className="space-y-4">
                 <div className="relative group">
@@ -441,6 +417,7 @@ export default function Login() {
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
                   />
                 </div>
+
                 <div className="relative group">
                   <Mail
                     className="absolute left-3 top-3.5 text-slate-400"
@@ -454,6 +431,7 @@ export default function Login() {
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
                   />
                 </div>
+
                 <div className="relative group">
                   <Briefcase
                     className="absolute left-3 top-3.5 text-slate-400"
@@ -476,6 +454,7 @@ export default function Login() {
                     size={20}
                   />
                 </div>
+
                 <div className="relative group">
                   <LogIn
                     className="absolute left-3 top-3.5 text-slate-400"
@@ -489,6 +468,7 @@ export default function Login() {
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
                   />
                 </div>
+
                 <div className="relative group">
                   <Lock
                     className="absolute left-3 top-3.5 text-slate-400"
@@ -502,6 +482,7 @@ export default function Login() {
                     className="w-full pl-10 py-3 bg-white border rounded-xl"
                   />
                 </div>
+
                 {senha.length > 0 && (
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex gap-1 h-1.5 mb-2">
@@ -549,7 +530,6 @@ export default function Login() {
                 onClick={() => {
                   setIsCadastro(!isCadastro);
                   resetForm();
-                  // ✅ libera flag de redirect caso o usuário volte pra login manual
                   sessionStorage.removeItem("inove_redirecting");
                 }}
                 className="text-blue-600 font-bold hover:underline"
