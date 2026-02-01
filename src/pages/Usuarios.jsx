@@ -123,12 +123,15 @@ export default function Usuarios() {
                     <select
                       value={u.nivel || "Pendente"}
                       onChange={(e) => atualizarNivel(u.id, e.target.value)}
-                      className="border rounded px-2 py-1 text-sm"
+                      className="border rounded px-2 py-1 text-sm bg-white"
                     >
                       <option value="Pendente">Pendente</option>
                       <option value="CCO">CCO</option>
                       <option value="Manutenção">Manutenção</option>
                       <option value="Tratativa">Tratativa</option>
+                      {/* 👇 ADICIONADO AQUI 👇 */}
+                      <option value="RH">RH</option>
+                      {/* 👆 ADICIONADO AQUI 👆 */}
                       <option value="Gestor">Gestor</option>
                       <option value="Administrador">Administrador</option>
                     </select>
