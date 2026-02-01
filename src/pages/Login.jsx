@@ -17,6 +17,7 @@ const SETORES = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Garante que o parâmetro de origem exista
 function appendFromInove(url) {
   try {
     const u = new URL(url);
@@ -25,6 +26,18 @@ function appendFromInove(url) {
   } catch {
     if (String(url || "").includes("?")) return `${url}&from=inove`;
     return `${url}?from=inove`;
+  }
+}
+
+// 🔥 IMPORTANTE: Pega sempre a raiz do site de destino (remove /inicio, /dashboard, etc)
+// Isso garante que o LandingFarol.jsx seja ativado para salvar os dados.
+function getBaseUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + "/"; 
+  } catch {
+    // Fallback caso a URL seja inválida, ajusta para a raiz do Farol de produção
+    return "https://faroldemetas.onrender.com/"; 
   }
 }
 
@@ -61,38 +74,43 @@ export default function Login() {
     return "/inove";
   }
 
-  // --- FUNÇÃO DE ENVIO PARA O FAROL ---
+  // --- FUNÇÃO DE ENVIO PARA O FAROL (DADOS COMPLETOS) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
-    // 🔥 CORREÇÃO: Garante que NUNCA vá sem nome
-    const nomeFinal = dadosUsuario.nome || dadosUsuario.login || "Colaborador";
-    console.log("Enviando usuário para Farol:", nomeFinal);
+    console.log("Preparando envio completo para o Farol...", dadosUsuario);
 
+    // 1. Pacote com TODOS os dados necessários para rastreio
     const pacote = {
       id: dadosUsuario.id,
-      nome: nomeFinal, 
+      nome: dadosUsuario.nome || dadosUsuario.login, // Garante nome
       email: dadosUsuario.email,
       nivel: dadosUsuario.nivel,
-      login: dadosUsuario.login
+      login: dadosUsuario.login,
+      setor: dadosUsuario.setor || "N/A", // Envia setor também
+      origem: "Portal Inove"
     };
     
+    // 2. Codifica o pacote
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
-    const urlBase = appendFromInove(urlDestino);
-    const separator = urlBase.includes("?") ? "&" : "?";
     
-    // Redireciona
-    window.location.href = `${urlBase}${separator}userData=${dadosString}`;
+    // 3. Força a ida para a RAIZ (Landing) para garantir que o script de salvamento rode
+    // O Landing vai salvar e depois mandar para o /inicio automaticamente
+    const baseUrl = getBaseUrl(urlDestino);
+    
+    const urlFinal = `${baseUrl}?from=inove&userData=${dadosString}`;
+    
+    console.log("Redirecionando para:", urlFinal);
+    window.location.href = urlFinal;
   };
 
-  // --- AUTO-REDIRECT (Gatilho Automático) ---
+  // --- AUTO-REDIRECT (Se já estiver logado no Inove) ---
   useEffect(() => {
     const verificarSessaoAtiva = async () => {
-      // Se tem um pedido de redirect e um login salvo
       const storedLogin = localStorage.getItem("inove_login");
       
+      // Só executa se tiver um pedido de redirect E um login salvo
       if (redirectParam && storedLogin) {
-        console.log("Detectado redirect + login salvo. Buscando dados frescos...");
+        console.log("Sessão ativa detectada. Buscando dados frescos para envio...");
         
-        // Busca os dados no banco para garantir que o Nome vá atualizado
         const { data } = await supabase
           .from("usuarios_aprovadores")
           .select("*")
@@ -101,11 +119,11 @@ export default function Login() {
           .maybeSingle();
 
         if (data) {
-           // Atualiza o cache local por precaução
+           // Atualiza cache local por garantia
            localStorage.setItem("inove_nome", data.nome || "");
            localStorage.setItem("inove_nivel", data.nivel || "");
            
-           // Envia para o Farol
+           // Dispara envio
            enviarParaFarol(data, redirectParam);
         }
       }
@@ -177,12 +195,13 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ Se tem redirect, envia os dados (Login Manual)
+    // ✅ DETECTA REDIRECT DO FAROL: Envia todos os dados
     if (redirectParam && isGestorAdm) {
       enviarParaFarol(data, redirectParam);
       return;
     }
 
+    // Fluxo normal (sem redirect)
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
@@ -276,21 +295,34 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
-      {/* Branding */}
+      
+      {/* --- LADO ESQUERDO: Branding (Desktop) --- */}
       <div className="hidden lg:flex lg:w-5/12 bg-blue-900 relative overflow-hidden flex-col items-center justify-center text-center p-12">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 to-blue-950 opacity-90 z-0" />
         <div className="relative z-10 flex flex-col items-center">
-          <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
+          
+          <img
+            src={logoInova}
+            alt="Logo Portal Inove"
+            className="w-48 mb-8 drop-shadow-xl" 
+          />
+          
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
-          <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
+          
+          {/* ✅ TEXTO DA LIDERANÇA COMPLETO */}
+          <p className="text-blue-100 max-w-sm text-lg leading-relaxed text-justify">
             “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
           </p>
+
         </div>
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
 
-      {/* Formulário */}
+      {/* --- LADO DIREITO: Formulário --- */}
       <div className="w-full lg:w-7/12 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8">
+          
           <div className="lg:hidden text-center">
             <img src={logoInova} alt="Logo InovaQuatai" className="mx-auto mb-4 w-32 h-auto" />
           </div>
@@ -301,9 +333,14 @@ export default function Login() {
             </h1>
             {redirectParam && (
                <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium animate-pulse">
-                  Por favor, faça login para validar seu acesso ao Farol.
+                  Validando credenciais para o Farol Tático...
                </div>
             )}
+            <p className="mt-2 text-slate-500">
+              {isCadastro 
+                ? "Preencha todos os dados abaixo para solicitar acesso." 
+                : "Entre com suas credenciais para continuar."}
+            </p>
           </div>
 
           <form onSubmit={isCadastro ? handleCadastro : handleEntrar} className="space-y-5">
@@ -317,7 +354,7 @@ export default function Login() {
                       placeholder="Usuário ou E-mail"
                       value={loginInput}
                       onChange={(e) => setLoginInput(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white border rounded-xl"
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
                     />
                   </div>
                   <div className="relative group">
@@ -327,39 +364,75 @@ export default function Login() {
                       placeholder="Senha"
                       value={senha}
                       onChange={(e) => setSenha(e.target.value)}
-                      className="w-full pl-10 pr-12 py-3 bg-white border rounded-xl"
+                      className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
+                      autoComplete="current-password" // Ajuda a remover warning
                     />
-                    <button type="button" onClick={() => setMostrarSenha(!mostrarSenha)} className="absolute right-3 top-3 text-slate-400">
+                    <button type="button" onClick={() => setMostrarSenha(!mostrarSenha)} className="absolute right-3 top-3 text-slate-400 hover:text-blue-600 transition p-1">
                       {mostrarSenha ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
                   </div>
                 </>
             )}
 
-            {/* Campos de Cadastro (Simplificado aqui, mas mantenha o código original se precisar) */}
+            {/* Campos de Cadastro */}
             {isCadastro && (
                 <div className="space-y-4">
-                   <input type="text" placeholder="Nome *" value={nome} onChange={e => setNome(e.target.value)} className="w-full p-3 border rounded-xl" />
-                   <input type="email" placeholder="Email *" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border rounded-xl" />
-                   {/* ... outros campos ... */}
-                   <input type="text" placeholder="Usuário *" value={loginInput} onChange={e => setLoginInput(e.target.value)} className="w-full p-3 border rounded-xl" />
-                   <input type="password" placeholder="Senha *" value={senha} onChange={e => setSenha(e.target.value)} className="w-full p-3 border rounded-xl" />
-                   <select value={setor} onChange={e => setSetor(e.target.value)} className="w-full p-3 border rounded-xl">
-                      <option value="">Setor *</option>
-                      {SETORES.map(s => <option key={s} value={s}>{s}</option>)}
-                   </select>
+                   <div className="relative group">
+                      <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                      <input type="text" placeholder="Nome Completo *" value={nome} onChange={e => setNome(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                   </div>
+                   <div className="relative group">
+                      <Mail className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                      <input type="email" placeholder="Email Corporativo *" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                   </div>
+                   <div className="relative group">
+                      <Briefcase className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                      <select value={setor} onChange={e => setSetor(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl appearance-none">
+                         <option value="">Selecione seu Setor *</option>
+                         {SETORES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-3.5 pointer-events-none text-slate-400" size={20} />
+                   </div>
+                   <div className="relative group">
+                      <LogIn className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                      <input type="text" placeholder="Usuário (Login) *" value={loginInput} onChange={e => setLoginInput(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                   </div>
+                   <div className="relative group">
+                      <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                      <input type="password" placeholder="Senha *" value={senha} onChange={e => setSenha(e.target.value)} className="w-full pl-10 py-3 bg-white border rounded-xl" />
+                   </div>
+                   {senha.length > 0 && (
+                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <div className="flex gap-1 h-1.5 mb-2">
+                           {[1, 2, 3, 4].map(s => <div key={s} className={`flex-1 rounded-full ${passwordMetrics.score >= s ? "bg-green-500" : "bg-slate-200"}`} />)}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                           <PasswordCheck label="8+ Car" met={passwordMetrics.minChar} />
+                           <PasswordCheck label="Maiúscula" met={passwordMetrics.hasUpper} />
+                           <PasswordCheck label="Número" met={passwordMetrics.hasNumber} />
+                           <PasswordCheck label="Símbolo" met={passwordMetrics.hasSpecial} />
+                        </div>
+                     </div>
+                   )}
                 </div>
             )}
 
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
               {loading ? <Loader2 className="animate-spin" size={22} /> : (isCadastro ? "Solicitar Cadastro" : "Entrar no Sistema")}
             </button>
           </form>
 
           <div className="mt-8 text-center">
-             <button onClick={() => { setIsCadastro(!isCadastro); resetForm(); }} className="text-blue-600 font-bold hover:underline">
-               {isCadastro ? "Fazer Login" : "Cadastre-se aqui"}
-             </button>
+            <p className="text-slate-600">
+              {isCadastro ? "Já possui cadastro?" : "Não tem uma conta?"}{" "}
+              <button onClick={() => { setIsCadastro(!isCadastro); resetForm(); }} className="text-blue-600 font-bold hover:underline">
+                {isCadastro ? "Fazer Login" : "Cadastre-se aqui"}
+              </button>
+            </p>
+          </div>
+          
+          <div className="text-center mt-8">
+            <p className="text-xs text-slate-400">© {new Date().getFullYear()} PORTAL INOVE</p>
           </div>
         </div>
       </div>
