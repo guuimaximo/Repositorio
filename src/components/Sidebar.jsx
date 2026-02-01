@@ -28,7 +28,7 @@ import {
   FaRobot,
   FaChartPie,
 } from "react-icons/fa";
-import { ExternalLink } from "lucide-react"; // ✅ NOVO
+import { ExternalLink } from "lucide-react";
 import logoInova from "../assets/logoInovaQuatai.png";
 import { AuthContext } from "../context/AuthContext";
 
@@ -36,7 +36,7 @@ import { AuthContext } from "../context/AuthContext";
    ROTAS
 ========================= */
 
-// ✅ Rotas Diesel
+// Rotas Diesel
 const DIESEL_ROUTES = {
   lancamento: "/desempenho-lancamento",
   resumo: "/desempenho-diesel-resumo",
@@ -45,25 +45,24 @@ const DIESEL_ROUTES = {
   agente: "/desempenho-diesel-agente",
 };
 
-// ✅ Rotas PCM (ABA)
+// Rotas PCM (ABA)
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
-  inicio: "/pcm-inicio", // ✅ PCM do dia (abre PCMInicio)
-  diario: "/pcm-diario", // base (com :id)
+  inicio: "/pcm-inicio", 
+  diario: "/pcm-diario",
 };
 
 /* =========================
    FAROL TÁTICO (BOTÃO)
 ========================= */
-const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador"]);
+// ✅ ATUALIZADO: Adicionado "RH" na lista de permissão
+const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador", "RH"]);
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
 /* =========================
    ACESSO POR NÍVEL
 ========================= */
 
-// Regra: "/" (Início executivo) é APENAS Gestor/Adm.
-// Para demais, use "/inicio-basico".
 const ACCESS = {
   Administrador: "ALL",
 
@@ -90,16 +89,24 @@ const ACCESS = {
 
     "/km-rodado",
 
-    // ✅ PCM
+    // PCM
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
 
-    // ✅ Diesel
+    // Diesel
     ...Object.values(DIESEL_ROUTES),
   ],
 
-  // ❗ Tratativa NÃO vê resumo (somente Solicitação/Central, conforme você já tinha)
+  // ✅ NÍVEL RH
+  RH: [
+    "/", // Dashboard Principal (Resumo Geral)
+    "/tratativas-resumo",
+    "/central", // Central de Tratativas
+    "/avarias-resumo",
+    "/cobrancas", // Cobranças de Avarias
+  ],
+
   Tratativa: ["/inicio-basico", "/solicitar", "/central", "/cobrancas"],
 
   Manutenção: [
@@ -117,7 +124,7 @@ const ACCESS = {
 
     "/km-rodado",
 
-    // ✅ PCM
+    // PCM
     PCM_ROUTES.resumo,
     PCM_ROUTES.inicio,
     PCM_ROUTES.diario,
@@ -138,12 +145,13 @@ function canSee(user, path) {
   if (!user?.nivel) return false;
   if (user.nivel === "Administrador") return true;
   if (user.nivel === "Gestor") return ACCESS.Gestor.includes(path);
+  
   const allowed = ACCESS[user.nivel] || [];
   return allowed.includes(path);
 }
 
 export default function Sidebar() {
-  const [pcmOpen, setPcmOpen] = useState(false); // ✅ NOVO (ABA PCM)
+  const [pcmOpen, setPcmOpen] = useState(false);
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
   const [avariasOpen, setAvariasOpen] = useState(false);
@@ -156,20 +164,18 @@ export default function Sidebar() {
   const isAdmin = user?.nivel === "Administrador";
   const isGestor = user?.nivel === "Gestor";
   const isManutencao = user?.nivel === "Manutenção";
+  const isRH = user?.nivel === "RH";
 
-  // ✅ Regra pedida:
-  // - Gestor/Adm vê Início executivo ("/")
-  // - Outros níveis vêem Início básico ("/inicio-basico")
-  const showInicioExecutivo = isAdmin || isGestor;
+  // Regra de Visualização do Dashboard Principal ("/")
+  const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
 
-  // ✅ Botão Farol: apenas Gestor/Adm
+  // ✅ Botão Farol: Verifica se o nível está no Set (agora inclui RH)
   const podeVerFarol = useMemo(() => {
     const nivel = String(user?.nivel || "").trim();
     return NIVEIS_LIBERADOS_FAROL.has(nivel);
   }, [user?.nivel]);
 
-  // ✅ PASSO 1: salvar usuário do INOVE no localStorage antes de abrir o Farol
   function abrirFarol() {
     try {
       if (user) {
@@ -178,8 +184,8 @@ export default function Sidebar() {
           login: user.login || null,
           nome: user.nome || null,
           nivel: user.nivel || null,
-          auth_user_id: user.auth_user_id || null, // se existir no seu contexto
-          email: user.email || null, // se existir no seu contexto
+          auth_user_id: user.auth_user_id || null,
+          email: user.email || null,
           timestamp: new Date().toISOString(),
         };
         localStorage.setItem("farol_user", JSON.stringify(payload));
@@ -196,13 +202,12 @@ export default function Sidebar() {
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-basico", label: "Início", icon: <FaHome /> },
 
-      // ✅ PCM como ABA com 2 itens
       pcm: {
         label: "PCM",
         icon: <FaClipboardList />,
         tabs: [
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
-          { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> }, // ✅ PCMInicio
+          { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
         ],
       },
 
@@ -218,8 +223,7 @@ export default function Sidebar() {
         ],
       },
 
-      // ✅ Tratativas: ordem pedida (Resumo -> Solicitação -> Central)
-      // ✅ Resumo só para Gestor/Adm
+      // Tratativas
       tratativas: [
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
@@ -266,18 +270,15 @@ export default function Sidebar() {
     }`;
 
   const showDesempenhoDiesel = isAdmin || isGestor;
-
-  // ✅ PCM: aparece para Adm/Gestor/Manutenção
   const showPCM = isAdmin || isGestor || isManutencao;
 
-  // ✅ Tratativas aparecem para quem tiver ao menos 1 item visível
   const showTratativas = links.tratativas.some((l) => {
-    if (l.onlyAdminGestor) return isAdmin || isGestor;
+    if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null; // RH vê resumo
     return canSee(user, l.path);
   });
 
   const showAvarias = links.avarias.some((l) => {
-    if (l.path === "/avarias-resumo") return isAdmin || isGestor;
+    if (l.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null; // RH vê resumo
     return canSee(user, l.path);
   });
 
@@ -293,7 +294,7 @@ export default function Sidebar() {
             <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
 
-            {/* ✅ BOTÃO FAROL TÁTICO (somente Gestor/Adm) */}
+            {/* ✅ Botão Farol Tático (Gestor / Adm / RH) */}
             {podeVerFarol && (
               <button
                 onClick={abrirFarol}
@@ -310,15 +311,15 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* ✅ Início para Gestor/Adm ("/") */}
+        {/* Início para Gestor/Adm/RH ("/") */}
         {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon}
             <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
-          </NavLink>
+          NavLink>
         )}
 
-        {/* ✅ Início básico para demais ("/inicio-basico") */}
+        {/* Início básico para demais ("/inicio-basico") */}
         {showInicioBasico && canSee(user, links.inicioBasico.path) && (
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
             {links.inicioBasico.icon}
@@ -326,7 +327,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* ✅ PCM (ABA) */}
+        {/* PCM */}
         {showPCM && (
           <>
             <button
@@ -356,7 +357,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Desempenho Diesel */}
+        {/* Desempenho Diesel */}
         {showDesempenhoDiesel && (
           <>
             <button
@@ -386,7 +387,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Tratativas */}
+        {/* Tratativas */}
         {showTratativas && (
           <>
             <button
@@ -403,7 +404,7 @@ export default function Sidebar() {
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) => {
-                  if (link.onlyAdminGestor && !(isAdmin || isGestor)) return null;
+                  if (link.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
                   if (!link.onlyAdminGestor && !canSee(user, link.path)) return null;
 
                   return (
@@ -417,7 +418,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Avarias */}
+        {/* Avarias */}
         {showAvarias && (
           <>
             <button
@@ -434,10 +435,10 @@ export default function Sidebar() {
             {avariasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.avarias.map((link) => {
-                  if (link.path === "/avarias-resumo" && !(isAdmin || isGestor)) return null;
+                  if (link.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null;
 
                   return canSee(user, link.path) ||
-                    (link.path === "/avarias-resumo" && (isAdmin || isGestor)) ? (
+                    (link.path === "/avarias-resumo" && (isAdmin || isGestor || isRH)) ? (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                       {link.icon} <span>{link.label}</span>
                     </NavLink>
@@ -448,7 +449,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Intervenções */}
+        {/* Intervenções */}
         {showSOS && (
           <>
             <button
@@ -476,7 +477,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* ✅ Configurações */}
+        {/* Configurações */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
