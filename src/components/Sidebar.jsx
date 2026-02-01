@@ -55,7 +55,6 @@ const PCM_ROUTES = {
 /* =========================
    FAROL TÁTICO (BOTÃO)
 ========================= */
-// ✅ ATUALIZADO: Adicionado "RH" na lista de permissão
 const NIVEIS_LIBERADOS_FAROL = new Set(["Gestor", "Administrador", "RH"]);
 const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 
@@ -170,7 +169,7 @@ export default function Sidebar() {
   const showInicioExecutivo = isAdmin || isGestor || isRH;
   const showInicioBasico = !showInicioExecutivo;
 
-  // ✅ Botão Farol: Verifica se o nível está no Set (agora inclui RH)
+  // Botão Farol
   const podeVerFarol = useMemo(() => {
     const nivel = String(user?.nivel || "").trim();
     return NIVEIS_LIBERADOS_FAROL.has(nivel);
@@ -223,7 +222,6 @@ export default function Sidebar() {
         ],
       },
 
-      // Tratativas
       tratativas: [
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
@@ -273,12 +271,12 @@ export default function Sidebar() {
   const showPCM = isAdmin || isGestor || isManutencao;
 
   const showTratativas = links.tratativas.some((l) => {
-    if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null; // RH vê resumo
+    if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
     return canSee(user, l.path);
   });
 
   const showAvarias = links.avarias.some((l) => {
-    if (l.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null; // RH vê resumo
+    if (l.path === "/avarias-resumo" && !(isAdmin || isGestor || isRH)) return null;
     return canSee(user, l.path);
   });
 
@@ -294,7 +292,6 @@ export default function Sidebar() {
             <p className="text-sm font-semibold text-white">Olá, {user.nome?.split(" ")[0]} 👋</p>
             <p className="text-xs text-blue-200">Seja bem-vindo!</p>
 
-            {/* ✅ Botão Farol Tático (Gestor / Adm / RH) */}
             {podeVerFarol && (
               <button
                 onClick={abrirFarol}
@@ -311,15 +308,13 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* Início para Gestor/Adm/RH ("/") */}
         {showInicioExecutivo && canSee(user, links.inicioExecutivo.path) && (
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon}
             <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
-          NavLink>
+          </NavLink> // ✅ ERRO CORRIGIDO AQUI
         )}
 
-        {/* Início básico para demais ("/inicio-basico") */}
         {showInicioBasico && canSee(user, links.inicioBasico.path) && (
           <NavLink to={links.inicioBasico.path} className={navLinkClass}>
             {links.inicioBasico.icon}
@@ -327,7 +322,6 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* PCM */}
         {showPCM && (
           <>
             <button
@@ -357,7 +351,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Desempenho Diesel */}
         {showDesempenhoDiesel && (
           <>
             <button
@@ -387,7 +380,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Tratativas */}
         {showTratativas && (
           <>
             <button
@@ -418,7 +410,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Avarias */}
         {showAvarias && (
           <>
             <button
@@ -449,7 +440,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Intervenções */}
         {showSOS && (
           <>
             <button
@@ -477,7 +467,6 @@ export default function Sidebar() {
           </>
         )}
 
-        {/* Configurações */}
         {showConfig && (
           <>
             <hr className="my-3 border-blue-500" />
