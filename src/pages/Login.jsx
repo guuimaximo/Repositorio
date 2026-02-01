@@ -17,7 +17,7 @@ const SETORES = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Garante que o parâmetro de origem exista
+// ✅ Garante que o parâmetro de origem exista
 function appendFromInove(url) {
   try {
     const u = new URL(url);
@@ -29,14 +29,12 @@ function appendFromInove(url) {
   }
 }
 
-// 🔥 IMPORTANTE: Pega sempre a raiz do site de destino (remove /inicio, /dashboard, etc)
-// Isso garante que o LandingFarol.jsx seja ativado para salvar os dados.
+// ✅ IMPORTANTE: Remove rotas como /inicio para garantir que caia no LandingFarol (Raiz)
 function getBaseUrl(url) {
   try {
     const u = new URL(url);
-    return u.origin + "/"; 
+    return u.origin + "/"; // Retorna sempre a raiz (ex: https://farol.com/)
   } catch {
-    // Fallback caso a URL seja inválida, ajusta para a raiz do Farol de produção
     return "https://faroldemetas.onrender.com/"; 
   }
 }
@@ -76,29 +74,29 @@ export default function Login() {
 
   // --- FUNÇÃO DE ENVIO PARA O FAROL (DADOS COMPLETOS) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
-    console.log("Preparando envio completo para o Farol...", dadosUsuario);
+    console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
 
-    // 1. Pacote com TODOS os dados necessários para rastreio
+    // 1. Pacote com TODOS os dados para rastreio
     const pacote = {
       id: dadosUsuario.id,
-      nome: dadosUsuario.nome || dadosUsuario.login, // Garante nome
+      nome: dadosUsuario.nome || dadosUsuario.login, // Garante que tenha nome
       email: dadosUsuario.email,
       nivel: dadosUsuario.nivel,
       login: dadosUsuario.login,
-      setor: dadosUsuario.setor || "N/A", // Envia setor também
+      setor: dadosUsuario.setor || "N/A", // ✅ Envia o setor para rastreio
       origem: "Portal Inove"
     };
     
-    // 2. Codifica o pacote
+    // 2. Codifica o pacote para URL
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
     
-    // 3. Força a ida para a RAIZ (Landing) para garantir que o script de salvamento rode
-    // O Landing vai salvar e depois mandar para o /inicio automaticamente
+    // 3. Força a ida para a RAIZ (Landing)
     const baseUrl = getBaseUrl(urlDestino);
     
+    // 4. Monta URL Final
     const urlFinal = `${baseUrl}?from=inove&userData=${dadosString}`;
     
-    console.log("Redirecionando para:", urlFinal);
+    console.log("🚀 Redirecionando para:", urlFinal);
     window.location.href = urlFinal;
   };
 
@@ -109,7 +107,7 @@ export default function Login() {
       
       // Só executa se tiver um pedido de redirect E um login salvo
       if (redirectParam && storedLogin) {
-        console.log("Sessão ativa detectada. Buscando dados frescos para envio...");
+        console.log("🔄 Sessão ativa detectada. Buscando dados frescos...");
         
         const { data } = await supabase
           .from("usuarios_aprovadores")
@@ -119,7 +117,7 @@ export default function Login() {
           .maybeSingle();
 
         if (data) {
-           // Atualiza cache local por garantia
+           // Atualiza cache local
            localStorage.setItem("inove_nome", data.nome || "");
            localStorage.setItem("inove_nivel", data.nivel || "");
            
@@ -333,7 +331,7 @@ export default function Login() {
             </h1>
             {redirectParam && (
                <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 font-medium animate-pulse">
-                  Validando credenciais para o Farol Tático...
+                  Conectando ao Farol Tático...
                </div>
             )}
             <p className="mt-2 text-slate-500">
@@ -365,7 +363,7 @@ export default function Login() {
                       value={senha}
                       onChange={(e) => setSenha(e.target.value)}
                       className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all"
-                      autoComplete="current-password" // Ajuda a remover warning
+                      autoComplete="current-password"
                     />
                     <button type="button" onClick={() => setMostrarSenha(!mostrarSenha)} className="absolute right-3 top-3 text-slate-400 hover:text-blue-600 transition p-1">
                       {mostrarSenha ? <EyeOff size={20} /> : <Eye size={20} />}
