@@ -283,7 +283,7 @@ export default function Login() {
           <img src={logoInova} alt="Logo Portal Inove" className="w-48 mb-8 drop-shadow-xl" />
           <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">PORTAL INOVE</h2>
           <p className="text-blue-100 max-w-sm text-lg leading-relaxed">
-            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas...”
+            “O papel da liderança no Grupo CSC é motivar e capacitar pessoas, entendendo a individualidade de cada um, com disciplina e comprometimento, gerando resiliência e coragem para influenciar, quebrar barreiras, melhorar processos e entregar resultados com foco na segurança, na satisfação do cliente e na otimização de custos”
           </p>
         </div>
       </div>
