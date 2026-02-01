@@ -17,18 +17,6 @@ const SETORES = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ✅ Garante que o parâmetro de origem exista
-function appendFromInove(url) {
-  try {
-    const u = new URL(url);
-    if (!u.searchParams.get("from")) u.searchParams.set("from", "inove");
-    return u.toString();
-  } catch {
-    if (String(url || "").includes("?")) return `${url}&from=inove`;
-    return `${url}?from=inove`;
-  }
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,7 +50,7 @@ export default function Login() {
     return "/inove";
   }
 
-  // --- FUNÇÃO DE ENVIO PARA O FAROL (ATUALIZADA) ---
+  // --- FUNÇÃO DE ENVIO PARA O FAROL (ATUALIZADA E BLINDADA) ---
   const enviarParaFarol = (dadosUsuario, urlDestino) => {
     console.log("📦 Empacotando dados completos para o Farol:", dadosUsuario);
 
@@ -78,31 +66,37 @@ export default function Login() {
 
     const dadosString = encodeURIComponent(JSON.stringify(pacote));
 
-    // ⚠️ MUDANÇA CRÍTICA AQUI:
-    // Em vez de mandar para a raiz, mandamos para a rota de LIMPEZA "/receber-acesso"
+    // 1. Define a origem base (Domínio do Farol)
     let origin;
     try {
+        // Tenta pegar a base da URL que veio no redirect (ex: https://farol.com)
         origin = new URL(urlDestino).origin;
     } catch {
+        // Fallback de segurança se vier vazio ou inválido
         origin = "https://faroldemetas.onrender.com";
     }
 
-    const urlFinal = `${origin}/receber-acesso?userData=${dadosString}`;
+    // 2. Adiciona timestamp para evitar cache do navegador (Cache Buster)
+    const timestamp = new Date().getTime();
+
+    // 3. Monta a URL forçando a rota /receber-acesso
+    const urlFinal = `${origin}/receber-acesso?t=${timestamp}&userData=${dadosString}`;
 
     console.log("🚀 Redirecionando para rota de limpeza:", urlFinal);
-    window.location.href = urlFinal;
+    
+    // 4. Usa replace para não deixar voltar no histórico
+    window.location.replace(urlFinal);
   };
 
-  // ✅ ANTES: AUTO-REDIRECT (causava “grudar” no último login salvo)
-  // ✅ AGORA: apenas preenche o login se houver redirect, mas NÃO redireciona sozinho
+  // Preenche login se vier de um redirect
   useEffect(() => {
     if (!redirectParam) return;
 
     const storedLogin = localStorage.getItem("inove_login");
     if (storedLogin && !loginInput) {
-      setLoginInput(storedLogin); // só prefill
+      setLoginInput(storedLogin); 
     }
-  }, [redirectParam]); // intencionalmente sem loginInput aqui para não ficar “brigando”
+  }, [redirectParam]);
 
   // Monitor de Senha
   useEffect(() => {
@@ -167,13 +161,13 @@ export default function Login() {
 
     const isGestorAdm = NIVEIS_PORTAL.has(nivel);
 
-    // ✅ redirect para Farol: envia dados do usuário LOGADO AGORA (sem auto-redirect antigo)
+    // ✅ CHECKPOINT CRÍTICO: Se tiver redirect para o Farol, usa a nova lógica
     if (redirectParam && isGestorAdm) {
       enviarParaFarol(data, redirectParam);
       return;
     }
 
-    // Fluxo normal (sem redirect)
+    // Fluxo normal (sem redirect, navegação interna do Inove)
     navigate(nextPathState || decideDefaultNext(nivel), { replace: true });
   }
 
