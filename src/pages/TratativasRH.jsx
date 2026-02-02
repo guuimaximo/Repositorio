@@ -88,9 +88,9 @@ function Info({ titulo, valor }) {
 }
 
 export default function TratativasRH() {
-  const { user } = useContext(AuthContext);
+  useContext(AuthContext); // mantém contexto (mesmo se não usar agora)
 
-  // filtros (padrão Central)
+  // filtros
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("PENDENTE"); // PENDENTE | CONCLUIDA | TODOS
   const [acaoFiltro, setAcaoFiltro] = useState("TODOS"); // TODOS | Advertência | Suspensão
@@ -107,7 +107,6 @@ export default function TratativasRH() {
   const [obsRH, setObsRH] = useState("");
   const [evidFile, setEvidFile] = useState(null);
 
-  // paste (print) — no próprio campo
   const pasteBoxRef = useRef(null);
 
   // =========================
@@ -155,12 +154,12 @@ export default function TratativasRH() {
   }
 
   // =========================
-  // Carregar listagem (igual Central)
+  // Carregar listagem
   // =========================
   async function load() {
     setLoading(true);
     try {
-      // 1) detalhes do tratador que geram RH (Advertência/Suspensão)
+      // 1) detalhes do tratador que viram RH
       const { data, error } = await supabase
         .from("tratativas_detalhes")
         .select(
@@ -199,14 +198,13 @@ export default function TratativasRH() {
       const detalhes = (data || []).filter((d) => d?.tratativas?.id);
       const tratativaIds = Array.from(new Set(detalhes.map((d) => d.tratativa_id))).filter(Boolean);
 
-      // 2) status RH (por tratativa_id)
+      // 2) status RH (SEM colunas inexistentes)
       const rhMap = new Map();
       if (tratativaIds.length > 0) {
-        // ⚠️ selecione apenas colunas que existem no seu schema
         const { data: rh, error: erh } = await supabase
           .from("tratativas_rh")
           .select(
-            "id, tratativa_id, status_rh, lancado_transnet, evidencia_transnet_url, observacao_rh, lancado_em, tratado_por_login, tratado_por_nome, tratado_por_id, created_at"
+            "id, tratativa_id, status_rh, lancado_transnet, evidencia_transnet_url, observacao_rh, lancado_em, created_at"
           )
           .in("tratativa_id", tratativaIds);
 
@@ -250,7 +248,6 @@ export default function TratativasRH() {
           rh_obs: rh?.observacao_rh || "",
           rh_evid_url: rh?.evidencia_transnet_url || null,
           rh_lancado_em: rh?.lancado_em || null,
-          rh_tratado_por_nome: rh?.tratado_por_nome || rh?.tratado_por_login || "—",
         };
       });
 
@@ -268,20 +265,17 @@ export default function TratativasRH() {
   }, []);
 
   // =========================
-  // Filtros (como Central)
+  // Filtros
   // =========================
   const filtered = useMemo(() => {
     const q = norm(busca);
 
     return rows.filter((r) => {
-      // status
       if (status === "PENDENTE" && r.rh_lancado) return false;
       if (status === "CONCLUIDA" && !r.rh_lancado) return false;
 
-      // ação
       if (acaoFiltro !== "TODOS" && r.acao_aplicada !== acaoFiltro) return false;
 
-      // busca
       if (!q) return true;
       const blob = norm(
         [
@@ -319,18 +313,14 @@ export default function TratativasRH() {
   }, [rows]);
 
   // =========================
-  // Abrir/fechar modal
+  // Modal
   // =========================
   function openModal(r) {
     setSel(r);
     setObsRH(r.rh_obs || "");
     setEvidFile(null);
     setAberto(true);
-
-    // dica: foco no paste box para Ctrl+V funcionar na hora
-    setTimeout(() => {
-      pasteBoxRef.current?.focus?.();
-    }, 150);
+    setTimeout(() => pasteBoxRef.current?.focus?.(), 150);
   }
   function closeModal() {
     setAberto(false);
@@ -339,13 +329,9 @@ export default function TratativasRH() {
     setEvidFile(null);
   }
 
-  // =========================
-  // Render evidências (thumb se imagem, link se PDF)
-  // =========================
   const renderThumbOrLink = (url) => {
     if (!url) return <span className="text-gray-400">—</span>;
     const img = isImageUrl(url) && !isPdf(url);
-
     return img ? (
       <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir">
         <img
@@ -361,20 +347,20 @@ export default function TratativasRH() {
         target="_blank"
         rel="noopener noreferrer"
         className="text-blue-600 underline text-xs"
-        title="Abrir arquivo"
       >
         {fileNameFromUrl(url)}
       </a>
     );
   };
 
+  const modoConsulta = Boolean(sel?.rh_lancado);
+
   // =========================
-  // Botão “Fechar Medida” (lançar RH)
+  // Fechar Medida (RH)
   // =========================
   async function fecharMedidaRH() {
     if (!sel) return;
 
-    // se já foi lançado, não deixa lançar de novo
     if (sel.rh_lancado) {
       alert("Esta medida já está concluída no RH.");
       return;
@@ -391,32 +377,8 @@ export default function TratativasRH() {
 
     setLoading(true);
     try {
-      // auditoria
-      const loginSessao = user?.login || user?.email || null;
-      const idSessao = user?.id || user?.auth_user_id || null;
-      let nomeSessao = user?.nome || user?.nome_completo || null;
+      const evidUrl = await uploadToTratativasBucket(evidFile, `${sel.tratativa_id}/rh_transnet`);
 
-      if (!nomeSessao && loginSessao) {
-        const { data: u } = await supabase
-          .from("usuarios_aprovadores")
-          .select("nome, sobrenome, nome_completo")
-          .eq("login", loginSessao)
-          .maybeSingle();
-
-        nomeSessao =
-          u?.nome_completo ||
-          [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
-          u?.nome ||
-          loginSessao ||
-          null;
-      }
-
-      const evidUrl = await uploadToTratativasBucket(
-        evidFile,
-        `${sel.tratativa_id}/rh_transnet`
-      );
-
-      // upsert por tratativa_id (precisa UNIQUE(tratativa_id))
       const up = await supabase
         .from("tratativas_rh")
         .upsert(
@@ -427,10 +389,6 @@ export default function TratativasRH() {
             lancado_em: new Date().toISOString(),
             observacao_rh: obsRH.trim(),
             evidencia_transnet_url: evidUrl,
-
-            tratado_por_login: loginSessao,
-            tratado_por_nome: nomeSessao,
-            tratado_por_id: idSessao,
           },
           { onConflict: "tratativa_id" }
         );
@@ -447,9 +405,6 @@ export default function TratativasRH() {
     }
   }
 
-  // =========================
-  // File Picker “bonito”
-  // =========================
   const FilePicker = ({ id, accept, onPick, selectedFile }) => (
     <div className="flex items-center gap-3">
       <input
@@ -471,9 +426,6 @@ export default function TratativasRH() {
     </div>
   );
 
-  // =========================
-  // PasteBox “clique e cole” (REAL)
-  // =========================
   const PasteBox = ({ file, onClear, disabled }) => {
     return (
       <div
@@ -515,15 +467,11 @@ export default function TratativasRH() {
     );
   };
 
-  const modoConsulta = Boolean(sel?.rh_lancado);
-
   return (
     <div className="mx-auto max-w-6xl p-6">
-      {/* header (padrão Central) */}
+      {/* header */}
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">TratativasRH</h1>
-        </div>
+        <h1 className="text-2xl font-bold">TratativasRH</h1>
 
         <button
           type="button"
@@ -535,7 +483,7 @@ export default function TratativasRH() {
         </button>
       </div>
 
-      {/* cards (padrão Central) */}
+      {/* cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         <Card titulo="Pendentes RH" valor={counts.pend} />
         <Card titulo="Concluídas RH" valor={counts.concl} />
@@ -544,7 +492,7 @@ export default function TratativasRH() {
         <Card titulo="Total" valor={counts.total} />
       </div>
 
-      {/* filtros (padrão Central) */}
+      {/* filtros */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
@@ -580,7 +528,7 @@ export default function TratativasRH() {
         </div>
       </div>
 
-      {/* tabela (padrão Central) */}
+      {/* tabela */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
@@ -638,7 +586,7 @@ export default function TratativasRH() {
         </div>
       </div>
 
-      {/* MODAL (LANÇAR / CONSULTAR) */}
+      {/* MODAL */}
       {aberto && sel && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="w-full max-w-3xl bg-white rounded-lg shadow-lg overflow-hidden">
@@ -653,7 +601,9 @@ export default function TratativasRH() {
                 </div>
               </div>
               <button
-                onClick={closeModal}
+                onClick={() => {
+                  closeModal();
+                }}
                 className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Fechar
@@ -661,7 +611,6 @@ export default function TratativasRH() {
             </div>
 
             <div className="p-4 space-y-4">
-              {/* infos base */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <Info titulo="Ocorrência" valor={sel.tipo_ocorrencia || "—"} />
                 <Info titulo="Data Ocorrido" valor={brDate(sel.data_ocorrido)} />
@@ -669,7 +618,6 @@ export default function TratativasRH() {
                 <Info titulo="Prioridade" valor={sel.prioridade || "—"} />
               </div>
 
-              {/* resumo do tratador */}
               <div>
                 <div className="text-sm text-gray-600 mb-1">Resumo / Observações (Tratador)</div>
                 <div className="rounded-md border bg-gray-50 p-3 text-sm whitespace-pre-wrap">
@@ -680,7 +628,6 @@ export default function TratativasRH() {
                 </div>
               </div>
 
-              {/* evidências do tratador */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <div className="text-sm text-gray-600 mb-2">Evidência (Tratador)</div>
@@ -703,7 +650,6 @@ export default function TratativasRH() {
 
               <hr />
 
-              {/* RH */}
               <div>
                 <div className="text-sm font-semibold mb-2">RH (Transnet)</div>
 
@@ -715,11 +661,8 @@ export default function TratativasRH() {
                         titulo="Lançado em"
                         valor={sel.rh_lancado_em ? brDateTime(sel.rh_lancado_em) : "—"}
                       />
-                      <Info
-                        titulo="Lançado por"
-                        valor={sel.rh_tratado_por_nome || "—"}
-                      />
                       <Info titulo="Ação" valor={sel.acao_aplicada || "—"} />
+                      <Info titulo="—" valor="—" />
                     </div>
 
                     <div>
