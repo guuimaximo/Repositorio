@@ -143,32 +143,6 @@ export default function TratarTratativa() {
     return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
   };
 
-  const renderListaArquivosCompacta = (urls, label) => {
-    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-    if (arr.length === 0) return null;
-
-    return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
-        <ul className="space-y-1">
-          {arr.map((u, i) => (
-            <li key={`${u}-${i}`} className="text-sm">
-              <a
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 underline"
-                title="Abrir evidência"
-              >
-                {fileNameFromUrl(u)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
   const renderArquivoOuThumb = (url, label) => {
     if (!url) return null;
 
@@ -203,6 +177,67 @@ export default function TratarTratativa() {
     );
   };
 
+  // ✅ Galeria compacta: miniatura se imagem; se PDF/doc -> “cartão” clicável com nome
+  const renderEvidenciasSolicitacao = (urls) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+    if (arr.length === 0) return null;
+
+    return (
+      <div className="mt-3">
+        <span className="block text-sm text-gray-600 mb-2">
+          Evidências da solicitação (reclamação)
+        </span>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {arr.map((u, i) => {
+            const nome = fileNameFromUrl(u);
+            const pdf = isPdf(u);
+            const imgOk = !pdf && isImageUrl(u);
+
+            if (imgOk) {
+              return (
+                <a
+                  key={`${u}-${i}`}
+                  href={u}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-md border bg-white overflow-hidden hover:shadow"
+                  title="Abrir imagem"
+                >
+                  <img
+                    src={u}
+                    alt={nome}
+                    className="h-24 w-full object-cover group-hover:opacity-95"
+                    loading="lazy"
+                  />
+                  <div className="px-2 py-1 text-xs text-gray-600 truncate">{nome}</div>
+                </a>
+              );
+            }
+
+            return (
+              <a
+                key={`${u}-${i}`}
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border bg-white p-3 hover:shadow flex flex-col justify-between"
+                title="Abrir arquivo"
+              >
+                <div className="text-[11px] font-medium text-gray-700 break-words line-clamp-3">
+                  {nome}
+                </div>
+                <div className="mt-2 inline-flex items-center justify-center rounded-md bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
+                  Abrir arquivo
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ✅ CTRL+V: cola print (imagem) -> vira File
   const makeFileFromClipboardImage = (blobFile) => {
     const type = blobFile?.type || "image/png";
@@ -222,7 +257,6 @@ export default function TratarTratativa() {
   };
 
   const onPasteAnexo = (e) => {
-    // Anexo geralmente é PDF/documento — mas se colar print, também aceitamos como imagem
     const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
     const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
     if (!imgItem) return;
@@ -282,9 +316,9 @@ export default function TratarTratativa() {
         .from("tratativas")
         .update({
           tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-          prioridade: editForm.prioridade || null, // ✅ inclui Gravíssima
+          prioridade: editForm.prioridade || null,
           setor_origem: editForm.setor_origem || null,
-          linha: editForm.linha || null, // ✅ pode ser "NA"
+          linha: editForm.linha || null,
           descricao: editForm.descricao || null,
         })
         .eq("id", t.id);
@@ -389,7 +423,7 @@ export default function TratarTratativa() {
       });
       if (ins.error) throw ins.error;
 
-      // atualiza status + mantém imagem_tratativa “principal”
+      // atualiza status + mantém imagem/anexo “principal”
       const upd = await supabase
         .from("tratativas")
         .update({
@@ -718,9 +752,61 @@ export default function TratarTratativa() {
   const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
   const criadoEm = brDateTime(t.created_at);
 
+  // UI: picker bonito
+  const FilePicker = ({ accept, onChangeFile, selectedFile }) => (
+    <div className="flex items-center gap-3">
+      <label className="inline-flex cursor-pointer items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        Escolher arquivo
+        <input
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(e) => onChangeFile(e.target.files?.[0] || null)}
+        />
+      </label>
+
+      <div className="text-sm text-gray-600 truncate flex-1">
+        {selectedFile ? selectedFile.name : "Nenhum arquivo escolhido"}
+      </div>
+
+      {selectedFile ? (
+        <button
+          type="button"
+          onClick={() => onChangeFile(null)}
+          className="rounded-md bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300"
+          title="Remover arquivo"
+        >
+          Remover
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const PasteBox = ({ onPaste, boxRef }) => (
+    <div
+      ref={boxRef}
+      tabIndex={0}
+      onPaste={onPaste}
+      className="mt-2 rounded-md border border-dashed bg-gray-50 px-3 py-6 text-center text-sm text-gray-600 outline-none focus:ring-2 focus:ring-blue-200"
+      title="Clique aqui e use Ctrl+V"
+    >
+      Clique e cole o Print
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+      {/* ✅ Header com botão voltar */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h1 className="text-2xl font-bold">Tratar</h1>
+        <button
+          type="button"
+          onClick={() => nav(-1)}
+          className="rounded-md bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
+        >
+          Voltar
+        </button>
+      </div>
 
       <div className="text-sm text-blue-700 mb-4">
         <span className="font-semibold">Criado por:</span> {criadoPor}{" "}
@@ -873,12 +959,8 @@ export default function TratarTratativa() {
             }
           />
 
-          <div className="md:col-span-2">
-            {renderListaArquivosCompacta(
-              evidenciasSolicitacao,
-              "Evidências da solicitação (reclamação)"
-            )}
-          </div>
+          {/* ✅ Evidências com miniatura */}
+          <div className="md:col-span-2">{renderEvidenciasSolicitacao(evidenciasSolicitacao)}</div>
         </dl>
       </div>
 
@@ -948,29 +1030,20 @@ export default function TratarTratativa() {
           />
         </div>
 
-        {/* Evidência + Anexo com CTRL+V */}
+        {/* ✅ Evidência + Anexo com UI mais limpa (Escolher arquivo + Print) */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">
-              Evidência da conclusão (opcional) — imagem ou PDF
+              Evidência da conclusão (opcional)
             </label>
 
-            <div
-              ref={pasteConclusaoRef}
-              tabIndex={0}
-              onPaste={onPasteConclusao}
-              className="rounded-md border border-dashed p-3 bg-gray-50"
-              title="Clique aqui e use Ctrl+V para colar um print"
-            >
-              <div className="text-xs text-gray-600">
-                ✅ Você pode <b>colar um print (Ctrl+V)</b> aqui (imagem) ou selecionar arquivo abaixo.
-              </div>
-              <input
-                type="file"
+            <div className="rounded-md border p-3 bg-white">
+              <FilePicker
                 accept="image/*,application/pdf"
-                className="mt-2"
-                onChange={(e) => setImg(e.target.files?.[0] || null)}
+                selectedFile={img}
+                onChangeFile={setImg}
               />
+              <PasteBox onPaste={onPasteConclusao} boxRef={pasteConclusaoRef} />
             </div>
 
             {renderArquivoOuThumb(t.imagem_tratativa || null, "Evidência já anexada (se houver)")}
@@ -978,25 +1051,16 @@ export default function TratarTratativa() {
 
           <div>
             <label className="block text-sm text-gray-600 mb-1">
-              Anexo da tratativa (documento) (opcional) — imagem ou PDF
+              Anexo da tratativa (opcional)
             </label>
 
-            <div
-              ref={pasteAnexoRef}
-              tabIndex={0}
-              onPaste={onPasteAnexo}
-              className="rounded-md border border-dashed p-3 bg-gray-50"
-              title="Clique aqui e use Ctrl+V para colar um print"
-            >
-              <div className="text-xs text-gray-600">
-                ✅ Também aceita <b>Ctrl+V</b> (print) ou selecione arquivo abaixo.
-              </div>
-              <input
-                type="file"
+            <div className="rounded-md border p-3 bg-white">
+              <FilePicker
                 accept="image/*,application/pdf"
-                className="mt-2"
-                onChange={(e) => setAnexo(e.target.files?.[0] || null)}
+                selectedFile={anexo}
+                onChangeFile={setAnexo}
               />
+              <PasteBox onPaste={onPasteAnexo} boxRef={pasteAnexoRef} />
             </div>
 
             <p className="text-xs text-gray-500 mt-1">
