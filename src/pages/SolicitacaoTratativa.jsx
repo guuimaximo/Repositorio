@@ -1,11 +1,3 @@
-// src/pages/SolicitacaoTratativa.jsx
-// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
-// + Múltiplas evidências (salva TODAS em evidencias_urls)
-// ✅ AJUSTE: grava criado_por_login, criado_por_nome, criado_por_id (sem alterar o resto)
-// ✅ AJUSTE: Prioridade adiciona "Gravíssima"
-// ✅ AJUSTE: Linha adiciona opção "— Não se aplica" (salva como "NA")
-// ✅ AJUSTE: Evidências aceitam CTRL+V (print do clipboard) no Dropzone
-
 import { useState, useEffect, useRef, useMemo, useContext } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
@@ -65,7 +57,8 @@ export default function SolicitacaoTratativa() {
           supabase.from("linhas").select("id, codigo, descricao").order("codigo"),
         ]);
 
-        if (e1 || e2 || e3) console.error("Erro carregando listas:", e1 || e2 || e3);
+        if (e1 || e2 || e3)
+          console.error("Erro carregando listas:", e1 || e2 || e3);
 
         setTiposOcorrencia(Array.isArray(tipos) ? tipos : []);
         setSetores(Array.isArray(setoresData) ? setoresData : []);
@@ -108,19 +101,18 @@ export default function SolicitacaoTratativa() {
       if (!items.length) return;
 
       const images = items
-        .filter((it) => it.kind === "file" && it.type && it.type.startsWith("image/"))
+        .filter((it) => it.kind === "file" && (it.type || "").startsWith("image/"))
         .map((it) => it.getAsFile())
-        .filter(Boolean);
+        .filter((f) => f && f.size > 0);
 
       if (!images.length) return;
 
-      // evita colar texto dentro do dropzone e só pega as imagens
+      // evita colar texto dentro do dropzone/campo e só pega as imagens
       e.preventDefault();
 
       const filesFromClipboard = images.map((f) => {
         const ext =
-          f.type === "image/png" ? "png" :
-          f.type === "image/jpeg" ? "jpg" : "img";
+          f.type === "image/png" ? "png" : f.type === "image/jpeg" ? "jpg" : "img";
         const name = `print_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
         return new File([f], name, { type: f.type, lastModified: Date.now() });
       });
@@ -346,71 +338,157 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
+        {/* =========================
+            ✅ EVIDÊNCIAS (Layout melhorado + Campo CTRL+V)
+        ========================== */}
         <div className="md:col-span-2">
           <label className="block text-sm text-gray-700 font-medium mb-2">
             Evidências (Fotos, Vídeos e PDF)
           </label>
 
-          <div
-            tabIndex={0}
-            onPaste={onPasteEvidencia}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={onDrop}
-            className={[
-              "w-full rounded-lg border-2 border-dashed bg-gray-50 transition",
-              isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:bg-gray-100",
-            ].join(" ")}
-            style={{ minHeight: 120 }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <div className="h-full w-full flex flex-col items-center justify-center py-8 cursor-pointer select-none">
-              <p className="text-sm font-semibold text-gray-600">
-                Clique para enviar <span className="font-normal">ou arraste e solte</span>
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                PNG, JPG, MP4, MOV ou PDF • Você também pode colar um print com <b>Ctrl+V</b>
-              </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* ✅ DROPZONE */}
+            <div
+              tabIndex={0}
+              onPaste={onPasteEvidencia}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={[
+                "w-full rounded-xl border-2 border-dashed transition",
+                "bg-gray-50 hover:bg-gray-100",
+                "focus:outline-none focus:ring-2 focus:ring-blue-500",
+                isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300",
+              ].join(" ")}
+              style={{ minHeight: 150 }}
+            >
+              <div className="h-full w-full flex flex-col items-center justify-center py-8 cursor-pointer select-none px-4 text-center">
+                <p className="text-sm font-semibold text-gray-700">
+                  Clique para enviar <span className="font-normal">ou arraste e solte</span>
+                </p>
+                <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
+
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">
+                  <span className="font-medium">Dica:</span>
+                  <span>Você também pode colar um print com</span>
+                  <span className="font-semibold">Ctrl+V</span>
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
+                multiple
+                className="hidden"
+                onChange={onPickFiles}
+              />
             </div>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
-              multiple
-              className="hidden"
-              onChange={onPickFiles}
-            />
+            {/* ✅ CAMPO EXPLÍCITO CTRL+V */}
+            <div className="w-full">
+              <div className="rounded-xl border bg-white p-4 h-full">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Cole um print aqui</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Clique no campo abaixo e pressione <b>Ctrl+V</b> (ou Cmd+V no Mac).
+                    </p>
+                  </div>
+
+                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">
+                    Clipboard
+                  </span>
+                </div>
+
+                <div
+                  tabIndex={0}
+                  onPaste={onPasteEvidencia}
+                  className={[
+                    "mt-3 rounded-lg border-2 border-dashed p-4",
+                    "bg-gray-50 text-gray-700",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                  ].join(" ")}
+                >
+                  <p className="text-sm">Clique aqui e cole seu print.</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    (A imagem do clipboard será anexada automaticamente como evidência)
+                  </p>
+                </div>
+
+                <div className="mt-3 text-xs text-gray-500">
+                  {files.length > 0 ? (
+                    <span>
+                      <b>{files.length}</b> evidência(s) anexada(s)
+                    </span>
+                  ) : (
+                    <span>Nenhuma evidência anexada ainda</span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
+          {/* ✅ LISTA DE ARQUIVOS */}
           {files.length > 0 && (
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {files.map((f, idx) => (
-                <div
-                  key={`${f.name}-${idx}`}
-                  className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">Arquivos anexados</p>
+
+                <button
+                  type="button"
+                  className="text-xs text-red-600 hover:underline"
+                  onClick={() => setFiles([])}
                 >
-                  <div className="truncate">
-                    <span className="font-medium">{f.name}</span>
-                    <span className="ml-2 text-gray-500">
-                      ({Math.round(f.size / 1024)} KB)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFile(idx);
-                    }}
-                    className="text-red-600 hover:underline"
-                  >
-                    remover
-                  </button>
-                </div>
-              ))}
+                  remover tudo
+                </button>
+              </div>
+
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {files.map((f, idx) => {
+                  const isImg = (f.type || "").startsWith("image/");
+                  const isVid = (f.type || "").startsWith("video/");
+                  const isPdf = f.type === "application/pdf";
+                  const badge = isImg ? "Imagem" : isVid ? "Vídeo" : isPdf ? "PDF" : "Arquivo";
+
+                  return (
+                    <div
+                      key={`${f.name}-${f.size}-${idx}`}
+                      className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] rounded-full border px-2 py-0.5 text-gray-600">
+                            {badge}
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            {Math.round(f.size / 1024)} KB
+                          </span>
+                        </div>
+
+                        <div className="truncate mt-1">
+                          <span className="font-medium">{f.name}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(idx);
+                        }}
+                        className="ml-3 text-red-600 hover:underline shrink-0"
+                      >
+                        remover
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
