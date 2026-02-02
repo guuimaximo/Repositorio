@@ -1,151 +1,155 @@
 // src/pages/TratarTratativa.jsx
-import { useEffect, useMemo, useState, useContext } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { supabase } from '../supabase'
-import { AuthContext } from '../context/AuthContext' // ✅ NOVO
+import { useEffect, useMemo, useState, useContext, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "../supabase";
+import { AuthContext } from "../context/AuthContext";
 
 const acoes = [
-  'Orientação',
-  'Advertência',
-  'Suspensão',
-  'Aviso de última oportunidade',
-  'Contato Pessoal',
-  'Não aplicada',
-  'Contato via Celular',
-  'Elogiado',
-]
+  "Orientação",
+  "Advertência",
+  "Suspensão",
+  "Aviso de última oportunidade",
+  "Contato Pessoal",
+  "Não aplicada",
+  "Contato via Celular",
+  "Elogiado",
+];
 
 export default function TratarTratativa() {
-  const { id } = useParams()
-  const nav = useNavigate()
+  const { id } = useParams();
+  const nav = useNavigate();
 
-  const { user } = useContext(AuthContext) // ✅ NOVO (pega usuário logado)
+  const { user } = useContext(AuthContext);
 
-  const [t, setT] = useState(null)
-  const [resumo, setResumo] = useState('')
-  const [acao, setAcao] = useState('Orientação')
+  const [t, setT] = useState(null);
+  const [resumo, setResumo] = useState("");
+  const [acao, setAcao] = useState("Orientação");
 
   // Conclusão: evidência (imagem/pdf) + anexo (imagem/pdf)
-  const [img, setImg] = useState(null) // evidência da conclusão
-  const [anexo, setAnexo] = useState(null) // anexo da tratativa (documento)
+  const [img, setImg] = useState(null);
+  const [anexo, setAnexo] = useState(null);
 
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false);
 
   // Complementos
-  const [linhaDescricao, setLinhaDescricao] = useState('')
-  const [cargoMotorista, setCargoMotorista] = useState('MOTORISTA')
+  const [linhaDescricao, setLinhaDescricao] = useState("");
+  const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
 
   // Edição inline
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    tipo_ocorrencia: '',
-    prioridade: 'Média',
-    setor_origem: '',
-    linha: '',
-    descricao: '',
-  })
+    tipo_ocorrencia: "",
+    prioridade: "Média",
+    setor_origem: "",
+    linha: "",
+    descricao: "",
+  });
 
   // ---- Controles de Suspensão ----
-  const [diasSusp, setDiasSusp] = useState(1) // 1,3,5,7
-  const [dataSuspensao, setDataSuspensao] = useState(() => new Date().toISOString().slice(0, 10)) // yyyy-mm-dd
+  const [diasSusp, setDiasSusp] = useState(1);
+  const [dataSuspensao, setDataSuspensao] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+
+  // refs p/ CTRL+V (print)
+  const pasteConclusaoRef = useRef(null);
+  const pasteAnexoRef = useRef(null);
 
   const dataPtCompletaUpper = (d = new Date()) => {
     const meses = [
-      'JANEIRO',
-      'FEVEREIRO',
-      'MARÇO',
-      'ABRIL',
-      'MAIO',
-      'JUNHO',
-      'JULHO',
-      'AGOSTO',
-      'SETEMBRO',
-      'OUTUBRO',
-      'NOVEMBRO',
-      'DEZEMBRO',
-    ]
-    const dia = String(d.getDate()).padStart(2, '0')
-    const mes = meses[d.getMonth()]
-    const ano = d.getFullYear()
-    return `${dia} de ${mes} de ${ano}`
-  }
+      "JANEIRO",
+      "FEVEREIRO",
+      "MARÇO",
+      "ABRIL",
+      "MAIO",
+      "JUNHO",
+      "JULHO",
+      "AGOSTO",
+      "SETEMBRO",
+      "OUTUBRO",
+      "NOVEMBRO",
+      "DEZEMBRO",
+    ];
+    const dia = String(d.getDate()).padStart(2, "0");
+    const mes = meses[d.getMonth()];
+    const ano = d.getFullYear();
+    return `${dia} de ${mes} de ${ano}`;
+  };
 
   const br = (d) => {
-    if (!d) return '—'
-    const dt = d instanceof Date ? d : new Date(d)
-    if (Number.isNaN(dt.getTime())) return '—'
-    return dt.toLocaleDateString('pt-BR')
-  }
+    if (!d) return "—";
+    const dt = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(dt.getTime())) return "—";
+    return dt.toLocaleDateString("pt-BR");
+  };
 
-  // ✅ NOVO: formata Data+Hora (pt-BR) para exibir no topo
   const brDateTime = (d) => {
-    if (!d) return '—'
-    const dt = d instanceof Date ? d : new Date(d)
-    if (Number.isNaN(dt.getTime())) return '—'
-    return dt.toLocaleString('pt-BR')
-  }
+    if (!d) return "—";
+    const dt = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(dt.getTime())) return "—";
+    return dt.toLocaleString("pt-BR");
+  };
 
   // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
   const parseDateLocal = (dateStr) => {
-    if (!dateStr) return new Date()
-    const [yyyy, mm, dd] = String(dateStr).split('-').map(Number)
-    return new Date(yyyy, (mm || 1) - 1, dd || 1)
-  }
+    if (!dateStr) return new Date();
+    const [yyyy, mm, dd] = String(dateStr).split("-").map(Number);
+    return new Date(yyyy, (mm || 1) - 1, dd || 1);
+  };
 
   const addDaysLocal = (dateOrStr, n) => {
-    const base = dateOrStr instanceof Date ? new Date(dateOrStr) : parseDateLocal(dateOrStr)
-    base.setDate(base.getDate() + Number(n || 0))
-    return base
-  }
+    const base =
+      dateOrStr instanceof Date ? new Date(dateOrStr) : parseDateLocal(dateOrStr);
+    base.setDate(base.getDate() + Number(n || 0));
+    return base;
+  };
 
-  // Regras: início = data da suspensão; fim = início + (dias - 1); retorno = início + dias
-  const inicioSusp = useMemo(() => parseDateLocal(dataSuspensao), [dataSuspensao])
+  const inicioSusp = useMemo(() => parseDateLocal(dataSuspensao), [dataSuspensao]);
 
   const fimSusp = useMemo(
     () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp) - 1, 0)),
     [inicioSusp, diasSusp]
-  )
+  );
 
   const retornoSusp = useMemo(
     () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)),
     [inicioSusp, diasSusp]
-  )
+  );
 
-  // ===== Helpers de evidência (compacta: só nome do arquivo) =====
+  // ===== Helpers de evidência =====
   const fileNameFromUrl = (u) => {
     try {
-      const raw = String(u || '')
-      const noHash = raw.split('#')[0]
-      const noQuery = noHash.split('?')[0]
-      const last = noQuery.split('/').filter(Boolean).pop() || 'arquivo'
-      return decodeURIComponent(last)
+      const raw = String(u || "");
+      const noHash = raw.split("#")[0];
+      const noQuery = noHash.split("?")[0];
+      const last = noQuery.split("/").filter(Boolean).pop() || "arquivo";
+      return decodeURIComponent(last);
     } catch {
-      return 'arquivo'
+      return "arquivo";
     }
-  }
+  };
 
   const isPdf = (fileOrUrl) => {
-    if (!fileOrUrl) return false
-    if (typeof fileOrUrl === 'string') return fileOrUrl.toLowerCase().includes('.pdf')
+    if (!fileOrUrl) return false;
+    if (typeof fileOrUrl === "string") return fileOrUrl.toLowerCase().includes(".pdf");
     return (
-      fileOrUrl.type === 'application/pdf' ||
-      String(fileOrUrl.name || '').toLowerCase().endsWith('.pdf')
-    )
-  }
+      fileOrUrl.type === "application/pdf" ||
+      String(fileOrUrl.name || "").toLowerCase().endsWith(".pdf")
+    );
+  };
 
   const isImageUrl = (u) => {
-    const s = String(u || '').toLowerCase()
-    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s)
-  }
+    const s = String(u || "").toLowerCase();
+    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
+  };
 
   const renderListaArquivosCompacta = (urls, label) => {
-    const arr = Array.isArray(urls) ? urls.filter(Boolean) : []
-    if (arr.length === 0) return null
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+    if (arr.length === 0) return null;
 
     return (
       <div className="mt-2">
         <span className="block text-sm text-gray-600 mb-2">{label}</span>
-
         <ul className="space-y-1">
           {arr.map((u, i) => (
             <li key={`${u}-${i}`} className="text-sm">
@@ -162,21 +166,20 @@ export default function TratarTratativa() {
           ))}
         </ul>
       </div>
-    )
-  }
+    );
+  };
 
-  // ====== Ajuste: anexo / arquivo único -> PDF mostra link | imagem mostra miniatura clicável ======
   const renderArquivoOuThumb = (url, label) => {
-    if (!url) return null
+    if (!url) return null;
 
-    const pdf = isPdf(url)
-    const img = !pdf && isImageUrl(url)
+    const pdf = isPdf(url);
+    const imgOk = !pdf && isImageUrl(url);
 
     return (
       <div className="mt-2">
         <span className="block text-sm text-gray-600 mb-2">{label}</span>
 
-        {pdf || !img ? (
+        {pdf || !imgOk ? (
           <a
             href={url}
             target="_blank"
@@ -197,150 +200,212 @@ export default function TratarTratativa() {
           </a>
         )}
       </div>
-    )
-  }
+    );
+  };
 
+  // ✅ CTRL+V: cola print (imagem) -> vira File
+  const makeFileFromClipboardImage = (blobFile) => {
+    const type = blobFile?.type || "image/png";
+    const ext = type === "image/jpeg" ? "jpg" : "png";
+    const name = `print_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+    return new File([blobFile], name, { type, lastModified: Date.now() });
+  };
+
+  const onPasteConclusao = (e) => {
+    const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+    const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
+    if (!imgItem) return;
+    e.preventDefault();
+    const f = imgItem.getAsFile();
+    if (!f) return;
+    setImg(makeFileFromClipboardImage(f));
+  };
+
+  const onPasteAnexo = (e) => {
+    // Anexo geralmente é PDF/documento — mas se colar print, também aceitamos como imagem
+    const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+    const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
+    if (!imgItem) return;
+    e.preventDefault();
+    const f = imgItem.getAsFile();
+    if (!f) return;
+    setAnexo(makeFileFromClipboardImage(f));
+  };
+
+  // ======= Carrega tratativa =======
   useEffect(() => {
-    ;(async () => {
-      const { data, error } = await supabase.from('tratativas').select('*').eq('id', id).single()
+    (async () => {
+      const { data, error } = await supabase.from("tratativas").select("*").eq("id", id).single();
       if (error) {
-        console.error(error)
-        return
+        console.error(error);
+        return;
       }
-      setT(data || null)
+      setT(data || null);
 
       setEditForm({
-        tipo_ocorrencia: data?.tipo_ocorrencia || '',
-        prioridade: data?.prioridade || 'Média',
-        setor_origem: data?.setor_origem || '',
-        linha: data?.linha || '',
-        descricao: data?.descricao || '',
-      })
+        tipo_ocorrencia: data?.tipo_ocorrencia || "",
+        prioridade: data?.prioridade || "Média",
+        setor_origem: data?.setor_origem || "",
+        linha: data?.linha || "",
+        descricao: data?.descricao || "",
+      });
 
       // Linha (código -> descrição)
-      if (data?.linha) {
+      if (data?.linha && data.linha !== "NA") {
         const { data: row } = await supabase
-          .from('linhas')
-          .select('descricao')
-          .eq('codigo', data.linha)
-          .maybeSingle()
-        setLinhaDescricao(row?.descricao || '')
-      } else setLinhaDescricao('')
+          .from("linhas")
+          .select("descricao")
+          .eq("codigo", data.linha)
+          .maybeSingle();
+        setLinhaDescricao(row?.descricao || "");
+      } else setLinhaDescricao("");
 
       // Cargo (por registro/chapa)
       if (data?.motorista_chapa) {
         const { data: m } = await supabase
-          .from('motoristas')
-          .select('cargo')
-          .eq('chapa', data.motorista_chapa)
-          .maybeSingle()
-        setCargoMotorista((m?.cargo || data?.cargo || 'Motorista').toUpperCase())
+          .from("motoristas")
+          .select("cargo")
+          .eq("chapa", data.motorista_chapa)
+          .maybeSingle();
+        setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
       } else {
-        setCargoMotorista((data?.cargo || 'Motorista').toUpperCase())
+        setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
       }
-    })()
-  }, [id])
+    })();
+  }, [id]);
 
   async function salvarEdicao() {
-    if (!t) return
-    setLoading(true)
+    if (!t) return;
+    setLoading(true);
     try {
       const { error } = await supabase
-        .from('tratativas')
+        .from("tratativas")
         .update({
           tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-          prioridade: editForm.prioridade || null,
+          prioridade: editForm.prioridade || null, // ✅ inclui Gravíssima
           setor_origem: editForm.setor_origem || null,
-          linha: editForm.linha || null,
+          linha: editForm.linha || null, // ✅ pode ser "NA"
           descricao: editForm.descricao || null,
         })
-        .eq('id', t.id)
-      if (error) throw error
+        .eq("id", t.id);
+      if (error) throw error;
 
-      setT((prev) => (prev ? { ...prev, ...editForm } : prev))
+      setT((prev) => (prev ? { ...prev, ...editForm } : prev));
 
-      if (editForm.linha) {
+      if (editForm.linha && editForm.linha !== "NA") {
         const { data: row } = await supabase
-          .from('linhas')
-          .select('descricao')
-          .eq('codigo', editForm.linha)
-          .maybeSingle()
-        setLinhaDescricao(row?.descricao || '')
-      } else setLinhaDescricao('')
+          .from("linhas")
+          .select("descricao")
+          .eq("codigo", editForm.linha)
+          .maybeSingle();
+        setLinhaDescricao(row?.descricao || "");
+      } else setLinhaDescricao("");
 
-      setIsEditing(false)
-      alert('Dados atualizados!')
+      setIsEditing(false);
+      alert("Dados atualizados!");
     } catch (e) {
-      alert(`Erro ao salvar: ${e.message}`)
+      alert(`Erro ao salvar: ${e.message}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
+  // ===== Upload helper (organiza por tratativa) =====
+  const sanitizeName = (name) =>
+    String(name || "arquivo")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9._-]/g, "");
+
+  async function uploadToTratativasBucket(file, prefixFolder) {
+    const safeName = sanitizeName(file?.name);
+    const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+    const path = `${prefixFolder}/${unique}`;
+
+    const up = await supabase.storage.from("tratativas").upload(path, file, {
+      upsert: false,
+      contentType: file?.type || undefined,
+    });
+    if (up.error) throw up.error;
+
+    const { data: pub } = supabase.storage.from("tratativas").getPublicUrl(path);
+    return pub?.publicUrl || null;
+  }
+
   async function concluir() {
-    if (!t) return
+    if (!t) return;
     if (!resumo) {
-      alert('Informe o resumo/observações')
-      return
+      alert("Informe o resumo/observações");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      // Evidência da conclusão (imagem/pdf)
-      let evidencia_conclusao_url = null
-      if (img) {
-        const safe = `conclusao_${Date.now()}_${img.name}`.replace(/\s+/g, '_')
-        const up = await supabase.storage.from('tratativas').upload(safe, img, {
-          upsert: false,
-          contentType: img.type || undefined,
-        })
-        if (up.error) throw up.error
-        evidencia_conclusao_url = supabase.storage.from('tratativas').getPublicUrl(safe).data.publicUrl
+      // ✅ resolve identidade do tratador com fallback
+      const loginSessao = user?.login || user?.email || null;
+      const idSessao = user?.id || user?.auth_user_id || null;
+      let nomeSessao = user?.nome || user?.nome_completo || null;
+
+      if (!nomeSessao && loginSessao) {
+        const { data: u, error: eu } = await supabase
+          .from("usuarios_aprovadores")
+          .select("nome, sobrenome, nome_completo")
+          .eq("login", loginSessao)
+          .maybeSingle();
+        if (!eu) {
+          nomeSessao =
+            u?.nome_completo ||
+            [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
+            u?.nome ||
+            null;
+        }
       }
 
-      // Anexo da tratativa (documento) (imagem/pdf)
-      let anexo_tratativa_url = null
+      // Evidência da conclusão (imagem/pdf)
+      let evidencia_conclusao_url = null;
+      if (img) {
+        evidencia_conclusao_url = await uploadToTratativasBucket(img, `${t.id}/conclusao`);
+      }
+
+      // Anexo da tratativa (imagem/pdf)
+      let anexo_tratativa_url = null;
       if (anexo) {
-        const safe = `anexo_${Date.now()}_${anexo.name}`.replace(/\s+/g, '_')
-        const up = await supabase.storage.from('tratativas').upload(safe, anexo, {
-          upsert: false,
-          contentType: anexo.type || undefined,
-        })
-        if (up.error) throw up.error
-        anexo_tratativa_url = supabase.storage.from('tratativas').getPublicUrl(safe).data.publicUrl
+        anexo_tratativa_url = await uploadToTratativasBucket(anexo, `${t.id}/anexos`);
       }
 
       // detalhe/histórico
-      const ins = await supabase.from('tratativas_detalhes').insert({
+      const ins = await supabase.from("tratativas_detalhes").insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
         observacoes: resumo,
         imagem_tratativa: evidencia_conclusao_url,
         anexo_tratativa: anexo_tratativa_url,
 
-        // ✅ quem tratou (auditoria)
-        tratado_por_login: user?.login || null,
-        tratado_por_nome: user?.nome || null,
-        tratado_por_id: user?.id || null,
-      })
-      if (ins.error) throw ins.error
+        // ✅ auditoria de quem tratou
+        tratado_por_login: loginSessao,
+        tratado_por_nome: nomeSessao || loginSessao,
+        tratado_por_id: idSessao,
+      });
+      if (ins.error) throw ins.error;
 
-      // atualiza status
+      // atualiza status + mantém imagem_tratativa “principal”
       const upd = await supabase
-        .from('tratativas')
+        .from("tratativas")
         .update({
-          status: 'Concluída',
+          status: "Concluída",
           imagem_tratativa: evidencia_conclusao_url || t.imagem_tratativa || null,
+          anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null,
         })
-        .eq('id', t.id)
-      if (upd.error) throw upd.error
+        .eq("id", t.id);
+      if (upd.error) throw upd.error;
 
-      alert('Tratativa concluída com sucesso!')
-      nav('/central')
+      alert("Tratativa concluída com sucesso!");
+      nav("/central");
     } catch (e) {
-      alert(`Erro: ${e.message}`)
+      alert(`Erro: ${e.message}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -367,7 +432,7 @@ export default function TratarTratativa() {
         .ass { text-align: center; }
         .ass-line { margin-top: 34px; border-top: 1px solid #000; height:1px; }
       </style>
-    `
+    `;
   }
 
   function renderSuspensaoHtml({
@@ -383,12 +448,12 @@ export default function TratarTratativa() {
     fim,
     retorno,
   }) {
-    const br = (d) => {
-      const dt = d instanceof Date ? d : new Date(d)
-      return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR')
-    }
-    const diasFmt = String(dias).padStart(2, '0')
-    const rotuloDia = Number(dias) === 1 ? 'dia' : 'dias'
+    const brLocal = (d) => {
+      const dt = d instanceof Date ? d : new Date(d);
+      return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("pt-BR");
+    };
+    const diasFmt = String(dias).padStart(2, "0");
+    const rotuloDia = Number(dias) === 1 ? "dia" : "dias";
 
     return `
   <html>
@@ -424,23 +489,25 @@ export default function TratarTratativa() {
           <div class="right mt">${dataDoc}</div>
 
           <div class="linha mt">
-            <div>SR(A) <span class="label">${nome}</span> ${registro ? `(REGISTRO: ${registro})` : ''}</div>
+            <div>SR(A) <span class="label">${nome}</span> ${
+              registro ? `(REGISTRO: ${registro})` : ""
+            }</div>
             <div><span class="label">Cargo:</span> ${cargo}</div>
           </div>
 
           <p class="mt bl">
-  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${br(
+  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${brLocal(
       inicio
-    )}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${br(
+    )}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${brLocal(
       retorno
     )}</span></span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
 </p>
 
           <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
           <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-          <div class="mt"><span class="label">Período da Suspensão:</span> ${br(inicio)} a ${br(
-      fim
-    )} (retorno: ${br(retorno)})</div>
+          <div class="mt"><span class="label">Período da Suspensão:</span> ${brLocal(
+            inicio
+          )} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
           <div class="mt"><span class="label">Observação:</span> ${observ}</div>
 
           <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
@@ -460,7 +527,7 @@ export default function TratarTratativa() {
       <script>window.onload = () => { window.print(); }</script>
     </body>
   </html>
-  `
+  `;
   }
 
   function renderGenericHtml({
@@ -490,7 +557,7 @@ export default function TratarTratativa() {
 
               <div class="linha mt">
                 <div>SR(A) <span class="label">${nome}</span> ${
-      registro ? `(REGISTRO: ${registro})` : ''
+      registro ? `(REGISTRO: ${registro})` : ""
     }</div>
                 <div><span class="label">Cargo:</span> ${cargo}</div>
               </div>
@@ -531,31 +598,30 @@ export default function TratarTratativa() {
           <script>window.onload = () => { window.print(); }</script>
         </body>
       </html>
-    `
+    `;
   }
 
-  // ======== Geradores ========
   function gerarOrientacao() {
-    if (!t) return
+    if (!t) return;
     if (!resumo.trim()) {
-      alert('Preencha o Resumo / Observações para gerar a medida.')
-      return
+      alert("Preencha o Resumo / Observações para gerar a medida.");
+      return;
     }
 
-    const dataDoc = dataPtCompletaUpper(new Date())
-    const nome = (t.motorista_nome || '—').toUpperCase()
-    const registro = t.motorista_chapa || ''
-    const cargo = cargoMotorista
-    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
-    const observ = (resumo || t.descricao || '').trim() || '—'
+    const dataDoc = dataPtCompletaUpper(new Date());
+    const nome = (t.motorista_nome || "—").toUpperCase();
+    const registro = t.motorista_chapa || "";
+    const cargo = cargoMotorista;
+    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
+    const observ = (resumo || t.descricao || "").trim() || "—";
 
     const html = renderGenericHtml({
-      titulo: 'ORIENTAÇÃO DISCIPLINAR',
+      titulo: "ORIENTAÇÃO DISCIPLINAR",
       intro1:
-        'Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
+        "Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.",
       intro2:
-        'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.',
+        "Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.",
       nome,
       registro,
       cargo,
@@ -563,34 +629,34 @@ export default function TratarTratativa() {
       dataOcorr,
       observ,
       dataDoc,
-    })
+    });
 
-    const w = window.open('', '_blank')
-    w.document.write(html)
-    w.document.close()
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
   }
 
   function gerarAdvertencia() {
-    if (!t) return
+    if (!t) return;
     if (!resumo.trim()) {
-      alert('Preencha o Resumo / Observações para gerar a medida.')
-      return
+      alert("Preencha o Resumo / Observações para gerar a medida.");
+      return;
     }
 
-    const dataDoc = dataPtCompletaUpper(new Date())
-    const nome = (t.motorista_nome || '—').toUpperCase()
-    const registro = t.motorista_chapa || ''
-    const cargo = cargoMotorista
-    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
-    const observ = (resumo || t.descricao || '').trim() || '—'
+    const dataDoc = dataPtCompletaUpper(new Date());
+    const nome = (t.motorista_nome || "—").toUpperCase();
+    const registro = t.motorista_chapa || "";
+    const cargo = cargoMotorista;
+    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
+    const observ = (resumo || t.descricao || "").trim() || "—";
 
     const html = renderGenericHtml({
-      titulo: 'ADVERTÊNCIA DISCIPLINAR',
+      titulo: "ADVERTÊNCIA DISCIPLINAR",
       intro1:
-        'Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.',
+        "Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.",
       intro2:
-        'Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.',
+        "Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.",
       nome,
       registro,
       cargo,
@@ -598,27 +664,27 @@ export default function TratarTratativa() {
       dataOcorr,
       observ,
       dataDoc,
-    })
+    });
 
-    const w = window.open('', '_blank')
-    w.document.write(html)
-    w.document.close()
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
   }
 
   function gerarSuspensao() {
-    if (!t) return
+    if (!t) return;
     if (!resumo.trim()) {
-      alert('Preencha o Resumo / Observações para gerar a medida.')
-      return
+      alert("Preencha o Resumo / Observações para gerar a medida.");
+      return;
     }
 
-    const dataDoc = dataPtCompletaUpper(new Date())
-    const nome = (t.motorista_nome || '—').toUpperCase()
-    const registro = t.motorista_chapa || ''
-    const cargo = cargoMotorista
-    const ocorrencia = (t.tipo_ocorrencia || '—').toUpperCase()
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : '—'
-    const observ = (resumo || t.descricao || '').trim() || '—'
+    const dataDoc = dataPtCompletaUpper(new Date());
+    const nome = (t.motorista_nome || "—").toUpperCase();
+    const registro = t.motorista_chapa || "";
+    const cargo = cargoMotorista;
+    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
+    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
+    const observ = (resumo || t.descricao || "").trim() || "—";
 
     const html = renderSuspensaoHtml({
       nome,
@@ -632,41 +698,41 @@ export default function TratarTratativa() {
       inicio: inicioSusp,
       fim: fimSusp,
       retorno: retornoSusp,
-    })
+    });
 
-    const w = window.open('', '_blank')
-    w.document.write(html)
-    w.document.close()
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
   }
 
-  if (!t) return <div className="p-6">Carregando…</div>
+  if (!t) return <div className="p-6">Carregando…</div>;
 
-  // Evidências da solicitação (múltiplas) – prefere evidencias_urls, senão cai em imagem_url (legado)
+  // Evidências da solicitação
   const evidenciasSolicitacao =
     Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
       ? t.evidencias_urls
       : t.imagem_url
       ? [t.imagem_url]
-      : []
+      : [];
 
-  // ✅ NOVO: texto do topo (Nome + Data/Hora)
-  const criadoPor = t.criado_por_nome || t.criado_por_login || '—'
-  const criadoEm = brDateTime(t.created_at)
+  const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
+  const criadoEm = brDateTime(t.created_at);
 
   return (
     <div className="mx-auto max-w-5xl p-6">
       <h1 className="text-2xl font-bold mb-2">Tratar</h1>
 
-      {/* ✅ NOVO: Linha azul com Nome + Data/Hora de criação */}
       <div className="text-sm text-blue-700 mb-4">
-        <span className="font-semibold">Criado por:</span> {criadoPor}{' '}
+        <span className="font-semibold">Criado por:</span> {criadoPor}{" "}
         <span className="mx-2 text-blue-300">•</span>
         <span className="font-semibold">Data/Hora:</span> {criadoEm}
       </div>
 
-      <p className="text-gray-600 mb-6">Revise os dados, anexe a evidência/anexo e gere a medida.</p>
+      <p className="text-gray-600 mb-6">
+        Revise os dados, anexe a evidência/anexo e gere a medida.
+      </p>
 
-      {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
+      {/* ====== DETALHES ====== */}
       <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
         <div className="flex items-center justify-between gap-4 mb-3">
           <h2 className="text-lg font-semibold">Detalhes da tratativa</h2>
@@ -688,14 +754,14 @@ export default function TratarTratativa() {
               </button>
               <button
                 onClick={() => {
-                  setIsEditing(false)
+                  setIsEditing(false);
                   setEditForm({
-                    tipo_ocorrencia: t.tipo_ocorrencia || '',
-                    prioridade: t.prioridade || 'Média',
-                    setor_origem: t.setor_origem || '',
-                    linha: t.linha || '',
-                    descricao: t.descricao || '',
-                  })
+                    tipo_ocorrencia: t.tipo_ocorrencia || "",
+                    prioridade: t.prioridade || "Média",
+                    setor_origem: t.setor_origem || "",
+                    linha: t.linha || "",
+                    descricao: t.descricao || "",
+                  });
                 }}
                 className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
               >
@@ -706,8 +772,8 @@ export default function TratarTratativa() {
         </div>
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item titulo="Motorista" valor={`${t.motorista_nome || '-'}`} />
-          <Item titulo="Registro" valor={t.motorista_chapa || '-'} />
+          <Item titulo="Motorista" valor={`${t.motorista_nome || "-"}`} />
+          <Item titulo="Registro" valor={t.motorista_chapa || "-"} />
 
           <Item
             titulo="Ocorrência"
@@ -716,13 +782,16 @@ export default function TratarTratativa() {
                 <input
                   className="w-full border rounded px-2 py-1"
                   value={editForm.tipo_ocorrencia}
-                  onChange={(e) => setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))}
+                  onChange={(e) =>
+                    setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))
+                  }
                 />
               ) : (
                 t.tipo_ocorrencia
               )
             }
           />
+
           <Item
             titulo="Prioridade"
             valor={
@@ -730,17 +799,21 @@ export default function TratarTratativa() {
                 <select
                   className="w-full border rounded px-2 py-1"
                   value={editForm.prioridade}
-                  onChange={(e) => setEditForm((s) => ({ ...s, prioridade: e.target.value }))}
+                  onChange={(e) =>
+                    setEditForm((s) => ({ ...s, prioridade: e.target.value }))
+                  }
                 >
                   <option>Baixa</option>
                   <option>Média</option>
                   <option>Alta</option>
+                  <option>Gravíssima</option>
                 </select>
               ) : (
                 t.prioridade
               )
             }
           />
+
           <Item
             titulo="Setor"
             valor={
@@ -748,32 +821,40 @@ export default function TratarTratativa() {
                 <input
                   className="w-full border rounded px-2 py-1"
                   value={editForm.setor_origem}
-                  onChange={(e) => setEditForm((s) => ({ ...s, setor_origem: e.target.value }))}
+                  onChange={(e) =>
+                    setEditForm((s) => ({ ...s, setor_origem: e.target.value }))
+                  }
                 />
               ) : (
                 t.setor_origem
               )
             }
           />
+
           <Item
             titulo="Linha"
             valor={
               isEditing ? (
                 <input
                   className="w-full border rounded px-2 py-1"
-                  placeholder="Código ex.: 01TR"
+                  placeholder="Código ex.: 01TR ou NA"
                   value={editForm.linha}
                   onChange={(e) => setEditForm((s) => ({ ...s, linha: e.target.value }))}
                 />
               ) : t.linha ? (
-                `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ''}`
+                t.linha === "NA" ? (
+                  "— Não se aplica"
+                ) : (
+                  `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ""}`
+                )
               ) : (
-                '-'
+                "-"
               )
             }
           />
+
           <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || '-'} ${t.hora_ocorrido || ''}`} />
+          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`} />
 
           <Item
             className="md:col-span-2"
@@ -787,19 +868,21 @@ export default function TratarTratativa() {
                   onChange={(e) => setEditForm((s) => ({ ...s, descricao: e.target.value }))}
                 />
               ) : (
-                t.descricao || '-'
+                t.descricao || "-"
               )
             }
           />
 
-          {/* Evidências da solicitação (compacto) */}
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(evidenciasSolicitacao, 'Evidências da solicitação (reclamação)')}
+            {renderListaArquivosCompacta(
+              evidenciasSolicitacao,
+              "Evidências da solicitação (reclamação)"
+            )}
           </div>
         </dl>
       </div>
 
-      {/* ====== CONCLUSÃO (EM BAIXO) ====== */}
+      {/* ====== CONCLUSÃO ====== */}
       <div className="bg-white rounded-lg shadow-sm p-5">
         <h2 className="text-lg font-semibold mb-3">Conclusão</h2>
 
@@ -819,7 +902,7 @@ export default function TratarTratativa() {
             </select>
           </div>
 
-          {acao === 'Suspensão' && (
+          {acao === "Suspensão" && (
             <>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Dias de Suspensão</label>
@@ -848,8 +931,8 @@ export default function TratarTratativa() {
 
               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Item titulo="Início" valor={br(inicioSusp)} />
-                <Item titulo="Fim" valor={br(fimSusp)} />
-                <Item titulo="Retorno" valor={br(retornoSusp)} />
+                <Item titulo="Fim" value={br(fimSusp)} />
+                <Item titulo="Retorno" value={br(retornoSusp)} />
               </div>
             </>
           )}
@@ -865,34 +948,62 @@ export default function TratarTratativa() {
           />
         </div>
 
-        {/* Evidência da conclusão (AGORA EM BAIXO) */}
+        {/* Evidência + Anexo com CTRL+V */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">
               Evidência da conclusão (opcional) — imagem ou PDF
             </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setImg(e.target.files?.[0] || null)}
-            />
-            {renderArquivoOuThumb(t.imagem_tratativa || null, 'Evidência já anexada (se houver)')}
+
+            <div
+              ref={pasteConclusaoRef}
+              tabIndex={0}
+              onPaste={onPasteConclusao}
+              className="rounded-md border border-dashed p-3 bg-gray-50"
+              title="Clique aqui e use Ctrl+V para colar um print"
+            >
+              <div className="text-xs text-gray-600">
+                ✅ Você pode <b>colar um print (Ctrl+V)</b> aqui (imagem) ou selecionar arquivo abaixo.
+              </div>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="mt-2"
+                onChange={(e) => setImg(e.target.files?.[0] || null)}
+              />
+            </div>
+
+            {renderArquivoOuThumb(t.imagem_tratativa || null, "Evidência já anexada (se houver)")}
           </div>
 
           <div>
             <label className="block text-sm text-gray-600 mb-1">
               Anexo da tratativa (documento) (opcional) — imagem ou PDF
             </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setAnexo(e.target.files?.[0] || null)}
-            />
+
+            <div
+              ref={pasteAnexoRef}
+              tabIndex={0}
+              onPaste={onPasteAnexo}
+              className="rounded-md border border-dashed p-3 bg-gray-50"
+              title="Clique aqui e use Ctrl+V para colar um print"
+            >
+              <div className="text-xs text-gray-600">
+                ✅ Também aceita <b>Ctrl+V</b> (print) ou selecione arquivo abaixo.
+              </div>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="mt-2"
+                onChange={(e) => setAnexo(e.target.files?.[0] || null)}
+              />
+            </div>
+
             <p className="text-xs text-gray-500 mt-1">
               Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
             </p>
 
-            {renderArquivoOuThumb(t.anexo_tratativa || null, 'Anexo já anexado (se houver)')}
+            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
           </div>
         </div>
 
@@ -902,16 +1013,16 @@ export default function TratarTratativa() {
             disabled={loading}
             className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {loading ? 'Salvando…' : 'Concluir'}
+            {loading ? "Salvando…" : "Concluir"}
           </button>
 
           <button
             type="button"
             onClick={() => {
-              if (acao === 'Orientação') return gerarOrientacao()
-              if (acao === 'Advertência') return gerarAdvertencia()
-              if (acao === 'Suspensão') return gerarSuspensao()
-              alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.')
+              if (acao === "Orientação") return gerarOrientacao();
+              if (acao === "Advertência") return gerarAdvertencia();
+              if (acao === "Suspensão") return gerarSuspensao();
+              alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.');
             }}
             className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
             title="Gerar documento conforme a ação selecionada"
@@ -921,14 +1032,15 @@ export default function TratarTratativa() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-function Item({ titulo, valor, className }) {
+function Item({ titulo, valor, value, className }) {
+  const v = value ?? valor;
   return (
     <div className={className}>
       <dt className="text-sm text-gray-600">{titulo}</dt>
-      <dd className="font-medium break-words">{valor}</dd>
+      <dd className="font-medium break-words">{v}</dd>
     </div>
-  )
+  );
 }
