@@ -373,9 +373,6 @@ export default function SolicitacaoTratativa() {
                 <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
 
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">
-                  <span className="font-medium">Dica:</span>
-                  <span>Você também pode colar um print com</span>
-                  <span className="font-semibold">Ctrl+V</span>
                 </div>
               </div>
 
@@ -395,13 +392,11 @@ export default function SolicitacaoTratativa() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-800">Cole um print aqui</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Clique no campo abaixo e pressione <b>Ctrl+V</b> (ou Cmd+V no Mac).
+                    <p className="text-xs text-gray-500 mt-1">                      
                     </p>
                   </div>
 
-                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">
-                    Clipboard
+                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">                   
                   </span>
                 </div>
 
@@ -415,8 +410,7 @@ export default function SolicitacaoTratativa() {
                   ].join(" ")}
                 >
                   <p className="text-sm">Clique aqui e cole seu print.</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    (A imagem do clipboard será anexada automaticamente como evidência)
+                  <p className="text-xs text-gray-500 mt-1">                    
                   </p>
                 </div>
 
