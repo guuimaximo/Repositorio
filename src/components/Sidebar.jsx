@@ -48,7 +48,7 @@ const DIESEL_ROUTES = {
 // Rotas PCM (ABA)
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
-  inicio: "/pcm-inicio", 
+  inicio: "/pcm-inicio",
   diario: "/pcm-diario",
 };
 
@@ -73,6 +73,7 @@ const ACCESS = {
     "/solicitar",
     "/central",
     "/tratativas-resumo",
+    "/tratativas-rh", // ✅ NOVO (Gestor vê RH)
 
     "/lancar-avaria",
     "/avarias-em-revisao",
@@ -102,6 +103,7 @@ const ACCESS = {
     "/", // Dashboard Principal (Resumo Geral)
     "/tratativas-resumo",
     "/central", // Central de Tratativas
+    "/tratativas-rh", // ✅ NOVO (RH vê a nova tela)
     "/avarias-resumo",
     "/cobrancas", // Cobranças de Avarias
   ],
@@ -144,7 +146,7 @@ function canSee(user, path) {
   if (!user?.nivel) return false;
   if (user.nivel === "Administrador") return true;
   if (user.nivel === "Gestor") return ACCESS.Gestor.includes(path);
-  
+
   const allowed = ACCESS[user.nivel] || [];
   return allowed.includes(path);
 }
@@ -226,6 +228,9 @@ export default function Sidebar() {
         { path: "/tratativas-resumo", label: "Resumo", icon: <FaChartPie />, onlyAdminGestor: true },
         { path: "/solicitar", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/central", label: "Central", icon: <FaListAlt /> },
+
+        // ✅ NOVO: RH - Tratativas (visível para Admin/Gestor/RH)
+        { path: "/tratativas-rh", label: "Tratativas RH", icon: <FaUserCog />, onlyAdminGestorRH: true },
       ],
 
       avarias: [
@@ -272,6 +277,7 @@ export default function Sidebar() {
 
   const showTratativas = links.tratativas.some((l) => {
     if (l.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
+    if (l.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
     return canSee(user, l.path);
   });
 
@@ -312,7 +318,7 @@ export default function Sidebar() {
           <NavLink to={links.inicioExecutivo.path} className={navLinkClass}>
             {links.inicioExecutivo.icon}
             <span className="whitespace-nowrap">{links.inicioExecutivo.label}</span>
-          </NavLink> // ✅ ERRO CORRIGIDO AQUI
+          </NavLink>
         )}
 
         {showInicioBasico && canSee(user, links.inicioBasico.path) && (
@@ -396,8 +402,18 @@ export default function Sidebar() {
             {tratativasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-4 mb-2">
                 {links.tratativas.map((link) => {
+                  // ✅ Resumo: apenas Admin/Gestor (você já liberou RH no seu filtro antigo,
+                  // aqui mantive exatamente sua regra original)
                   if (link.onlyAdminGestor && !(isAdmin || isGestor || isRH)) return null;
-                  if (!link.onlyAdminGestor && !canSee(user, link.path)) return null;
+
+                  // ✅ Tratativas RH: Admin/Gestor/RH
+                  if (link.onlyAdminGestorRH && !(isAdmin || isGestor || isRH)) return null;
+
+                  if (!link.onlyAdminGestor && !link.onlyAdminGestorRH && !canSee(user, link.path))
+                    return null;
+
+                  // ✅ Garante que RH só veja se tiver no ACCESS dele
+                  if (user?.nivel === "RH" && !canSee(user, link.path)) return null;
 
                   return (
                     <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
