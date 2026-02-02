@@ -1,3 +1,8 @@
+// src/pages/TratativasLancarRH.jsx
+// ✅ Modal de lançamento consolidado (1 lançamento RH para N tratativas)
+// ✅ "Clique e cole o print" funcionando: listener global document.addEventListener("paste", ...)
+// ✅ Upload no bucket "tratativas" (pasta rh_consolidado/<chapa>/...)
+
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 
@@ -88,7 +93,7 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     setTimeout(() => pasteBoxRef.current?.focus?.(), 150);
   }, [aberto]);
 
-  // paste global (garante funcionar)
+  // ✅ paste global (funciona mesmo se foco estiver em outro elemento do modal)
   useEffect(() => {
     if (!aberto) return;
 
@@ -156,6 +161,8 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
             motorista_nome: grupo.motorista_nome,
             acao_aplicada: grupo.acao_aplicada,
 
+            arquivo_ref: grupo.evidencia_key || null, // ✅ guarda o nome após 2º "_"
+
             status_rh: "CONCLUIDA",
             lancado_transnet: true,
             lancado_em: new Date().toISOString(),
@@ -172,7 +179,7 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
       const lancamentoId = upLanc.data?.id;
       if (!lancamentoId) throw new Error("Não foi possível obter ID do lançamento.");
 
-      // 2) vincula itens
+      // 2) vincula itens (tratativas consolidadas)
       const itensPayload = (grupo.itens || []).map((i) => ({
         lancamento_id: lancamentoId,
         tratativa_id: i.tratativa_id,
@@ -204,8 +211,8 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
           <div>
             <div className="text-lg font-bold">Lançar no Transnet (RH)</div>
             <div className="text-xs text-gray-500">
-              <b>{grupo.acao_aplicada}</b> • {grupo.motorista_nome} ({grupo.motorista_chapa}) •{" "}
-              <b>{grupo.itens.length}</b> tratativa(s) consolidada(s)
+              <b>{grupo.acao_aplicada}</b> • {grupo.motorista_nome} ({grupo.motorista_chapa}) •
+              Arquivo: <b>{grupo.evidencia_key || "—"}</b> • <b>{grupo.itens.length}</b> tratativa(s)
             </div>
           </div>
           <button
