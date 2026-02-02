@@ -1,3 +1,7 @@
+// src/pages/TratativasConsultarRH.jsx
+// ✅ Modal consulta com tabela azul (mostra todas as tratativas consolidadas)
+// ✅ Exibe evidência RH + observação + data lançamento
+
 import React from "react";
 
 function brDateTime(d) {
@@ -60,8 +64,8 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
           <div>
             <div className="text-lg font-bold">Consultar (RH)</div>
             <div className="text-xs text-gray-500">
-              <b>{grupo.acao_aplicada}</b> • {grupo.motorista_nome} ({grupo.motorista_chapa}) •{" "}
-              <b>{grupo.itens.length}</b> tratativa(s) consolidadas
+              <b>{grupo.acao_aplicada}</b> • {grupo.motorista_nome} ({grupo.motorista_chapa}) •
+              Arquivo: <b>{grupo.evidencia_key || "—"}</b> • <b>{grupo.itens.length}</b> tratativa(s)
             </div>
           </div>
           <button
@@ -80,7 +84,9 @@ export default function TratativasConsultarRH({ aberto, grupo, onClose }) {
             </div>
             <div>
               <div className="text-xs text-gray-500">Lançado em</div>
-              <div className="text-sm font-medium">{grupo.rh_lancado_em ? brDateTime(grupo.rh_lancado_em) : "—"}</div>
+              <div className="text-sm font-medium">
+                {grupo.rh_lancado_em ? brDateTime(grupo.rh_lancado_em) : "—"}
+              </div>
             </div>
           </div>
 
