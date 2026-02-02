@@ -1,3 +1,8 @@
+// src/pages/TratativasRH.jsx
+// ✅ Layout igual Central (cards coloridos + tabela azul)
+// ✅ Consolidação por evidência: usa filename APÓS o 2º "_" (ex.: conclusao_123_RIC_FINAL.pdf -> RIC_FINAL.pdf)
+// ✅ Consulta/Lançamento separados em 2 componentes: TratativasConsultarRH / TratativasLancarRH
+
 import React, { useEffect, useMemo, useState, useContext } from "react";
 import { supabase } from "../supabase";
 import { AuthContext } from "../context/AuthContext";
@@ -15,12 +20,53 @@ function brDateTime(d) {
 function norm(s) {
   return String(s || "").trim().toLowerCase();
 }
-function buildKey({ motorista_chapa, acao_aplicada, evidencia_base }) {
+
+/* =========================
+   Evidência Key (regra nova)
+========================= */
+function lastPathNameFromUrl(url) {
+  try {
+    const raw = String(url || "");
+    const noHash = raw.split("#")[0];
+    const noQuery = noHash.split("?")[0];
+    const last = noQuery.split("/").filter(Boolean).pop() || "";
+    return decodeURIComponent(last);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Regra RH:
+ * - filename: "conclusao_1770051345532_RIC_FINAL_V2.pdf"
+ * - key: tudo APÓS o 2º "_" => "RIC_FINAL_V2.pdf"
+ * - fallback: filename inteiro
+ */
+function evidKeyFromUrl(url) {
+  const filename = lastPathNameFromUrl(url);
+  if (!filename) return "";
+
+  const lower = filename.toLowerCase();
+  if (!lower.startsWith("conclusao_")) return filename;
+
+  const parts = filename.split("_");
+  // parts[0]="conclusao", parts[1]="1770...", parts[2...]="NOME_REAL"
+  if (parts.length >= 3) {
+    const afterSecondUnderscore = parts.slice(2).join("_");
+    return afterSecondUnderscore || filename;
+  }
+  return filename;
+}
+
+function buildGroupKey({ motorista_chapa, acao_aplicada, evidencia_key }) {
   return `${String(motorista_chapa || "").trim()}|${String(acao_aplicada || "").trim()}|${String(
-    evidencia_base || ""
+    evidencia_key || ""
   ).trim()}`;
 }
 
+/* =========================
+   UI
+========================= */
 function CardResumo({ titulo, valor, cor }) {
   return (
     <div className={`${cor} rounded-lg shadow p-5 text-center`}>
@@ -29,7 +75,6 @@ function CardResumo({ titulo, valor, cor }) {
     </div>
   );
 }
-
 function BadgeAcao({ acao }) {
   const isSusp = acao === "Suspensão";
   return (
@@ -48,9 +93,11 @@ export default function TratativasRH() {
   useContext(AuthContext);
 
   const [loading, setLoading] = useState(false);
+
+  // groups = consolidados
   const [groups, setGroups] = useState([]);
 
-  // filtros
+  // filtros (layout Central)
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState(""); // "" | PENDENTE | CONCLUIDA
   const [acaoFiltro, setAcaoFiltro] = useState(""); // "" | Advertência | Suspensão
@@ -62,7 +109,7 @@ export default function TratativasRH() {
   async function load() {
     setLoading(true);
     try {
-      // 1) detalhes RH (tratador)
+      // 1) detalhes do tratador que viram RH
       const { data, error } = await supabase
         .from("tratativas_detalhes")
         .select(
@@ -94,51 +141,62 @@ export default function TratativasRH() {
         )
         .in("acao_aplicada", Array.from(ACOES_RH))
         .order("created_at", { ascending: false })
-        .limit(5000);
+        .limit(8000);
 
       if (error) throw error;
 
       const detalhes = (data || []).filter((d) => d?.tratativas?.id);
 
-      // 2) agrupa por evidência-base
+      // 2) consolidar por (chapa + ação + evidencia_key)
       const map = new Map();
+
       for (const d of detalhes) {
         const t = d.tratativas;
-        const evidencia_base = d.imagem_tratativa || d.anexo_tratativa || "";
-        const key = buildKey({
+
+        const evidencia_url = d.imagem_tratativa || d.anexo_tratativa || "";
+        const evidencia_key = evidKeyFromUrl(evidencia_url) || "SEM_EVIDENCIA";
+
+        const key = buildGroupKey({
           motorista_chapa: t?.motorista_chapa,
           acao_aplicada: d.acao_aplicada,
-          evidencia_base,
+          evidencia_key,
         });
 
         if (!map.has(key)) {
           map.set(key, {
-            key,
+            key, // chave_consolidacao
             motorista_nome: t?.motorista_nome || "",
             motorista_chapa: t?.motorista_chapa || "",
             acao_aplicada: d.acao_aplicada,
-            evidencia_base,
+            evidencia_key, // ✅ RIC_FINAL.pdf
+            evidencia_url, // url original (só pra referência/preview)
             last_created_at: d.created_at,
             itens: [],
           });
         }
 
         const g = map.get(key);
+
         g.itens.push({
           detalhe_id: d.id,
           detalhe_created_at: d.created_at,
           tratativa_id: d.tratativa_id,
-          tipo_ocorrencia: t?.tipo_ocorrencia || "",
-          linha: t?.linha || "",
-          prioridade: t?.prioridade || "",
-          setor_origem: t?.setor_origem || "",
-          data_ocorrido: t?.data_ocorrido || null,
-          hora_ocorrido: t?.hora_ocorrido || "",
-          descricao: t?.descricao || "",
+
+          acao_aplicada: d.acao_aplicada,
           observacoes_tratador: d.observacoes || "",
           evidencia_conclusao_url: d.imagem_tratativa || null,
           anexo_tratador_url: d.anexo_tratativa || null,
           tratado_por_nome: d.tratado_por_nome || d.tratado_por_login || "—",
+
+          motorista_nome: t?.motorista_nome || "",
+          motorista_chapa: t?.motorista_chapa || "",
+          tipo_ocorrencia: t?.tipo_ocorrencia || "",
+          prioridade: t?.prioridade || "",
+          setor_origem: t?.setor_origem || "",
+          linha: t?.linha || "",
+          descricao: t?.descricao || "",
+          data_ocorrido: t?.data_ocorrido || null,
+          hora_ocorrido: t?.hora_ocorrido || "",
         });
 
         if (new Date(d.created_at).getTime() > new Date(g.last_created_at).getTime()) {
@@ -150,16 +208,21 @@ export default function TratativasRH() {
         (a, b) => new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime()
       );
 
-      // 3) status RH (consolidado)
+      // 3) status RH do lançamento consolidado
       const keys = grouped.map((g) => g.key);
       const lancMap = new Map();
-      if (keys.length) {
+
+      if (keys.length > 0) {
+        // chunk pra não estourar query
         const chunkSize = 200;
         for (let i = 0; i < keys.length; i += chunkSize) {
           const slice = keys.slice(i, i + chunkSize);
+
           const { data: rh, error: erh } = await supabase
             .from("tratativas_rh_lancamentos")
-            .select("id, chave_consolidacao, status_rh, lancado_transnet, lancado_em, observacao_rh, evidencia_transnet_url")
+            .select(
+              "id, chave_consolidacao, status_rh, lancado_transnet, lancado_em, observacao_rh, evidencia_transnet_url"
+            )
             .in("chave_consolidacao", slice);
 
           if (erh) throw erh;
@@ -198,22 +261,26 @@ export default function TratativasRH() {
 
   const filtered = useMemo(() => {
     const q = norm(busca);
+
     return groups.filter((g) => {
       if (status === "PENDENTE" && g.rh_lancado) return false;
       if (status === "CONCLUIDA" && !g.rh_lancado) return false;
       if (acaoFiltro && g.acao_aplicada !== acaoFiltro) return false;
 
       if (!q) return true;
+
       const blob = norm(
         [
           g.motorista_nome,
           g.motorista_chapa,
           g.acao_aplicada,
+          g.evidencia_key,
           ...g.itens.map((i) => `${i.tipo_ocorrencia} ${i.linha} ${i.descricao}`),
         ]
           .filter(Boolean)
           .join(" ")
       );
+
       return blob.includes(q);
     });
   }, [groups, busca, status, acaoFiltro]);
@@ -224,12 +291,15 @@ export default function TratativasRH() {
       concl = 0,
       adv = 0,
       susp = 0;
+
     groups.forEach((g) => {
       if (g.rh_lancado) concl++;
       else pend++;
+
       if (g.acao_aplicada === "Advertência") adv++;
       if (g.acao_aplicada === "Suspensão") susp++;
     });
+
     return { total, pend, concl, adv, susp };
   }, [groups]);
 
@@ -239,11 +309,11 @@ export default function TratativasRH() {
     setAcaoFiltro("");
   }
 
-  function open(g) {
+  function openGroup(g) {
     setSel(g);
     setModalType(g.rh_lancado ? "CONSULTAR" : "LANCAR");
   }
-  function close() {
+  function closeModal() {
     setSel(null);
     setModalType(null);
   }
@@ -252,7 +322,7 @@ export default function TratativasRH() {
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-700">Tratativas RH</h1>
 
-      {/* Filtros (layout Central) */}
+      {/* 🔍 Filtros (igual Central) */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
 
@@ -307,7 +377,7 @@ export default function TratativasRH() {
         </div>
       </div>
 
-      {/* Cards (coloridos igual Central) */}
+      {/* 🧾 Cards (coloridos igual Central) */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
         <CardResumo titulo="Total" valor={counts.total} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes" valor={counts.pend} cor="bg-yellow-100 text-yellow-700" />
@@ -316,7 +386,7 @@ export default function TratativasRH() {
         <CardResumo titulo="Suspensões" valor={counts.susp} cor="bg-red-100 text-red-700" />
       </div>
 
-      {/* Tabela (azul igual Central) */}
+      {/* 📋 Tabela (azul igual Central) */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
@@ -325,7 +395,8 @@ export default function TratativasRH() {
               <th className="py-2 px-3 text-left">Motorista</th>
               <th className="py-2 px-3 text-left">Chapa</th>
               <th className="py-2 px-3 text-left">Ação</th>
-              <th className="py-2 px-3 text-left">Tratativas</th>
+              <th className="py-2 px-3 text-left">Arquivo</th>
+              <th className="py-2 px-3 text-left">Qtd. Tratativas</th>
               <th className="py-2 px-3 text-left">Status RH</th>
               <th className="py-2 px-3 text-left">Ações</th>
             </tr>
@@ -334,13 +405,13 @@ export default function TratativasRH() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
+                <td colSpan="8" className="text-center p-4 text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
+                <td colSpan="8" className="text-center p-4 text-gray-500">
                   Nenhuma tratativa RH encontrada.
                 </td>
               </tr>
@@ -353,8 +424,9 @@ export default function TratativasRH() {
                   <td className="py-2 px-3">
                     <BadgeAcao acao={g.acao_aplicada} />
                   </td>
+                  <td className="py-2 px-3 text-gray-700">{g.evidencia_key || "—"}</td>
                   <td className="py-2 px-3 text-gray-700">
-                    <b>{g.itens.length}</b> consolidada(s)
+                    <b>{g.itens.length}</b>
                   </td>
                   <td className="py-2 px-3">
                     {g.rh_lancado ? (
@@ -369,7 +441,7 @@ export default function TratativasRH() {
                   </td>
                   <td className="py-2 px-3">
                     <button
-                      onClick={() => open(g)}
+                      onClick={() => openGroup(g)}
                       className={[
                         "px-3 py-1 rounded-md text-sm text-white",
                         g.rh_lancado ? "bg-gray-500 hover:bg-gray-600" : "bg-emerald-600 hover:bg-emerald-700",
@@ -387,10 +459,10 @@ export default function TratativasRH() {
 
       {/* Modais separados */}
       {modalType === "LANCAR" && sel && (
-        <TratativasLancarRH aberto={true} grupo={sel} onClose={close} onSaved={load} />
+        <TratativasLancarRH aberto={true} grupo={sel} onClose={closeModal} onSaved={load} />
       )}
       {modalType === "CONSULTAR" && sel && (
-        <TratativasConsultarRH aberto={true} grupo={sel} onClose={close} />
+        <TratativasConsultarRH aberto={true} grupo={sel} onClose={closeModal} />
       )}
     </div>
   );
