@@ -18,7 +18,6 @@ const acoes = [
 export default function TratarTratativa() {
   const { id } = useParams();
   const nav = useNavigate();
-
   const { user } = useContext(AuthContext);
 
   const [t, setT] = useState(null);
@@ -51,9 +50,12 @@ export default function TratarTratativa() {
     new Date().toISOString().slice(0, 10)
   );
 
-  // refs p/ CTRL+V (print)
+  // refs
   const pasteConclusaoRef = useRef(null);
   const pasteAnexoRef = useRef(null);
+
+  // qual caixa de paste está "armada"
+  const [pasteTarget, setPasteTarget] = useState(null); // "conclusao" | "anexo" | null
 
   const dataPtCompletaUpper = (d = new Date()) => {
     const meses = [
@@ -143,6 +145,52 @@ export default function TratarTratativa() {
     return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
   };
 
+  const isDocLikeUrl = (u) => {
+    const s = String(u || "").toLowerCase();
+    return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|#|$)/.test(s) || s.includes(".pdf");
+  };
+
+  // Solicitação: grid com miniatura se imagem; se doc/pdf link
+  const renderEvidenciasSolicitacao = (urls, label) => {
+    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+    if (arr.length === 0) return null;
+
+    return (
+      <div className="mt-2">
+        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+        <div className="flex flex-wrap gap-3">
+          {arr.map((u, i) => {
+            const imgOk = isImageUrl(u) && !isPdf(u);
+            const docOk = isDocLikeUrl(u) || isPdf(u);
+            return (
+              <a
+                key={`${u}-${i}`}
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group"
+                title="Abrir evidência"
+              >
+                {imgOk ? (
+                  <img
+                    src={u}
+                    alt={fileNameFromUrl(u)}
+                    className="h-16 w-16 rounded border object-cover group-hover:opacity-90"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="h-16 min-w-[64px] px-3 rounded border bg-gray-50 flex items-center justify-center text-xs text-blue-700 underline">
+                    {docOk ? "Abrir arquivo" : "Abrir"}
+                  </div>
+                )}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderArquivoOuThumb = (url, label) => {
     if (!url) return null;
 
@@ -177,67 +225,6 @@ export default function TratarTratativa() {
     );
   };
 
-  // ✅ Galeria compacta: miniatura se imagem; se PDF/doc -> “cartão” clicável com nome
-  const renderEvidenciasSolicitacao = (urls) => {
-    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-    if (arr.length === 0) return null;
-
-    return (
-      <div className="mt-3">
-        <span className="block text-sm text-gray-600 mb-2">
-          Evidências da solicitação (reclamação)
-        </span>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {arr.map((u, i) => {
-            const nome = fileNameFromUrl(u);
-            const pdf = isPdf(u);
-            const imgOk = !pdf && isImageUrl(u);
-
-            if (imgOk) {
-              return (
-                <a
-                  key={`${u}-${i}`}
-                  href={u}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group rounded-md border bg-white overflow-hidden hover:shadow"
-                  title="Abrir imagem"
-                >
-                  <img
-                    src={u}
-                    alt={nome}
-                    className="h-24 w-full object-cover group-hover:opacity-95"
-                    loading="lazy"
-                  />
-                  <div className="px-2 py-1 text-xs text-gray-600 truncate">{nome}</div>
-                </a>
-              );
-            }
-
-            return (
-              <a
-                key={`${u}-${i}`}
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-md border bg-white p-3 hover:shadow flex flex-col justify-between"
-                title="Abrir arquivo"
-              >
-                <div className="text-[11px] font-medium text-gray-700 break-words line-clamp-3">
-                  {nome}
-                </div>
-                <div className="mt-2 inline-flex items-center justify-center rounded-md bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
-                  Abrir arquivo
-                </div>
-              </a>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   // ✅ CTRL+V: cola print (imagem) -> vira File
   const makeFileFromClipboardImage = (blobFile) => {
     const type = blobFile?.type || "image/png";
@@ -246,25 +233,32 @@ export default function TratarTratativa() {
     return new File([blobFile], name, { type, lastModified: Date.now() });
   };
 
-  const onPasteConclusao = (e) => {
+  const tryGetClipboardImageFile = (e) => {
     const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
     const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
-    if (!imgItem) return;
-    e.preventDefault();
+    if (!imgItem) return null;
     const f = imgItem.getAsFile();
-    if (!f) return;
-    setImg(makeFileFromClipboardImage(f));
+    if (!f) return null;
+    return makeFileFromClipboardImage(f);
   };
 
-  const onPasteAnexo = (e) => {
-    const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
-    const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
-    if (!imgItem) return;
-    e.preventDefault();
-    const f = imgItem.getAsFile();
-    if (!f) return;
-    setAnexo(makeFileFromClipboardImage(f));
-  };
+  // ✅ PASTE mais confiável: listener global quando a caixa estiver "armada"
+  useEffect(() => {
+    function onGlobalPaste(e) {
+      if (!pasteTarget) return; // só captura se tiver alvo ativo
+
+      const file = tryGetClipboardImageFile(e);
+      if (!file) return;
+
+      e.preventDefault();
+
+      if (pasteTarget === "conclusao") setImg(file);
+      if (pasteTarget === "anexo") setAnexo(file);
+    }
+
+    window.addEventListener("paste", onGlobalPaste);
+    return () => window.removeEventListener("paste", onGlobalPaste);
+  }, [pasteTarget]);
 
   // ======= Carrega tratativa =======
   useEffect(() => {
@@ -398,15 +392,11 @@ export default function TratarTratativa() {
 
       // Evidência da conclusão (imagem/pdf)
       let evidencia_conclusao_url = null;
-      if (img) {
-        evidencia_conclusao_url = await uploadToTratativasBucket(img, `${t.id}/conclusao`);
-      }
+      if (img) evidencia_conclusao_url = await uploadToTratativasBucket(img, `${t.id}/conclusao`);
 
       // Anexo da tratativa (imagem/pdf)
       let anexo_tratativa_url = null;
-      if (anexo) {
-        anexo_tratativa_url = await uploadToTratativasBucket(anexo, `${t.id}/anexos`);
-      }
+      if (anexo) anexo_tratativa_url = await uploadToTratativasBucket(anexo, `${t.id}/anexos`);
 
       // detalhe/histórico
       const ins = await supabase.from("tratativas_detalhes").insert({
@@ -416,14 +406,13 @@ export default function TratarTratativa() {
         imagem_tratativa: evidencia_conclusao_url,
         anexo_tratativa: anexo_tratativa_url,
 
-        // ✅ auditoria de quem tratou
         tratado_por_login: loginSessao,
         tratado_por_nome: nomeSessao || loginSessao,
         tratado_por_id: idSessao,
       });
       if (ins.error) throw ins.error;
 
-      // atualiza status + mantém imagem/anexo “principal”
+      // atualiza status + mantém “principal”
       const upd = await supabase
         .from("tratativas")
         .update({
@@ -752,60 +741,97 @@ export default function TratarTratativa() {
   const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
   const criadoEm = brDateTime(t.created_at);
 
-  // UI: picker bonito
-  const FilePicker = ({ accept, onChangeFile, selectedFile }) => (
+  const goBack = () => {
+    if (window.history.length > 1) nav(-1);
+    else nav("/central");
+  };
+
+  // UI helper p/ botão bonito + input hidden
+  const FilePicker = ({
+    id,
+    accept,
+    onPick,
+    label = "Escolher arquivo",
+    selectedFile,
+  }) => (
     <div className="flex items-center gap-3">
-      <label className="inline-flex cursor-pointer items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
-        Escolher arquivo
-        <input
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={(e) => onChangeFile(e.target.files?.[0] || null)}
-        />
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => onPick(e.target.files?.[0] || null)}
+      />
+      <label
+        htmlFor={id}
+        className="inline-flex cursor-pointer items-center justify-center rounded-md border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+      >
+        {label}
       </label>
-
-      <div className="text-sm text-gray-600 truncate flex-1">
-        {selectedFile ? selectedFile.name : "Nenhum arquivo escolhido"}
+      <div className="text-xs text-gray-500 truncate">
+        {selectedFile?.name ? selectedFile.name : "Nenhum arquivo selecionado"}
       </div>
-
-      {selectedFile ? (
-        <button
-          type="button"
-          onClick={() => onChangeFile(null)}
-          className="rounded-md bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300"
-          title="Remover arquivo"
-        >
-          Remover
-        </button>
-      ) : null}
     </div>
   );
 
-  const PasteBox = ({ onPaste, boxRef }) => (
-    <div
-      ref={boxRef}
-      tabIndex={0}
-      onPaste={onPaste}
-      className="mt-2 rounded-md border border-dashed bg-gray-50 px-3 py-6 text-center text-sm text-gray-600 outline-none focus:ring-2 focus:ring-blue-200"
-      title="Clique aqui e use Ctrl+V"
-    >
-      Clique e cole o Print
-    </div>
-  );
+  const PasteBox = ({ target, file, onClear }) => {
+    const active = pasteTarget === target;
+
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setPasteTarget(target)}
+        onFocus={() => setPasteTarget(target)}
+        onBlur={() => setPasteTarget((cur) => (cur === target ? null : cur))}
+        className={[
+          "rounded-md border p-3",
+          "bg-gray-50",
+          active ? "border-blue-500 ring-2 ring-blue-200" : "border-dashed",
+          "select-none cursor-pointer",
+        ].join(" ")}
+        title="Clique aqui e use Ctrl+V"
+      >
+        <div className="text-sm font-medium text-gray-700">Clique e cole o Print</div>
+
+        {file ? (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="text-xs text-gray-600 truncate">{file.name}</div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear();
+              }}
+              className="text-xs text-red-600 hover:underline"
+            >
+              Remover
+            </button>
+          </div>
+        ) : (
+          <div className="mt-1 text-xs text-gray-500">
+            {active ? "Pronto para colar (Ctrl+V)" : "Clique para ativar"}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      {/* ✅ Header com botão voltar */}
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <h1 className="text-2xl font-bold">Tratar</h1>
+      {/* Top bar */}
+      <div className="mb-4 flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => nav(-1)}
-          className="rounded-md bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
+          onClick={goBack}
+          className="rounded-md border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          Voltar
+          ← Voltar
         </button>
+
+        <h1 className="text-2xl font-bold">Tratar</h1>
+
+        <div className="w-[88px]" /> {/* spacer p/ centralizar */}
       </div>
 
       <div className="text-sm text-blue-700 mb-4">
@@ -940,7 +966,10 @@ export default function TratarTratativa() {
           />
 
           <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`} />
+          <Item
+            titulo="Data/Hora"
+            valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`}
+          />
 
           <Item
             className="md:col-span-2"
@@ -959,8 +988,12 @@ export default function TratarTratativa() {
             }
           />
 
-          {/* ✅ Evidências com miniatura */}
-          <div className="md:col-span-2">{renderEvidenciasSolicitacao(evidenciasSolicitacao)}</div>
+          <div className="md:col-span-2">
+            {renderEvidenciasSolicitacao(
+              evidenciasSolicitacao,
+              "Evidências da solicitação (reclamação)"
+            )}
+          </div>
         </dl>
       </div>
 
@@ -1030,48 +1063,62 @@ export default function TratarTratativa() {
           />
         </div>
 
-        {/* ✅ Evidência + Anexo com UI mais limpa (Escolher arquivo + Print) */}
+        {/* Evidência + Anexo: botão bonito + paste limpo */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">
+            <label className="block text-sm text-gray-600 mb-2">
               Evidência da conclusão (opcional)
             </label>
 
-            <div className="rounded-md border p-3 bg-white">
+            <div className="space-y-2">
               <FilePicker
+                id="file_conclusao"
                 accept="image/*,application/pdf"
+                label="Escolher arquivo"
                 selectedFile={img}
-                onChangeFile={setImg}
+                onPick={(f) => setImg(f)}
               />
-              <PasteBox onPaste={onPasteConclusao} boxRef={pasteConclusaoRef} />
-            </div>
 
-            {renderArquivoOuThumb(t.imagem_tratativa || null, "Evidência já anexada (se houver)")}
+              <div ref={pasteConclusaoRef}>
+                <PasteBox
+                  target="conclusao"
+                  file={img}
+                  onClear={() => setImg(null)}
+                />
+              </div>
+
+              {renderArquivoOuThumb(t.imagem_tratativa || null, "Evidência já anexada (se houver)")}
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-600 mb-1">
+            <label className="block text-sm text-gray-600 mb-2">
               Anexo da tratativa (opcional)
             </label>
 
-            <div className="rounded-md border p-3 bg-white">
+            <div className="space-y-2">
               <FilePicker
+                id="file_anexo"
                 accept="image/*,application/pdf"
+                label="Escolher arquivo"
                 selectedFile={anexo}
-                onChangeFile={setAnexo}
+                onPick={(f) => setAnexo(f)}
               />
-              <PasteBox onPaste={onPasteAnexo} boxRef={pasteAnexoRef} />
+
+              <div ref={pasteAnexoRef}>
+                <PasteBox
+                  target="anexo"
+                  file={anexo}
+                  onClear={() => setAnexo(null)}
+                />
+              </div>
+
+              {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
             </div>
-
-            <p className="text-xs text-gray-500 mt-1">
-              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
-            </p>
-
-            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
           </div>
         </div>
 
-        <div className="mt-4 flex gap-3 flex-wrap">
+        <div className="mt-5 flex gap-3 flex-wrap">
           <button
             onClick={concluir}
             disabled={loading}
