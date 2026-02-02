@@ -2,24 +2,27 @@
 // Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
 // + Múltiplas evidências (salva TODAS em evidencias_urls)
 // ✅ AJUSTE: grava criado_por_login, criado_por_nome, criado_por_id (sem alterar o resto)
+// ✅ AJUSTE: Prioridade adiciona "Gravíssima"
+// ✅ AJUSTE: Linha adiciona opção "— Não se aplica" (salva como "NA")
+// ✅ AJUSTE: Evidências aceitam CTRL+V (print do clipboard) no Dropzone
 
-import { useState, useEffect, useRef, useMemo, useContext } from 'react';
-import { supabase } from '../supabase';
-import CampoMotorista from '../components/CampoMotorista';
-import { AuthContext } from '../context/AuthContext'; // ✅ AJUSTE
+import { useState, useEffect, useRef, useMemo, useContext } from "react";
+import { supabase } from "../supabase";
+import CampoMotorista from "../components/CampoMotorista";
+import { AuthContext } from "../context/AuthContext";
 
 export default function SolicitacaoTratativa() {
-  const { user } = useContext(AuthContext); // ✅ AJUSTE
+  const { user } = useContext(AuthContext);
 
-  const [motorista, setMotorista] = useState({ chapa: '', nome: '' });
+  const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
   const [form, setForm] = useState({
-    tipo_ocorrencia: '',
-    prioridade: 'Média',
-    setor_origem: '',
-    linha: '',
-    descricao: '',
-    data_ocorrida: '',
-    hora_ocorrida: '',
+    tipo_ocorrencia: "",
+    prioridade: "Média",
+    setor_origem: "",
+    linha: "",
+    descricao: "",
+    data_ocorrida: "",
+    hora_ocorrida: "",
   });
 
   const [files, setFiles] = useState([]);
@@ -39,7 +42,13 @@ export default function SolicitacaoTratativa() {
 
   // Aceita PNG/JPG, MP4/MOV, PDF
   const acceptMime = useMemo(
-    () => ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'],
+    () => [
+      "image/png",
+      "image/jpeg",
+      "video/mp4",
+      "video/quicktime",
+      "application/pdf",
+    ],
     []
   );
 
@@ -51,16 +60,18 @@ export default function SolicitacaoTratativa() {
           { data: setoresData, error: e2 },
           { data: linhasData, error: e3 },
         ] = await Promise.all([
-          supabase.from('tipos_ocorrencia').select('id, nome').order('nome'),
-          supabase.from('setores').select('id, nome').order('nome'),
-          supabase.from('linhas').select('id, codigo, descricao').order('codigo'),
+          supabase.from("tipos_ocorrencia").select("id, nome").order("nome"),
+          supabase.from("setores").select("id, nome").order("nome"),
+          supabase.from("linhas").select("id, codigo, descricao").order("codigo"),
         ]);
-        if (e1 || e2 || e3) console.error('Erro carregando listas:', e1 || e2 || e3);
+
+        if (e1 || e2 || e3) console.error("Erro carregando listas:", e1 || e2 || e3);
+
         setTiposOcorrencia(Array.isArray(tipos) ? tipos : []);
         setSetores(Array.isArray(setoresData) ? setoresData : []);
         setLinhas(Array.isArray(linhasData) ? linhasData : []);
       } catch (err) {
-        console.error('Falha geral ao carregar listas:', err);
+        console.error("Falha geral ao carregar listas:", err);
       }
     }
     carregarListas();
@@ -87,58 +98,98 @@ export default function SolicitacaoTratativa() {
     setIsDragging(false);
     addFiles(e.dataTransfer.files || []);
   };
+
   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  // ✅ CTRL+V (print do clipboard) vira evidência
+  const onPasteEvidencia = (e) => {
+    try {
+      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+      if (!items.length) return;
+
+      const images = items
+        .filter((it) => it.kind === "file" && it.type && it.type.startsWith("image/"))
+        .map((it) => it.getAsFile())
+        .filter(Boolean);
+
+      if (!images.length) return;
+
+      // evita colar texto dentro do dropzone e só pega as imagens
+      e.preventDefault();
+
+      const filesFromClipboard = images.map((f) => {
+        const ext =
+          f.type === "image/png" ? "png" :
+          f.type === "image/jpeg" ? "jpg" : "img";
+        const name = `print_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+        return new File([f], name, { type: f.type, lastModified: Date.now() });
+      });
+
+      addFiles(filesFromClipboard);
+    } catch (err) {
+      console.error("Erro ao colar evidência:", err);
+    }
+  };
 
   async function salvar() {
     if (!camposObrigatoriosPreenchidos) {
-      alert('Preencha motorista, tipo de ocorrência, setor de origem e descrição.');
+      alert("Preencha motorista, tipo de ocorrência, setor de origem e descrição.");
       return;
     }
 
     setLoading(true);
+
     try {
-      // ✅ AJUSTE: resolve nome/login/id do usuário logado (fallback para buscar no usuarios_aprovadores)
-      const loginSessao = user?.login || null;
+      // ✅ resolve nome/login/id do usuário logado (fallback para buscar no usuarios_aprovadores)
+      const loginSessao = user?.login || user?.email || null;
       const idSessao = user?.id || user?.auth_user_id || null;
 
-      let nomeSessao = user?.nome || null;
+      let nomeSessao = user?.nome || user?.nome_completo || null;
+
       if (!nomeSessao && loginSessao) {
         const { data: u, error: eu } = await supabase
-          .from('usuarios_aprovadores')
-          .select('nome')
-          .eq('login', loginSessao)
+          .from("usuarios_aprovadores")
+          .select("nome, sobrenome, nome_completo")
+          .eq("login", loginSessao)
           .maybeSingle();
 
-        if (!eu) nomeSessao = u?.nome || null;
+        if (!eu) {
+          nomeSessao =
+            u?.nome_completo ||
+            [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
+            u?.nome ||
+            null;
+        }
       }
 
       let evidenciasUrls = [];
+
       if (files.length > 0) {
         // NÃO coloque "tratativas/" aqui (isso é o bucket)
-        const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
+        const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || "sem_motorista")
           .toString()
           .trim()
-          .replace(/\s+/g, '_')}`;
+          .replace(/\s+/g, "_")}`;
 
         for (const f of files) {
           // sanitiza nome do arquivo
-          const safeName = (f.name || 'arquivo')
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '') // remove acentos
-            .replace(/\s+/g, '_') // espaços -> _
-            .replace(/[^a-zA-Z0-9._-]/g, ''); // remove caracteres inválidos
+          const safeName = (f.name || "arquivo")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // remove acentos
+            .replace(/\s+/g, "_") // espaços -> _
+            .replace(/[^a-zA-Z0-9._-]/g, ""); // remove caracteres inválidos
 
           // garante unicidade para não colidir
           const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
           const path = `${folder}/${unique}`; // <-- key correta (sem "tratativas/")
 
-          const up = await supabase.storage.from('tratativas').upload(path, f, {
+          const up = await supabase.storage.from("tratativas").upload(path, f, {
             upsert: false,
             contentType: f.type || undefined,
           });
           if (up.error) throw up.error;
 
-          const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
+          const { data: pub } = supabase.storage.from("tratativas").getPublicUrl(path);
           if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
         }
       }
@@ -147,11 +198,11 @@ export default function SolicitacaoTratativa() {
         motorista_chapa: motorista.chapa || null,
         motorista_nome: motorista.nome || null,
         tipo_ocorrencia: form.tipo_ocorrencia,
-        prioridade: form.prioridade,
+        prioridade: form.prioridade, // ✅ agora pode ser "Gravíssima"
         setor_origem: form.setor_origem,
-        linha: form.linha || null,
+        linha: form.linha || null, // ✅ pode ser "NA" (Não se aplica)
         descricao: form.descricao,
-        status: 'Pendente',
+        status: "Pendente",
 
         // Mantém compatibilidade com seu campo antigo:
         // primeira evidência vai em imagem_url
@@ -163,25 +214,25 @@ export default function SolicitacaoTratativa() {
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
 
-        // ✅ AJUSTE (NOVO): auditoria do criador
+        // ✅ auditoria do criador
         criado_por_login: loginSessao,
         criado_por_nome: nomeSessao || loginSessao,
-        //criado_por_id: idSessao,
+        criado_por_id: idSessao,
       };
 
-      const { error } = await supabase.from('tratativas').insert(payload);
+      const { error } = await supabase.from("tratativas").insert(payload);
       if (error) throw error;
 
-      alert('Solicitação registrada com sucesso!');
-      setMotorista({ chapa: '', nome: '' });
+      alert("Solicitação registrada com sucesso!");
+      setMotorista({ chapa: "", nome: "" });
       setForm({
-        tipo_ocorrencia: '',
-        prioridade: 'Média',
-        setor_origem: '',
-        linha: '',
-        descricao: '',
-        data_ocorrida: '',
-        hora_ocorrida: '',
+        tipo_ocorrencia: "",
+        prioridade: "Média",
+        setor_origem: "",
+        linha: "",
+        descricao: "",
+        data_ocorrida: "",
+        hora_ocorrida: "",
       });
       setFiles([]);
     } catch (e) {
@@ -239,6 +290,10 @@ export default function SolicitacaoTratativa() {
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
             <option value="">Selecione</option>
+
+            {/* ✅ NOVO: “Não se aplica” */}
+            <option value="NA">— Não se aplica</option>
+
             {linhas.map((l) => (
               <option key={l.id} value={l.codigo}>
                 {l.codigo} - {l.descricao}
@@ -257,6 +312,7 @@ export default function SolicitacaoTratativa() {
             <option>Baixa</option>
             <option>Média</option>
             <option>Alta</option>
+            <option>Gravíssima</option>
           </select>
         </div>
 
@@ -296,6 +352,8 @@ export default function SolicitacaoTratativa() {
           </label>
 
           <div
+            tabIndex={0}
+            onPaste={onPasteEvidencia}
             onDragOver={(e) => {
               e.preventDefault();
               setIsDragging(true);
@@ -303,9 +361,9 @@ export default function SolicitacaoTratativa() {
             onDragLeave={() => setIsDragging(false)}
             onDrop={onDrop}
             className={[
-              'w-full rounded-lg border-2 border-dashed bg-gray-50 transition',
-              isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-100',
-            ].join(' ')}
+              "w-full rounded-lg border-2 border-dashed bg-gray-50 transition",
+              isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:bg-gray-100",
+            ].join(" ")}
             style={{ minHeight: 120 }}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -313,7 +371,9 @@ export default function SolicitacaoTratativa() {
               <p className="text-sm font-semibold text-gray-600">
                 Clique para enviar <span className="font-normal">ou arraste e solte</span>
               </p>
-              <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
+              <p className="text-xs text-gray-500 mt-1">
+                PNG, JPG, MP4, MOV ou PDF • Você também pode colar um print com <b>Ctrl+V</b>
+              </p>
             </div>
 
             <input
@@ -335,7 +395,9 @@ export default function SolicitacaoTratativa() {
                 >
                   <div className="truncate">
                     <span className="font-medium">{f.name}</span>
-                    <span className="ml-2 text-gray-500">({Math.round(f.size / 1024)} KB)</span>
+                    <span className="ml-2 text-gray-500">
+                      ({Math.round(f.size / 1024)} KB)
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -360,7 +422,7 @@ export default function SolicitacaoTratativa() {
           disabled={loading || !camposObrigatoriosPreenchidos}
           className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          {loading ? 'Salvando…' : 'Criar'}
+          {loading ? "Salvando…" : "Criar"}
         </button>
       </div>
     </div>
