@@ -1,10 +1,3 @@
-// src/pages/TratarTratativa.jsx
-// ✅ Padrão atualizado + adequações
-// ✅ Conclusão: remove duplicidade -> fica APENAS "Anexo da Tratativa" (imagem/pdf) + link/miniatura do que já existe
-// ✅ Mantém: Evidências da solicitação (lista compacta por nome), edição inline, geração de medida (Orientação/Advertência/Suspensão),
-//            cálculo de datas suspensão (LOCAL sem shift UTC), topo "Criado por + Data/Hora"
-// ✅ Auditoria: grava tratado_por_login, tratado_por_nome, tratado_por_id (UUID seguro) em tratativas_detalhes
-
 import { useEffect, useMemo, useState, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabase";
