@@ -625,7 +625,7 @@ export default function CentralTratativas() {
                     <td className="py-2 px-3">{badgeStatus(t)}</td>
 
                     <td className="py-2 px-3">
-                      {conclida ? (
+                      {concluida ? (
                         <button
                           onClick={() => navigate(`/consultar/${t.id}`)}
                           className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm"
