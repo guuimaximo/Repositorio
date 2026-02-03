@@ -418,7 +418,7 @@ export default function TratarTratativa() {
     }
   }
 
-  async function concluir() {
+async function concluir() {
     if (!t) return;
     if (!resumo) {
       alert("Informe o resumo/observações");
@@ -451,12 +451,12 @@ export default function TratarTratativa() {
         user?.email ||
         null;
 
-      // detalhe/histórico
+      // detalhe/histórico (AQUI JÁ ESTÁ SALVANDO O ANEXO CORRETAMENTE)
       const ins = await supabase.from("tratativas_detalhes").insert({
         tratativa_id: t.id,
         acao_aplicada: acao,
         observacoes: resumo,
-        anexo_tratativa: anexo_tratativa_url,
+        anexo_tratativa: anexo_tratativa_url, // ✅ Salvo no histórico
 
         // ✅ quem tratou (auditoria)
         tratado_por_login: tratadoPorLogin,
@@ -470,11 +470,11 @@ export default function TratarTratativa() {
         .from("tratativas")
         .update({
           status: "Concluída",
-          anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null,
+          // ❌ REMOVIDO: anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null, 
+          // (Isso causava o erro pois a coluna não existe na tabela tratativas)
         })
         .eq("id", t.id);
 
-      // Se sua tabela tratativas NÃO tem anexo_tratativa, comente a linha acima e deixe só status.
       if (upd.error) throw upd.error;
 
       alert("Tratativa concluída com sucesso!");
