@@ -148,8 +148,6 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
   // ✅ input ref (forma mais confiável de abrir seletor)
   const fileInputRef = useRef(null);
 
-  const titulo = "Lançar no Transnet (RH)";
-
   const evidenciasTratador = useMemo(() => {
     const arr = Array.from(
       new Set([...(grupo?.evidencia_conclusao_urls || []), ...(grupo?.anexo_tratador_urls || [])])
@@ -262,6 +260,8 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
         lancado_em: new Date().toISOString(),
         observacao_rh: obsRH.trim(),
         evidencia_transnet_url: evidUrl,
+        // ✅ CORREÇÃO: Adicionando acao_final obrigatória
+        acao_final: grupo.acao_aplicada, 
       }));
 
       const up = await supabase.from("tratativas_rh").upsert(payload, { onConflict: "tratativa_id" });
