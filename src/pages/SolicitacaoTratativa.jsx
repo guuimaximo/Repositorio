@@ -1,20 +1,25 @@
-import { useState, useEffect, useRef, useMemo, useContext } from "react";
-import { supabase } from "../supabase";
-import CampoMotorista from "../components/CampoMotorista";
-import { AuthContext } from "../context/AuthContext";
+// src/pages/SolicitacaoTratativa.jsx
+// Versão com Dropzone + LINHAS ajustado para (id, codigo, descricao) + Suporte a PDF
+// + Múltiplas evidências (salva TODAS em evidencias_urls)
+// ✅ AJUSTE: grava criado_por_login, criado_por_nome, criado_por_id (sem alterar o resto)
+
+import { useState, useEffect, useRef, useMemo, useContext } from 'react';
+import { supabase } from '../supabase';
+import CampoMotorista from '../components/CampoMotorista';
+import { AuthContext } from '../context/AuthContext'; // ✅ AJUSTE
 
 export default function SolicitacaoTratativa() {
-  const { user } = useContext(AuthContext);
+  const { user } = useContext(AuthContext); // ✅ AJUSTE
 
-  const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
+  const [motorista, setMotorista] = useState({ chapa: '', nome: '' });
   const [form, setForm] = useState({
-    tipo_ocorrencia: "",
-    prioridade: "Média",
-    setor_origem: "",
-    linha: "",
-    descricao: "",
-    data_ocorrida: "",
-    hora_ocorrida: "",
+    tipo_ocorrencia: '',
+    prioridade: 'Média',
+    setor_origem: '',
+    linha: '',
+    descricao: '',
+    data_ocorrida: '',
+    hora_ocorrida: '',
   });
 
   const [files, setFiles] = useState([]);
@@ -34,13 +39,7 @@ export default function SolicitacaoTratativa() {
 
   // Aceita PNG/JPG, MP4/MOV, PDF
   const acceptMime = useMemo(
-    () => [
-      "image/png",
-      "image/jpeg",
-      "video/mp4",
-      "video/quicktime",
-      "application/pdf",
-    ],
+    () => ['image/png', 'image/jpeg', 'video/mp4', 'video/quicktime', 'application/pdf'],
     []
   );
 
@@ -52,19 +51,16 @@ export default function SolicitacaoTratativa() {
           { data: setoresData, error: e2 },
           { data: linhasData, error: e3 },
         ] = await Promise.all([
-          supabase.from("tipos_ocorrencia").select("id, nome").order("nome"),
-          supabase.from("setores").select("id, nome").order("nome"),
-          supabase.from("linhas").select("id, codigo, descricao").order("codigo"),
+          supabase.from('tipos_ocorrencia').select('id, nome').order('nome'),
+          supabase.from('setores').select('id, nome').order('nome'),
+          supabase.from('linhas').select('id, codigo, descricao').order('codigo'),
         ]);
-
-        if (e1 || e2 || e3)
-          console.error("Erro carregando listas:", e1 || e2 || e3);
-
+        if (e1 || e2 || e3) console.error('Erro carregando listas:', e1 || e2 || e3);
         setTiposOcorrencia(Array.isArray(tipos) ? tipos : []);
         setSetores(Array.isArray(setoresData) ? setoresData : []);
         setLinhas(Array.isArray(linhasData) ? linhasData : []);
       } catch (err) {
-        console.error("Falha geral ao carregar listas:", err);
+        console.error('Falha geral ao carregar listas:', err);
       }
     }
     carregarListas();
@@ -91,97 +87,58 @@ export default function SolicitacaoTratativa() {
     setIsDragging(false);
     addFiles(e.dataTransfer.files || []);
   };
-
   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
-
-  // ✅ CTRL+V (print do clipboard) vira evidência
-  const onPasteEvidencia = (e) => {
-    try {
-      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
-      if (!items.length) return;
-
-      const images = items
-        .filter((it) => it.kind === "file" && (it.type || "").startsWith("image/"))
-        .map((it) => it.getAsFile())
-        .filter((f) => f && f.size > 0);
-
-      if (!images.length) return;
-
-      // evita colar texto dentro do dropzone/campo e só pega as imagens
-      e.preventDefault();
-
-      const filesFromClipboard = images.map((f) => {
-        const ext =
-          f.type === "image/png" ? "png" : f.type === "image/jpeg" ? "jpg" : "img";
-        const name = `print_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
-        return new File([f], name, { type: f.type, lastModified: Date.now() });
-      });
-
-      addFiles(filesFromClipboard);
-    } catch (err) {
-      console.error("Erro ao colar evidência:", err);
-    }
-  };
 
   async function salvar() {
     if (!camposObrigatoriosPreenchidos) {
-      alert("Preencha motorista, tipo de ocorrência, setor de origem e descrição.");
+      alert('Preencha motorista, tipo de ocorrência, setor de origem e descrição.');
       return;
     }
 
     setLoading(true);
-
     try {
-      // ✅ resolve nome/login/id do usuário logado (fallback para buscar no usuarios_aprovadores)
-      const loginSessao = user?.login || user?.email || null;
+      // ✅ AJUSTE: resolve nome/login/id do usuário logado (fallback para buscar no usuarios_aprovadores)
+      const loginSessao = user?.login || null;
       const idSessao = user?.id || user?.auth_user_id || null;
 
-      let nomeSessao = user?.nome || user?.nome_completo || null;
-
+      let nomeSessao = user?.nome || null;
       if (!nomeSessao && loginSessao) {
         const { data: u, error: eu } = await supabase
-          .from("usuarios_aprovadores")
-          .select("nome, sobrenome, nome_completo")
-          .eq("login", loginSessao)
+          .from('usuarios_aprovadores')
+          .select('nome')
+          .eq('login', loginSessao)
           .maybeSingle();
 
-        if (!eu) {
-          nomeSessao =
-            u?.nome_completo ||
-            [u?.nome, u?.sobrenome].filter(Boolean).join(" ") ||
-            u?.nome ||
-            null;
-        }
+        if (!eu) nomeSessao = u?.nome || null;
       }
 
       let evidenciasUrls = [];
-
       if (files.length > 0) {
         // NÃO coloque "tratativas/" aqui (isso é o bucket)
-        const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || "sem_motorista")
+        const folder = `${Date.now()}_${(motorista.chapa || motorista.nome || 'sem_motorista')
           .toString()
           .trim()
-          .replace(/\s+/g, "_")}`;
+          .replace(/\s+/g, '_')}`;
 
         for (const f of files) {
           // sanitiza nome do arquivo
-          const safeName = (f.name || "arquivo")
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "") // remove acentos
-            .replace(/\s+/g, "_") // espaços -> _
-            .replace(/[^a-zA-Z0-9._-]/g, ""); // remove caracteres inválidos
+          const safeName = (f.name || 'arquivo')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // remove acentos
+            .replace(/\s+/g, '_') // espaços -> _
+            .replace(/[^a-zA-Z0-9._-]/g, ''); // remove caracteres inválidos
 
           // garante unicidade para não colidir
           const unique = `${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
           const path = `${folder}/${unique}`; // <-- key correta (sem "tratativas/")
 
-          const up = await supabase.storage.from("tratativas").upload(path, f, {
+          const up = await supabase.storage.from('tratativas').upload(path, f, {
             upsert: false,
             contentType: f.type || undefined,
           });
           if (up.error) throw up.error;
 
-          const { data: pub } = supabase.storage.from("tratativas").getPublicUrl(path);
+          const { data: pub } = supabase.storage.from('tratativas').getPublicUrl(path);
           if (pub?.publicUrl) evidenciasUrls.push(pub.publicUrl);
         }
       }
@@ -190,11 +147,11 @@ export default function SolicitacaoTratativa() {
         motorista_chapa: motorista.chapa || null,
         motorista_nome: motorista.nome || null,
         tipo_ocorrencia: form.tipo_ocorrencia,
-        prioridade: form.prioridade, // ✅ agora pode ser "Gravíssima"
+        prioridade: form.prioridade,
         setor_origem: form.setor_origem,
-        linha: form.linha || null, // ✅ pode ser "NA" (Não se aplica)
+        linha: form.linha || null,
         descricao: form.descricao,
-        status: "Pendente",
+        status: 'Pendente',
 
         // Mantém compatibilidade com seu campo antigo:
         // primeira evidência vai em imagem_url
@@ -206,25 +163,25 @@ export default function SolicitacaoTratativa() {
         data_ocorrido: form.data_ocorrida || null,
         hora_ocorrido: form.hora_ocorrida || null,
 
-        // ✅ auditoria do criador
+        // ✅ AJUSTE (NOVO): auditoria do criador
         criado_por_login: loginSessao,
         criado_por_nome: nomeSessao || loginSessao,
-        criado_por_id: idSessao,
+        //criado_por_id: idSessao,
       };
 
-      const { error } = await supabase.from("tratativas").insert(payload);
+      const { error } = await supabase.from('tratativas').insert(payload);
       if (error) throw error;
 
-      alert("Solicitação registrada com sucesso!");
-      setMotorista({ chapa: "", nome: "" });
+      alert('Solicitação registrada com sucesso!');
+      setMotorista({ chapa: '', nome: '' });
       setForm({
-        tipo_ocorrencia: "",
-        prioridade: "Média",
-        setor_origem: "",
-        linha: "",
-        descricao: "",
-        data_ocorrida: "",
-        hora_ocorrida: "",
+        tipo_ocorrencia: '',
+        prioridade: 'Média',
+        setor_origem: '',
+        linha: '',
+        descricao: '',
+        data_ocorrida: '',
+        hora_ocorrida: '',
       });
       setFiles([]);
     } catch (e) {
@@ -282,10 +239,6 @@ export default function SolicitacaoTratativa() {
             onChange={(e) => setForm({ ...form, linha: e.target.value })}
           >
             <option value="">Selecione</option>
-
-            {/* ✅ NOVO: “Não se aplica” */}
-            <option value="NA">— Não se aplica</option>
-
             {linhas.map((l) => (
               <option key={l.id} value={l.codigo}>
                 {l.codigo} - {l.descricao}
@@ -304,7 +257,6 @@ export default function SolicitacaoTratativa() {
             <option>Baixa</option>
             <option>Média</option>
             <option>Alta</option>
-            <option>Gravíssima</option>
           </select>
         </div>
 
@@ -338,151 +290,65 @@ export default function SolicitacaoTratativa() {
           />
         </div>
 
-        {/* =========================
-            ✅ EVIDÊNCIAS (Layout melhorado + Campo CTRL+V)
-        ========================== */}
         <div className="md:col-span-2">
           <label className="block text-sm text-gray-700 font-medium mb-2">
             Evidências (Fotos, Vídeos e PDF)
           </label>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* ✅ DROPZONE */}
-            <div
-              tabIndex={0}
-              onPaste={onPasteEvidencia}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={[
-                "w-full rounded-xl border-2 border-dashed transition",
-                "bg-gray-50 hover:bg-gray-100",
-                "focus:outline-none focus:ring-2 focus:ring-blue-500",
-                isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300",
-              ].join(" ")}
-              style={{ minHeight: 150 }}
-            >
-              <div className="h-full w-full flex flex-col items-center justify-center py-8 cursor-pointer select-none px-4 text-center">
-                <p className="text-sm font-semibold text-gray-700">
-                  Clique para enviar <span className="font-normal">ou arraste e solte</span>
-                </p>
-                <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
-
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">
-                </div>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
-                multiple
-                className="hidden"
-                onChange={onPickFiles}
-              />
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={onDrop}
+            className={[
+              'w-full rounded-lg border-2 border-dashed bg-gray-50 transition',
+              isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-100',
+            ].join(' ')}
+            style={{ minHeight: 120 }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="h-full w-full flex flex-col items-center justify-center py-8 cursor-pointer select-none">
+              <p className="text-sm font-semibold text-gray-600">
+                Clique para enviar <span className="font-normal">ou arraste e solte</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
             </div>
 
-            {/* ✅ CAMPO EXPLÍCITO CTRL+V */}
-            <div className="w-full">
-              <div className="rounded-xl border bg-white p-4 h-full">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">Cole um print aqui</p>
-                    <p className="text-xs text-gray-500 mt-1">                      
-                    </p>
-                  </div>
-
-                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">                   
-                  </span>
-                </div>
-
-                <div
-                  tabIndex={0}
-                  onPaste={onPasteEvidencia}
-                  className={[
-                    "mt-3 rounded-lg border-2 border-dashed p-4",
-                    "bg-gray-50 text-gray-700",
-                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                  ].join(" ")}
-                >
-                  <p className="text-sm">Clique aqui e cole seu print.</p>
-                  <p className="text-xs text-gray-500 mt-1">                    
-                  </p>
-                </div>
-
-                <div className="mt-3 text-xs text-gray-500">
-                  {files.length > 0 ? (
-                    <span>
-                      <b>{files.length}</b> evidência(s) anexada(s)
-                    </span>
-                  ) : (
-                    <span>Nenhuma evidência anexada ainda</span>
-                  )}
-                </div>
-              </div>
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,video/mp4,video/quicktime,application/pdf"
+              multiple
+              className="hidden"
+              onChange={onPickFiles}
+            />
           </div>
 
-          {/* ✅ LISTA DE ARQUIVOS */}
           {files.length > 0 && (
-            <div className="mt-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">Arquivos anexados</p>
-
-                <button
-                  type="button"
-                  className="text-xs text-red-600 hover:underline"
-                  onClick={() => setFiles([])}
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {files.map((f, idx) => (
+                <div
+                  key={`${f.name}-${idx}`}
+                  className="flex items-center justify-between rounded border px-3 py-2 text-sm"
                 >
-                  remover tudo
-                </button>
-              </div>
-
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {files.map((f, idx) => {
-                  const isImg = (f.type || "").startsWith("image/");
-                  const isVid = (f.type || "").startsWith("video/");
-                  const isPdf = f.type === "application/pdf";
-                  const badge = isImg ? "Imagem" : isVid ? "Vídeo" : isPdf ? "PDF" : "Arquivo";
-
-                  return (
-                    <div
-                      key={`${f.name}-${f.size}-${idx}`}
-                      className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] rounded-full border px-2 py-0.5 text-gray-600">
-                            {badge}
-                          </span>
-                          <span className="text-[11px] text-gray-500">
-                            {Math.round(f.size / 1024)} KB
-                          </span>
-                        </div>
-
-                        <div className="truncate mt-1">
-                          <span className="font-medium">{f.name}</span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFile(idx);
-                        }}
-                        className="ml-3 text-red-600 hover:underline shrink-0"
-                      >
-                        remover
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                  <div className="truncate">
+                    <span className="font-medium">{f.name}</span>
+                    <span className="ml-2 text-gray-500">({Math.round(f.size / 1024)} KB)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(idx);
+                    }}
+                    className="text-red-600 hover:underline"
+                  >
+                    remover
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -494,7 +360,7 @@ export default function SolicitacaoTratativa() {
           disabled={loading || !camposObrigatoriosPreenchidos}
           className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          {loading ? "Salvando…" : "Criar"}
+          {loading ? 'Salvando…' : 'Criar'}
         </button>
       </div>
     </div>
