@@ -1,970 +1,646 @@
-// src/pages/TratarTratativa.jsx
-// ✅ Padrão atualizado + adequações
-// ✅ Conclusão: remove duplicidade -> fica APENAS "Anexo da Tratativa" (imagem/pdf) + link/miniatura do que já existe
-// ✅ Mantém: Evidências da solicitação (lista compacta por nome), edição inline, geração de medida (Orientação/Advertência/Suspensão),
-//            cálculo de datas suspensão (LOCAL sem shift UTC), topo "Criado por + Data/Hora"
-// ✅ Auditoria: grava tratado_por_login, tratado_por_nome, tratado_por_id (UUID seguro) em tratativas_detalhes
-
-import { useEffect, useMemo, useState, useContext } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { AuthContext } from "../context/AuthContext";
 
-const acoes = [
-  "Orientação",
-  "Advertência",
-  "Suspensão",
-  "Aviso de última oportunidade",
-  "Contato Pessoal",
-  "Não aplicada",
-  "Contato via Celular",
-  "Elogiado",
-];
+const VIEW = {
+  OPEN_ONLY: "open_only", // Pendentes & Atrasadas
+  ALL: "all",             // Ver tudo
+};
 
-function isValidUUID(v) {
-  if (!v) return false;
-  const s = String(v).trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    s
-  );
+// SLA por prioridade (dias)
+const SLA_DIAS = {
+  "Gravíssima": 1,
+  "Gravissima": 1, // tolera sem acento
+  "Alta": 3,
+  "Média": 7,
+  "Media": 7,
+  "Baixa": 15,
+};
+
+// Ordem de prioridade (maior urgência primeiro)
+const PRIORIDADE_RANK = {
+  "Gravíssima": 0,
+  "Gravissima": 0,
+  "Alta": 1,
+  "Média": 2,
+  "Media": 2,
+  "Baixa": 3,
+};
+
+function norm(s) {
+  return String(s || "").trim();
 }
 
-function pickUserUuid(user) {
-  if (isValidUUID(user?.auth_user_id)) return user.auth_user_id;
-  if (isValidUUID(user?.id)) return user.id;
-  return null;
+function isPendente(status) {
+  return norm(status).toLowerCase().includes("pendente");
+}
+function isConcluidaOuResolvida(status) {
+  const st = norm(status).toLowerCase();
+  return st.includes("conclu") || st.includes("resolvid");
 }
 
-export default function TratarTratativa() {
-  const { id } = useParams();
-  const nav = useNavigate();
-  const { user } = useContext(AuthContext);
+function daysDiffFromNow(createdAtISO) {
+  const dt = createdAtISO ? new Date(createdAtISO) : null;
+  if (!dt || Number.isNaN(dt.getTime())) return 0;
+  const now = new Date();
+  const diffMs = now.getTime() - dt.getTime();
+  return diffMs / (1000 * 60 * 60 * 24);
+}
 
-  const [t, setT] = useState(null);
-  const [resumo, setResumo] = useState("");
-  const [acao, setAcao] = useState("Orientação");
+function getSlaDias(prioridade) {
+  const p = norm(prioridade);
+  return SLA_DIAS[p] ?? 7; // default seguro = 7
+}
 
-  // ✅ Conclusão: APENAS Anexo da Tratativa (imagem/pdf)
-  const [anexoTratativa, setAnexoTratativa] = useState(null);
+function isAtrasadaBySLA(row) {
+  // Regra: atraso só faz sentido se estiver pendente
+  if (!isPendente(row?.status)) return false;
+  const sla = getSlaDias(row?.prioridade);
+  return daysDiffFromNow(row?.created_at) > sla;
+}
 
-  const [loading, setLoading] = useState(false);
+// Rank de status para ordenação secundária
+function statusRank(row) {
+  // Atrasada primeiro, depois Pendente, depois Concluídas/Resolvidas, depois resto
+  if (isAtrasadaBySLA(row)) return 0;
+  if (isPendente(row?.status)) return 1;
+  if (isConcluidaOuResolvida(row?.status)) return 2;
+  return 3;
+}
 
-  // Complementos
-  const [linhaDescricao, setLinhaDescricao] = useState("");
-  const [cargoMotorista, setCargoMotorista] = useState("MOTORISTA");
-
-  // Edição inline
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    tipo_ocorrencia: "",
-    prioridade: "Média",
-    setor_origem: "",
-    linha: "",
-    descricao: "",
+export default function CentralTratativas() {
+  const [tratativas, setTratativas] = useState([]);
+  const [filtros, setFiltros] = useState({
+    busca: "",
+    dataInicio: "",
+    dataFim: "",
+    setor: "",
+    status: "",
+    prioridade: "", // ✅ NOVO
   });
 
-  // ---- Controles de Suspensão ----
-  const [diasSusp, setDiasSusp] = useState(1); // 1,3,5,7
-  const [dataSuspensao, setDataSuspensao] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  ); // yyyy-mm-dd
+  const [loading, setLoading] = useState(false);
+  const [setores, setSetores] = useState([]);
 
-  const dataPtCompletaUpper = (d = new Date()) => {
-    const meses = [
-      "JANEIRO",
-      "FEVEREIRO",
-      "MARÇO",
-      "ABRIL",
-      "MAIO",
-      "JUNHO",
-      "JULHO",
-      "AGOSTO",
-      "SETEMBRO",
-      "OUTUBRO",
-      "NOVEMBRO",
-      "DEZEMBRO",
-    ];
-    const dia = String(d.getDate()).padStart(2, "0");
-    const mes = meses[d.getMonth()];
-    const ano = d.getFullYear();
-    return `${dia} de ${mes} de ${ano}`;
-  };
+  // ✅ Botão topo (default: Pendentes & Atrasadas)
+  const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
 
-  const br = (d) => {
-    if (!d) return "—";
-    const dt = d instanceof Date ? d : new Date(d);
-    if (Number.isNaN(dt.getTime())) return "—";
-    return dt.toLocaleDateString("pt-BR");
-  };
+  // Ordenação da tabela
+  const [sort, setSort] = useState({
+    key: "default", // default | created_at | motorista_nome | tipo_ocorrencia | prioridade | setor_origem | status
+    dir: "asc",     // asc | desc  (para "default" ignoramos e usamos regra fixa)
+  });
 
-  const brDateTime = (d) => {
-    if (!d) return "—";
-    const dt = d instanceof Date ? d : new Date(d);
-    if (Number.isNaN(dt.getTime())) return "—";
-    return dt.toLocaleString("pt-BR");
-  };
+  // Contadores reais do banco (head:true)
+  const [totalCount, setTotalCount] = useState(0);
+  const [pendentesCount, setPendentesCount] = useState(0);
+  const [concluidasCount, setConcluidasCount] = useState(0);
 
-  // ===== Ajuste de datas da suspensão (LOCAL, sem shift UTC) =====
-  const parseDateLocal = (dateStr) => {
-    if (!dateStr) return new Date();
-    const [yyyy, mm, dd] = String(dateStr).split("-").map(Number);
-    return new Date(yyyy, (mm || 1) - 1, dd || 1);
-  };
+  // ✅ Atrasadas conforme SLA (calculado com base na lista carregada + filtros + viewMode)
+  const [atrasadasCount, setAtrasadasCount] = useState(0);
 
-  const addDaysLocal = (dateOrStr, n) => {
-    const base =
-      dateOrStr instanceof Date ? new Date(dateOrStr) : parseDateLocal(dateOrStr);
-    base.setDate(base.getDate() + Number(n || 0));
-    return base;
-  };
+  const navigate = useNavigate();
 
-  // Regras: início = data da suspensão; fim = início + (dias - 1); retorno = início + dias
-  const inicioSusp = useMemo(() => parseDateLocal(dataSuspensao), [dataSuspensao]);
+  // --- Helpers para aplicar mesmos filtros nas consultas ---
+  function applyCommonFilters(query) {
+    const f = filtros;
 
-  const fimSusp = useMemo(
-    () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp) - 1, 0)),
-    [inicioSusp, diasSusp]
-  );
-
-  const retornoSusp = useMemo(
-    () => addDaysLocal(inicioSusp, Math.max(Number(diasSusp), 0)),
-    [inicioSusp, diasSusp]
-  );
-
-  // ===== Helpers de evidência (compacta: só nome do arquivo) =====
-  const fileNameFromUrl = (u) => {
-    try {
-      const raw = String(u || "");
-      const noHash = raw.split("#")[0];
-      const noQuery = noHash.split("?")[0];
-      const last = noQuery.split("/").filter(Boolean).pop() || "arquivo";
-      return decodeURIComponent(last);
-    } catch {
-      return "arquivo";
+    if (f.busca) {
+      query = query.or(
+        `motorista_nome.ilike.%${f.busca}%,motorista_chapa.ilike.%${f.busca}%,descricao.ilike.%${f.busca}%`
+      );
     }
-  };
+    if (f.setor) query = query.eq("setor_origem", f.setor);
+    if (f.status) query = query.ilike("status", `%${f.status}%`);
+    if (f.prioridade) query = query.eq("prioridade", f.prioridade);
 
-  const isPdf = (fileOrUrl) => {
-    if (!fileOrUrl) return false;
-    if (typeof fileOrUrl === "string") return fileOrUrl.toLowerCase().includes(".pdf");
-    return (
-      fileOrUrl.type === "application/pdf" ||
-      String(fileOrUrl.name || "").toLowerCase().endsWith(".pdf")
-    );
-  };
+    if (f.dataInicio) query = query.gte("created_at", f.dataInicio);
 
-  const isImageUrl = (u) => {
-    const s = String(u || "").toLowerCase();
-    return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
-  };
+    if (f.dataFim) {
+      const dataFimAjustada = new Date(f.dataFim);
+      dataFimAjustada.setDate(dataFimAjustada.getDate() + 1);
+      query = query.lt("created_at", dataFimAjustada.toISOString().split("T")[0]);
+    }
 
-  const renderListaArquivosCompacta = (urls, label) => {
-    const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-    if (arr.length === 0) return null;
+    return query;
+  }
 
-    return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
+  // ✅ Carregar setores dinamicamente para o dropdown
+  async function carregarSetoresFiltro() {
+    try {
+      const { data: setoresData, error: eSet } = await supabase
+        .from("setores")
+        .select("nome")
+        .order("nome", { ascending: true });
 
-        <ul className="space-y-1">
-          {arr.map((u, i) => (
-            <li key={`${u}-${i}`} className="text-sm">
-              <a
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 underline"
-                title="Abrir evidência"
-              >
-                {fileNameFromUrl(u)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
+      if (!eSet && Array.isArray(setoresData) && setoresData.length > 0) {
+        const lista = setoresData
+          .map((s) => String(s?.nome || "").trim())
+          .filter(Boolean);
 
-  // ====== Arquivo único -> PDF mostra link | imagem mostra miniatura clicável ======
-  const renderArquivoOuThumb = (url, label) => {
-    if (!url) return null;
-
-    const pdf = isPdf(url);
-    const img = !pdf && isImageUrl(url);
-
-    return (
-      <div className="mt-2">
-        <span className="block text-sm text-gray-600 mb-2">{label}</span>
-
-        {pdf || !img ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-blue-600 underline"
-            title="Abrir arquivo"
-          >
-            {fileNameFromUrl(url)}
-          </a>
-        ) : (
-          <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
-            <img
-              src={url}
-              alt={fileNameFromUrl(url)}
-              className="h-16 w-16 rounded border object-cover hover:opacity-90"
-              loading="lazy"
-            />
-          </a>
-        )}
-      </div>
-    );
-  };
-
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("tratativas")
-        .select("*")
-        .eq("id", id)
-        .single();
-      if (error) {
-        console.error(error);
+        setSetores(Array.from(new Set(lista)));
         return;
       }
-      setT(data || null);
 
-      setEditForm({
-        tipo_ocorrencia: data?.tipo_ocorrencia || "",
-        prioridade: data?.prioridade || "Média",
-        setor_origem: data?.setor_origem || "",
-        linha: data?.linha || "",
-        descricao: data?.descricao || "",
-      });
+      const { data: trat, error: eTrat } = await supabase
+        .from("tratativas")
+        .select("setor_origem")
+        .not("setor_origem", "is", null)
+        .limit(10000);
 
-      // Linha (código -> descrição)
-      if (data?.linha) {
-        const { data: row } = await supabase
-          .from("linhas")
-          .select("descricao")
-          .eq("codigo", data.linha)
-          .maybeSingle();
-        setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
+      if (eTrat) throw eTrat;
 
-      // Cargo (por registro/chapa)
-      if (data?.motorista_chapa) {
-        const { data: m } = await supabase
-          .from("motoristas")
-          .select("cargo")
-          .eq("chapa", data.motorista_chapa)
-          .maybeSingle();
-        setCargoMotorista((m?.cargo || data?.cargo || "Motorista").toUpperCase());
-      } else {
-        setCargoMotorista((data?.cargo || "Motorista").toUpperCase());
-      }
-    })();
-  }, [id]);
+      const lista2 = (trat || [])
+        .map((r) => String(r?.setor_origem || "").trim())
+        .filter(Boolean);
 
-  async function salvarEdicao() {
-    if (!t) return;
+      setSetores(Array.from(new Set(lista2)).sort((a, b) => a.localeCompare(b)));
+    } catch (err) {
+      console.error("Erro carregando setores do filtro:", err);
+      setSetores([]);
+    }
+  }
+
+  // --- Carregar lista (visual) ---
+  async function carregarLista() {
+    let query = supabase.from("tratativas").select("*").limit(100000);
+    query = applyCommonFilters(query);
+
+    // Mantém um order base por created_at desc (boa prática), mas vamos reordenar no front conforme regra
+    const { data, error } = await query.order("created_at", { ascending: false });
+
+    if (!error) setTratativas(data || []);
+    else console.error("Erro ao carregar lista de tratativas:", error);
+  }
+
+  // --- Carregar contadores head:true (Total/Pendentes/Concluídas) ---
+  async function carregarContadoresHead() {
+    // Total
+    let qTotal = supabase
+      .from("tratativas")
+      .select("id", { count: "exact", head: true });
+    qTotal = applyCommonFilters(qTotal);
+    const { count: total } = await qTotal;
+
+    // Pendentes
+    let qPend = supabase
+      .from("tratativas")
+      .select("id", { count: "exact", head: true })
+      .ilike("status", "%pendente%");
+    qPend = applyCommonFilters(qPend);
+    const { count: pend } = await qPend;
+
+    // Concluídas/Resolvidas
+    let qConc = supabase
+      .from("tratativas")
+      .select("id", { count: "exact", head: true })
+      .or("status.ilike.%conclu%,status.ilike.%resolvid%");
+    qConc = applyCommonFilters(qConc);
+    const { count: conc } = await qConc;
+
+    setTotalCount(total || 0);
+    setPendentesCount(pend || 0);
+    setConcluidasCount(conc || 0);
+  }
+
+  // ✅ Aplica: lista + contadores head (e depois recalcula atrasadas SLA)
+  async function aplicar() {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("tratativas")
-        .update({
-          tipo_ocorrencia: editForm.tipo_ocorrencia || null,
-          prioridade: editForm.prioridade || null,
-          setor_origem: editForm.setor_origem || null,
-          linha: editForm.linha || null,
-          descricao: editForm.descricao || null,
-        })
-        .eq("id", t.id);
-      if (error) throw error;
-
-      setT((prev) => (prev ? { ...prev, ...editForm } : prev));
-
-      if (editForm.linha) {
-        const { data: row } = await supabase
-          .from("linhas")
-          .select("descricao")
-          .eq("codigo", editForm.linha)
-          .maybeSingle();
-        setLinhaDescricao(row?.descricao || "");
-      } else setLinhaDescricao("");
-
-      setIsEditing(false);
-      alert("Dados atualizados!");
+      await Promise.all([carregarLista(), carregarContadoresHead()]);
     } catch (e) {
-      alert(`Erro ao salvar: ${e.message}`);
+      console.error("Erro ao aplicar filtros:", e);
     } finally {
       setLoading(false);
     }
   }
 
-  async function concluir() {
-    if (!t) return;
-    if (!resumo) {
-      alert("Informe o resumo/observações");
-      return;
+  useEffect(() => {
+    carregarSetoresFiltro();
+    aplicar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function limparFiltros() {
+    setFiltros({ busca: "", dataInicio: "", dataFim: "", setor: "", status: "", prioridade: "" });
+    // mantém viewMode default (open_only)
+    setTimeout(() => aplicar(), 0);
+  }
+
+  // ====== Linhas filtradas por "Ver Tudo" vs "Pendentes & Atrasadas" ======
+  const tratativasView = useMemo(() => {
+    const rows = Array.isArray(tratativas) ? tratativas : [];
+    if (viewMode === VIEW.ALL) return rows;
+
+    // OPEN_ONLY: mostra apenas pendentes (inclui as atrasadas, que são subset de pendentes)
+    return rows.filter((r) => isPendente(r?.status));
+  }, [tratativas, viewMode]);
+
+  // ✅ Recalcula atrasadasCount por SLA, respeitando viewMode e filtros já aplicados
+  useEffect(() => {
+    const rows = Array.isArray(tratativasView) ? tratativasView : [];
+    const atr = rows.filter((r) => isAtrasadaBySLA(r)).length;
+    setAtrasadasCount(atr);
+  }, [tratativasView]);
+
+  // ====== Ordenação ======
+  function defaultComparator(a, b) {
+    const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
+    const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
+    if (pa !== pb) return pa - pb; // menor rank = mais urgente
+
+    const sa = statusRank(a);
+    const sb = statusRank(b);
+    if (sa !== sb) return sa - sb;
+
+    // mais recentes primeiro
+    const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return db - da;
+  }
+
+  function stringComparator(getter, dir, a, b) {
+    const va = norm(getter(a)).toLowerCase();
+    const vb = norm(getter(b)).toLowerCase();
+    const r = va.localeCompare(vb, "pt-BR");
+    return dir === "asc" ? r : -r;
+  }
+
+  function numberComparator(getter, dir, a, b) {
+    const va = Number(getter(a) ?? 0);
+    const vb = Number(getter(b) ?? 0);
+    const r = va - vb;
+    return dir === "asc" ? r : -r;
+  }
+
+  const tratativasOrdenadas = useMemo(() => {
+    const rows = [...(tratativasView || [])];
+
+    if (sort.key === "default") {
+      rows.sort(defaultComparator);
+      return rows;
     }
 
-    setLoading(true);
-    try {
-      // ✅ Upload do Anexo da Tratativa (imagem/pdf) -> salva em tratativas_detalhes.anexo_tratativa
-      let anexo_tratativa_url = null;
-      if (anexoTratativa) {
-        const safe = `anexo_${Date.now()}_${anexoTratativa.name}`.replace(/\s+/g, "_");
-        const up = await supabase.storage.from("tratativas").upload(safe, anexoTratativa, {
-          upsert: false,
-          contentType: anexoTratativa.type || undefined,
-        });
-        if (up.error) throw up.error;
-
-        anexo_tratativa_url =
-          supabase.storage.from("tratativas").getPublicUrl(safe).data.publicUrl;
+    rows.sort((a, b) => {
+      if (sort.key === "created_at") {
+        const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
+        const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
+        const r = da - db;
+        return sort.dir === "asc" ? r : -r;
       }
 
-      // Auditoria segura
-      const tratadoPorId = pickUserUuid(user);
-      const tratadoPorLogin = user?.login || user?.email || null;
-      const tratadoPorNome =
-        user?.nome_completo ||
-        user?.nome ||
-        user?.login ||
-        user?.email ||
-        null;
+      if (sort.key === "prioridade") {
+        const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
+        const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
+        const r = pa - pb;
+        return sort.dir === "asc" ? r : -r;
+      }
 
-      // detalhe/histórico
-      const ins = await supabase.from("tratativas_detalhes").insert({
-        tratativa_id: t.id,
-        acao_aplicada: acao,
-        observacoes: resumo,
-        anexo_tratativa: anexo_tratativa_url,
+      if (sort.key === "status") {
+        const ra = statusRank(a);
+        const rb = statusRank(b);
+        const r = ra - rb;
+        return sort.dir === "asc" ? r : -r;
+      }
 
-        // ✅ quem tratou (auditoria)
-        tratado_por_login: tratadoPorLogin,
-        tratado_por_nome: tratadoPorNome,
-        tratado_por_id: tratadoPorId,
-      });
-      if (ins.error) throw ins.error;
+      if (sort.key === "motorista_nome") {
+        return stringComparator((x) => x?.motorista_nome, sort.dir, a, b);
+      }
+      if (sort.key === "tipo_ocorrencia") {
+        return stringComparator((x) => x?.tipo_ocorrencia, sort.dir, a, b);
+      }
+      if (sort.key === "setor_origem") {
+        return stringComparator((x) => x?.setor_origem, sort.dir, a, b);
+      }
 
-      // atualiza status
-      const upd = await supabase
-        .from("tratativas")
-        .update({
-          status: "Concluída",
-          // opcional: se você quiser guardar também no "tratativas" (coluna atual do registro),
-          // mantemos só se existir (não forçamos criação de coluna)
-          anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null,
-        })
-        .eq("id", t.id);
-
-      // se sua tabela tratativas NÃO tem anexo_tratativa, o update acima pode dar erro.
-      // Se isso acontecer, comente o campo anexo_tratativa no update e deixe só status.
-      if (upd.error) throw upd.error;
-
-      alert("Tratativa concluída com sucesso!");
-      nav("/central");
-    } catch (e) {
-      alert(`Erro: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ======== Impressão – CSS base ========
-  function baseCssCourier() {
-    return `
-      <style>
-        @page { size: A4; margin: 25mm; }
-        html, body { height: 100%; }
-        body {
-          font-family: "Courier New", Courier, monospace;
-          color:#000; font-size: 14px; line-height: 1.55; margin: 0;
-        }
-        .page { min-height: 100vh; display: flex; flex-direction: column; }
-        .content { padding: 0; }
-        .linha { display:flex; justify-content:space-between; gap:16px; }
-        .mt { margin-top: 16px; }
-        .center { text-align: center; font-weight: bold; }
-        .right { text-align: right; }
-        .bl { white-space: pre-wrap; }
-        .label { font-weight: bold; }
-        .footer-sign { margin-top: auto; }
-        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-        .ass { text-align: center; }
-        .ass-line { margin-top: 34px; border-top: 1px solid #000; height:1px; }
-      </style>
-    `;
-  }
-
-  function renderSuspensaoHtml({
-    nome,
-    registro,
-    cargo,
-    ocorrencia,
-    dataOcorr,
-    observ,
-    dataDoc,
-    dias,
-    inicio,
-    fim,
-    retorno,
-  }) {
-    const brLocal = (d) => {
-      const dt = d instanceof Date ? d : new Date(d);
-      return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("pt-BR");
-    };
-    const diasFmt = String(dias).padStart(2, "0");
-    const rotuloDia = Number(dias) === 1 ? "dia" : "dias";
-
-    return `
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        @page { size: A4; margin: 25mm; }
-        html, body { height: 100%; }
-        body {
-          font-family: "Courier New", Courier, monospace;
-          font-size: 14px; line-height: 1.7; color: #000; margin: 0;
-        }
-        .page { min-height: 100vh; display: flex; flex-direction: column; }
-        .content { max-width: 80ch; margin: 0 auto; }
-        .center { text-align: center; font-weight: bold; }
-        .right { text-align: right; }
-        .linha { display:flex; justify-content:space-between; gap:16px; }
-        .mt { margin-top: 18px; }
-        .label { font-weight: bold; }
-        .bl { white-space: pre-wrap; text-align: left; }
-        .nowrap { white-space: nowrap; }
-        .footer-sign { margin-top: auto; }
-        .ass-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-        .ass { text-align:center; }
-        .ass-line { margin-top: 36px; border-top:1px solid #000; height:1px; }
-      </style>
-      <title>SUSPENSÃO DISCIPLINAR - ${nome}</title>
-    </head>
-    <body>
-      <div class="page">
-        <div class="content">
-          <div class="center">SUSPENSÃO DISCIPLINAR</div>
-          <div class="right mt">${dataDoc}</div>
-
-          <div class="linha mt">
-            <div>SR(A) <span class="label">${nome}</span> ${
-      registro ? `(REGISTRO: ${registro})` : ""
-    }</div>
-            <div><span class="label">Cargo:</span> ${cargo}</div>
-          </div>
-
-          <p class="mt bl">
-  Pelo presente, notificamos que, por ter o senhor cometido a falta abaixo descrita, encontra-se suspenso do serviço por <span class="label nowrap">${diasFmt} ${rotuloDia}</span>, <span class="nowrap">a partir de <span class="label">${brLocal(
-      inicio
-    )}</span></span>, devendo, portanto, apresentar-se ao mesmo, no horário usual, <span class="nowrap">no dia <span class="label">${brLocal(
-      retorno
-    )}</span></span>, salvo outra resolução nossa, que lhe daremos parte se for o caso e, assim, pedimos a devolução do presente com o seu “ciente”.
-</p>
-
-          <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
-          <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-          <div class="mt"><span class="label">Período da Suspensão:</span> ${brLocal(
-            inicio
-          )} a ${brLocal(fim)} (retorno: ${brLocal(retorno)})</div>
-          <div class="mt"><span class="label">Observação:</span> ${observ}</div>
-
-          <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
-        </div>
-
-        <div class="footer-sign mt">
-          <div class="ass-grid">
-            <div class="ass"><div class="ass-line"></div>Assinatura do Empregado</div>
-            <div class="ass"><div class="ass-line"></div>Assinatura do Empregador</div>
-          </div>
-          <div class="ass-grid" style="margin-top:20px">
-            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-            <div class="ass"><div class="ass-line"></div>Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:</div>
-          </div>
-        </div>
-      </div>
-      <script>window.onload = () => { window.print(); }</script>
-    </body>
-  </html>
-  `;
-  }
-
-  function renderGenericHtml({
-    titulo,
-    intro1,
-    intro2,
-    nome,
-    registro,
-    cargo,
-    ocorrencia,
-    dataOcorr,
-    observ,
-    dataDoc,
-  }) {
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          ${baseCssCourier()}
-          <title>${titulo} - ${nome}</title>
-        </head>
-        <body>
-          <div class="page">
-            <div class="content">
-              <div class="center">${titulo}</div>
-              <div class="right mt">${dataDoc}</div>
-
-              <div class="linha mt">
-                <div>SR(A) <span class="label">${nome}</span> ${
-      registro ? `(REGISTRO: ${registro})` : ""
-    }</div>
-                <div><span class="label">Cargo:</span> ${cargo}</div>
-              </div>
-
-              <p class="mt bl">${intro1}</p>
-              <p class="bl">${intro2}</p>
-
-              <div class="mt"><span class="label">Ocorrência:</span> ${ocorrencia}</div>
-              <div class="mt"><span class="label">Data da Ocorrência:</span> ${dataOcorr}</div>
-              <div class="mt"><span class="label">Observação:</span> ${observ}</div>
-
-              <div class="mt"><span class="label">Ciente e Concordo:</span> ________/______/__________</div>
-            </div>
-
-            <div class="footer-sign mt">
-              <div class="ass-grid">
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Assinatura do Empregado
-                </div>
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Assinatura do Empregador
-                </div>
-              </div>
-              <div class="ass-grid" style="margin-top:20px">
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-                </div>
-                <div class="ass">
-                  <div class="ass-line"></div>
-                  Testemunha &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CPF:
-                </div>
-              </div>
-            </div>
-          </div>
-          <script>window.onload = () => { window.print(); }</script>
-        </body>
-      </html>
-    `;
-  }
-
-  // ======== Geradores ========
-  function gerarOrientacao() {
-    if (!t) return;
-    if (!resumo.trim()) {
-      alert("Preencha o Resumo / Observações para gerar a medida.");
-      return;
-    }
-
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
-
-    const html = renderGenericHtml({
-      titulo: "ORIENTAÇÃO DISCIPLINAR",
-      intro1:
-        "Vimos pelo presente, aplicar-lhe a pena de orientação disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.",
-      intro2:
-        "Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas que nos são facultadas pela lei.",
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
+      return 0;
     });
 
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
+    return rows;
+  }, [tratativasView, sort]);
+
+  function toggleSort(key) {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      // mesmo header: alterna asc/desc, e se estiver em desc volta pro default
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return { key: "default", dir: "asc" };
+    });
   }
 
-  function gerarAdvertencia() {
-    if (!t) return;
-    if (!resumo.trim()) {
-      alert("Preencha o Resumo / Observações para gerar a medida.");
-      return;
+  function SortIcon({ colKey }) {
+    if (sort.key !== colKey) return <span className="ml-1 text-white/70">↕</span>;
+    if (sort.key === "default") return <span className="ml-1 text-white/70">↕</span>;
+    return (
+      <span className="ml-1">
+        {sort.dir === "asc" ? "↑" : "↓"}
+      </span>
+    );
+  }
+
+  function badgePrioridade(p) {
+    const v = norm(p);
+    const base = "px-2 py-1 rounded text-xs font-medium";
+    if (v === "Gravíssima" || v === "Gravissima")
+      return <span className={`${base} bg-red-100 text-red-800`}>Gravíssima</span>;
+    if (v === "Alta") return <span className={`${base} bg-orange-100 text-orange-800`}>Alta</span>;
+    if (v === "Média" || v === "Media")
+      return <span className={`${base} bg-yellow-100 text-yellow-800`}>Média</span>;
+    if (v === "Baixa") return <span className={`${base} bg-green-100 text-green-800`}>Baixa</span>;
+    return <span className={`${base} bg-gray-100 text-gray-700`}>{v || "-"}</span>;
+  }
+
+  function badgeStatus(row) {
+    const st = norm(row?.status).toLowerCase();
+    const atrasada = isAtrasadaBySLA(row);
+
+    if (atrasada) {
+      return (
+        <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+          Atraso
+        </span>
+      );
     }
 
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
-
-    const html = renderGenericHtml({
-      titulo: "ADVERTÊNCIA DISCIPLINAR",
-      intro1:
-        "Vimos pelo presente, aplicar-lhe a pena de advertência disciplinar, em virtude de o(a) senhor(a) ter cometido a falta abaixo descrita.",
-      intro2:
-        "Pedimos que tal falta não mais se repita, pois, caso contrário, seremos obrigados a adotar medidas mais severas, nos termos da lei.",
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
-    });
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
-  }
-
-  function gerarSuspensao() {
-    if (!t) return;
-    if (!resumo.trim()) {
-      alert("Preencha o Resumo / Observações para gerar a medida.");
-      return;
+    if (st.includes("pendente")) {
+      return (
+        <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+          Pendente
+        </span>
+      );
     }
 
-    const dataDoc = dataPtCompletaUpper(new Date());
-    const nome = (t.motorista_nome || "—").toUpperCase();
-    const registro = t.motorista_chapa || "";
-    const cargo = cargoMotorista;
-    const ocorrencia = (t.tipo_ocorrencia || "—").toUpperCase();
-    const dataOcorr = t.data_ocorrido ? br(t.data_ocorrido) : "—";
-    const observ = (resumo || t.descricao || "").trim() || "—";
+    if (st.includes("resolvido") || st.includes("conclu")) {
+      return (
+        <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+          Resolvido
+        </span>
+      );
+    }
 
-    const html = renderSuspensaoHtml({
-      nome,
-      registro,
-      cargo,
-      ocorrencia,
-      dataOcorr,
-      observ,
-      dataDoc,
-      dias: diasSusp,
-      inicio: inicioSusp,
-      fim: fimSusp,
-      retorno: retornoSusp,
-    });
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
+    return (
+      <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+        {row?.status || "-"}
+      </span>
+    );
   }
-
-  if (!t) return <div className="p-6">Carregando…</div>;
-
-  // Evidências da solicitação (múltiplas) – prefere evidencias_urls, senão cai em imagem_url (legado)
-  const evidenciasSolicitacao =
-    Array.isArray(t.evidencias_urls) && t.evidencias_urls.length > 0
-      ? t.evidencias_urls
-      : t.imagem_url
-      ? [t.imagem_url]
-      : [];
-
-  // Topo (Nome + Data/Hora)
-  const criadoPor = t.criado_por_nome || t.criado_por_login || "—";
-  const criadoEm = brDateTime(t.created_at);
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-bold mb-2">Tratar</h1>
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h1 className="text-2xl font-bold text-gray-700">Central de Tratativas</h1>
 
-      <div className="text-sm text-blue-700 mb-4">
-        <span className="font-semibold">Criado por:</span> {criadoPor}{" "}
-        <span className="mx-2 text-blue-300">•</span>
-        <span className="font-semibold">Data/Hora:</span> {criadoEm}
-      </div>
-
-      <p className="text-gray-600 mb-6">
-        Revise os dados, anexe o anexo da tratativa e gere a medida.
-      </p>
-
-      {/* ====== DETALHES DA TRATATIVA (EM CIMA) ====== */}
-      <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <h2 className="text-lg font-semibold">Detalhes da tratativa</h2>
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="rounded-md bg-yellow-500 px-3 py-2 text-white hover:bg-yellow-600"
-            >
-              Editar dados
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={salvarEdicao}
-                disabled={loading}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                Salvar
-              </button>
-              <button
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditForm({
-                    tipo_ocorrencia: t.tipo_ocorrencia || "",
-                    prioridade: t.prioridade || "Média",
-                    setor_origem: t.setor_origem || "",
-                    linha: t.linha || "",
-                    descricao: t.descricao || "",
-                  });
-                }}
-                className="rounded-md bg-gray-400 px-3 py-2 text-white hover:bg-gray-500"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-        </div>
-
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Item titulo="Motorista" valor={`${t.motorista_nome || "-"}`} />
-          <Item titulo="Registro" valor={t.motorista_chapa || "-"} />
-
-          <Item
-            titulo="Ocorrência"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.tipo_ocorrencia}
-                  onChange={(e) =>
-                    setEditForm((s) => ({ ...s, tipo_ocorrencia: e.target.value }))
-                  }
-                />
-              ) : (
-                t.tipo_ocorrencia
-              )
-            }
-          />
-
-          <Item
-            titulo="Prioridade"
-            valor={
-              isEditing ? (
-                <select
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.prioridade}
-                  onChange={(e) =>
-                    setEditForm((s) => ({ ...s, prioridade: e.target.value }))
-                  }
-                >
-                  <option>Baixa</option>
-                  <option>Média</option>
-                  <option>Alta</option>
-                  <option>Gravíssima</option>
-                </select>
-              ) : (
-                t.prioridade
-              )
-            }
-          />
-
-          <Item
-            titulo="Setor"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  value={editForm.setor_origem}
-                  onChange={(e) =>
-                    setEditForm((s) => ({ ...s, setor_origem: e.target.value }))
-                  }
-                />
-              ) : (
-                t.setor_origem
-              )
-            }
-          />
-
-          <Item
-            titulo="Linha"
-            valor={
-              isEditing ? (
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  placeholder="Código ex.: 01TR ou NA"
-                  value={editForm.linha}
-                  onChange={(e) => setEditForm((s) => ({ ...s, linha: e.target.value }))}
-                />
-              ) : t.linha ? (
-                `${t.linha}${linhaDescricao ? ` - ${linhaDescricao}` : ""}`
-              ) : (
-                "-"
-              )
-            }
-          />
-
-          <Item titulo="Status" valor={t.status} />
-          <Item titulo="Data/Hora" valor={`${t.data_ocorrido || "-"} ${t.hora_ocorrido || ""}`} />
-
-          <Item
-            className="md:col-span-2"
-            titulo="Descrição"
-            valor={
-              isEditing ? (
-                <textarea
-                  className="w-full border rounded px-2 py-1"
-                  rows={3}
-                  value={editForm.descricao}
-                  onChange={(e) =>
-                    setEditForm((s) => ({ ...s, descricao: e.target.value }))
-                  }
-                />
-              ) : (
-                t.descricao || "-"
-              )
-            }
-          />
-
-          <div className="md:col-span-2">
-            {renderListaArquivosCompacta(
-              evidenciasSolicitacao,
-              "Evidências da solicitação (reclamação)"
-            )}
-          </div>
-        </dl>
-      </div>
-
-      {/* ====== CONCLUSÃO (EM BAIXO) ====== */}
-      <div className="bg-white rounded-lg shadow-sm p-5">
-        <h2 className="text-lg font-semibold mb-3">Conclusão</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Ação aplicada</label>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={acao}
-              onChange={(e) => setAcao(e.target.value)}
-            >
-              {acoes.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {acao === "Suspensão" && (
-            <>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Dias de Suspensão</label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={diasSusp}
-                  onChange={(e) => setDiasSusp(Number(e.target.value))}
-                >
-                  {[1, 3, 5, 7].map((d) => (
-                    <option key={d} value={d}>
-                      {d} dia(s)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">
-                  Data da Suspensão (emissão)
-                </label>
-                <input
-                  type="date"
-                  className="w-full rounded-md border px-3 py-2"
-                  value={dataSuspensao}
-                  onChange={(e) => setDataSuspensao(e.target.value)}
-                />
-              </div>
-
-              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Item titulo="Início" valor={br(inicioSusp)} />
-                <Item titulo="Fim" valor={br(fimSusp)} />
-                <Item titulo="Retorno" valor={br(retornoSusp)} />
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="mt-4">
-          <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
-          <textarea
-            rows={4}
-            className="w-full rounded-md border px-3 py-2"
-            value={resumo}
-            onChange={(e) => setResumo(e.target.value)}
-          />
-        </div>
-
-        {/* ✅ APENAS Anexo da Tratativa */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">
-              Anexo da Tratativa (opcional) — imagem ou PDF
-            </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
-            </p>
-
-            {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
-          </div>
-        </div>
-
-        <div className="mt-4 flex gap-3 flex-wrap">
+        {/* ✅ Botões simples no canto */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={concluir}
+            onClick={() => setViewMode(VIEW.ALL)}
+            className={[
+              "px-3 py-2 rounded-md text-sm border",
+              viewMode === VIEW.ALL
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
+            ].join(" ")}
+            title="Mostrar todas"
+          >
+            VER TUDO
+          </button>
+
+          <button
+            onClick={() => setViewMode(VIEW.OPEN_ONLY)}
+            className={[
+              "px-3 py-2 rounded-md text-sm border",
+              viewMode === VIEW.OPEN_ONLY
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
+            ].join(" ")}
+            title="Mostrar apenas pendentes (inclui atrasadas)"
+          >
+            PENDENTES & ATRASADAS
+          </button>
+        </div>
+      </div>
+
+      {/* 🔍 Filtros */}
+      <div className="bg-white shadow rounded-lg p-4 mb-6">
+        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          <input
+            type="text"
+            placeholder="Buscar (nome, chapa, descrição...)"
+            value={filtros.busca}
+            onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
+
+          <input
+            type="date"
+            placeholder="Data Início"
+            value={filtros.dataInicio}
+            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
+
+          <input
+            type="date"
+            placeholder="Data Fim"
+            value={filtros.dataFim}
+            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
+
+          {/* ✅ SETOR DINÂMICO */}
+          <select
+            value={filtros.setor}
+            onChange={(e) => setFiltros({ ...filtros, setor: e.target.value })}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Todos os Setores</option>
+            {setores.map((nome) => (
+              <option key={nome} value={nome}>
+                {nome}
+              </option>
+            ))}
+          </select>
+
+          {/* ✅ NOVO: Prioridade */}
+          <select
+            value={filtros.prioridade}
+            onChange={(e) => setFiltros({ ...filtros, prioridade: e.target.value })}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Todas as Prioridades</option>
+            <option value="Gravíssima">Gravíssima</option>
+            <option value="Alta">Alta</option>
+            <option value="Média">Média</option>
+            <option value="Baixa">Baixa</option>
+          </select>
+
+          <select
+            value={filtros.status}
+            onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Todos os Status</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Resolvido">Resolvido</option>
+            <option value="Concluída">Concluída</option>
+          </select>
+        </div>
+
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={limparFiltros}
+            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+          >
+            Limpar
+          </button>
+          <button
+            onClick={aplicar}
             disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+            className="ml-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
           >
-            {loading ? "Salvando…" : "Concluir"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (acao === "Orientação") return gerarOrientacao();
-              if (acao === "Advertência") return gerarAdvertencia();
-              if (acao === "Suspensão") return gerarSuspensao();
-              alert('Selecione "Orientação", "Advertência" ou "Suspensão" para gerar o documento.');
-            }}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-            title="Gerar documento conforme a ação selecionada"
-          >
-            GERAR MEDIDA DISCIPLINAR
+            {loading ? "Aplicando..." : "Aplicar"}
           </button>
         </div>
+
+        {/* ✅ Dica de ordenação */}
+        <div className="mt-3 text-xs text-gray-500">
+          Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>.  
+          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; terceira vez volta ao padrão.
+        </div>
+      </div>
+
+      {/* 🧾 Resumo abaixo dos filtros */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100 text-blue-700" />
+        <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100 text-yellow-700" />
+        <CardResumo titulo="Concluídas" valor={concluidasCount} cor="bg-green-100 text-green-700" />
+        <CardResumo titulo="Atrasadas (SLA)" valor={atrasadasCount} cor="bg-red-100 text-red-700" />
+      </div>
+
+      {/* 📋 Lista */}
+      <div className="bg-white shadow rounded-lg overflow-x-auto">
+        <table className="min-w-full">
+          <thead className="bg-blue-600 text-white">
+            <tr>
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("created_at")}
+                title="Ordenar por data"
+              >
+                Data de Abertura <SortIcon colKey="created_at" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("motorista_nome")}
+                title="Ordenar por motorista"
+              >
+                Motorista <SortIcon colKey="motorista_nome" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("tipo_ocorrencia")}
+                title="Ordenar por ocorrência"
+              >
+                Ocorrência <SortIcon colKey="tipo_ocorrencia" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("prioridade")}
+                title="Ordenar por prioridade"
+              >
+                Prioridade <SortIcon colKey="prioridade" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("setor_origem")}
+                title="Ordenar por setor"
+              >
+                Setor <SortIcon colKey="setor_origem" />
+              </th>
+
+              <th
+                className="py-2 px-3 text-left cursor-pointer select-none"
+                onClick={() => toggleSort("status")}
+                title="Ordenar por status (Atraso/Pendente/Concluída)"
+              >
+                Status <SortIcon colKey="status" />
+              </th>
+
+              <th className="py-2 px-3 text-left">Ações</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="text-center p-4 text-gray-500">
+                  Carregando...
+                </td>
+              </tr>
+            ) : tratativasOrdenadas.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center p-4 text-gray-500">
+                  Nenhuma tratativa encontrada.
+                </td>
+              </tr>
+            ) : (
+              tratativasOrdenadas.map((t) => {
+                const concluida = isConcluidaOuResolvida(t?.status);
+                return (
+                  <tr key={t.id} className="border-t hover:bg-gray-50">
+                    <td className="py-2 px-3 text-gray-600">
+                      {t.created_at ? new Date(t.created_at).toLocaleDateString("pt-BR") : "-"}
+                    </td>
+
+                    <td className="py-2 px-3 text-gray-700">{t.motorista_nome || "-"}</td>
+                    <td className="py-2 px-3 text-gray-700">{t.tipo_ocorrencia || "-"}</td>
+
+                    <td className="py-2 px-3">{badgePrioridade(t.prioridade)}</td>
+
+                    <td className="py-2 px-3 text-gray-700">{t.setor_origem || "-"}</td>
+
+                    <td className="py-2 px-3">{badgeStatus(t)}</td>
+
+                    <td className="py-2 px-3">
+                      {concluida ? (
+                        <button
+                          onClick={() => navigate(`/consultar/${t.id}`)}
+                          className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm"
+                        >
+                          Consultar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/tratar/${t.id}`)}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
+                        >
+                          Tratar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function Item({ titulo, valor, className }) {
+// Card resumo
+function CardResumo({ titulo, valor, cor }) {
   return (
-    <div className={className}>
-      <dt className="text-sm text-gray-600">{titulo}</dt>
-      <dd className="font-medium break-words">{valor}</dd>
+    <div className={`${cor} rounded-lg shadow p-5 text-center`}>
+      <h3 className="text-sm font-medium text-gray-600">{titulo}</h3>
+      <p className="text-3xl font-bold mt-2 text-gray-800">{valor}</p>
     </div>
   );
 }
