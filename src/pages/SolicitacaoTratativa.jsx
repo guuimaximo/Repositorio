@@ -1,8 +1,3 @@
-// src/pages/SolicitacaoTratativa.jsx
-// ✅ Mantém TODAS as melhorias: Dropzone + lista rica (badge/KB) + CTRL+V (print) + "Gravíssima" + "Não se aplica" (NA) + múltiplas evidências (evidencias_urls)
-// ✅ Ajuste UUID: só grava criado_por_id se for UUID válido (evita "5")
-// ✅ Mantém auditoria: criado_por_login, criado_por_nome, criado_por_id
-
 import { useState, useEffect, useRef, useMemo, useContext } from "react";
 import { supabase } from "../supabase";
 import CampoMotorista from "../components/CampoMotorista";
@@ -412,8 +407,7 @@ export default function SolicitacaoTratativa() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">PNG, JPG, MP4, MOV ou PDF</p>
 
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">
-                  Ctrl+V também funciona
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs text-gray-600 border">                 
                 </div>
               </div>
 
@@ -432,16 +426,14 @@ export default function SolicitacaoTratativa() {
               <div className="rounded-xl border bg-white p-4 h-full">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">
-                      Cole um print aqui
+                    <p className="text-sm font-semibold text-gray-800">                    
+                      
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Clique no campo abaixo e pressione <b>Ctrl+V</b>.
+                    <p className="text-xs text-gray-500 mt-1">                     
                     </p>
                   </div>
 
-                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">
-                    Ctrl+V
+                  <span className="text-[11px] text-gray-500 border rounded-full px-2 py-1">                   
                   </span>
                 </div>
 
