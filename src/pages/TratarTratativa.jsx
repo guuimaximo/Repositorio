@@ -124,7 +124,7 @@ export default function TratarTratativa() {
     [inicioSusp, diasSusp]
   );
 
-  // ===== Helpers de evidência (compacta: só nome do arquivo) =====
+  // ===== Helpers de evidência =====
   const fileNameFromUrl = (u) => {
     try {
       const raw = String(u || "");
@@ -151,39 +151,79 @@ export default function TratarTratativa() {
     return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(s);
   };
 
-  const renderListaArquivosCompacta = (urls, label) => {
+  // ✅ Grid de evidências com miniaturas (IMAGEM) e cards (PDF/outros)
+  const renderEvidenciasGrid = (urls, label) => {
     const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
     if (arr.length === 0) return null;
 
     return (
-      <div className="mt-2">
+      <div className="mt-3">
         <span className="block text-sm text-gray-600 mb-2">{label}</span>
 
-        <ul className="space-y-1">
-          {arr.map((u, i) => (
-            <li key={`${u}-${i}`} className="text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {arr.map((u, i) => {
+            const pdf = isPdf(u);
+            const img = !pdf && isImageUrl(u);
+            const name = fileNameFromUrl(u);
+
+            if (img) {
+              return (
+                <a
+                  key={`${u}-${i}`}
+                  href={u}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-lg border bg-white overflow-hidden hover:shadow-sm"
+                  title="Abrir evidência"
+                >
+                  <div className="relative">
+                    <img
+                      src={u}
+                      alt={name}
+                      className="h-24 w-full object-cover group-hover:opacity-95"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="px-2 py-1.5 text-xs text-gray-700 truncate">
+                    {name}
+                  </div>
+                </a>
+              );
+            }
+
+            // PDF / outros
+            return (
               <a
+                key={`${u}-${i}`}
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 underline"
+                className="rounded-lg border bg-white p-3 hover:shadow-sm"
                 title="Abrir evidência"
               >
-                {fileNameFromUrl(u)}
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                    {pdf ? "PDF" : "ARQ"}
+                  </span>
+                </div>
+                <div className="mt-2 text-xs text-blue-700 underline break-words">
+                  {name}
+                </div>
               </a>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       </div>
     );
   };
 
-  // ====== Arquivo único -> PDF mostra link | imagem mostra miniatura clicável ======
+  // ====== Arquivo único -> PDF mostra card | imagem mostra miniatura clicável ======
   const renderArquivoOuThumb = (url, label) => {
     if (!url) return null;
 
     const pdf = isPdf(url);
     const img = !pdf && isImageUrl(url);
+    const name = fileNameFromUrl(url);
 
     return (
       <div className="mt-2">
@@ -194,21 +234,105 @@ export default function TratarTratativa() {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 underline"
+            className="block rounded-lg border bg-white p-3 hover:shadow-sm"
             title="Abrir arquivo"
           >
-            {fileNameFromUrl(url)}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                {pdf ? "PDF" : "ARQ"}
+              </span>
+            </div>
+            <div className="mt-2 text-sm text-blue-700 underline break-words">{name}</div>
           </a>
         ) : (
-          <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir imagem">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir imagem"
+            className="inline-block"
+          >
             <img
               src={url}
-              alt={fileNameFromUrl(url)}
-              className="h-16 w-16 rounded border object-cover hover:opacity-90"
+              alt={name}
+              className="h-24 w-24 rounded-lg border object-cover hover:opacity-90"
               loading="lazy"
             />
           </a>
         )}
+      </div>
+    );
+  };
+
+  // ✅ Preview do arquivo selecionado (File) para conclusão
+  const [previewObjUrl, setPreviewObjUrl] = useState(null);
+  useEffect(() => {
+    if (!anexoTratativa) {
+      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+      setPreviewObjUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(anexoTratativa);
+    setPreviewObjUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anexoTratativa]);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+    };
+  }, [previewObjUrl]);
+
+  const renderPreviewSelecionado = () => {
+    if (!anexoTratativa) return null;
+
+    const pdf = isPdf(anexoTratativa);
+    const name = anexoTratativa.name || "arquivo";
+
+    if (pdf) {
+      return (
+        <div className="mt-3 rounded-lg border bg-white p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+              PDF
+            </span>
+            <button
+              type="button"
+              onClick={() => setAnexoTratativa(null)}
+              className="text-xs text-gray-500 hover:text-gray-700"
+              title="Remover arquivo"
+            >
+              Remover
+            </button>
+          </div>
+          <div className="mt-2 text-sm text-gray-700 break-words">{name}</div>
+        </div>
+      );
+    }
+
+    // imagem
+    return (
+      <div className="mt-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500">Pré-visualização</span>
+          <button
+            type="button"
+            onClick={() => setAnexoTratativa(null)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+            title="Remover arquivo"
+          >
+            Remover
+          </button>
+        </div>
+        <img
+          src={previewObjUrl}
+          alt={name}
+          className="mt-2 h-28 w-28 rounded-lg border object-cover"
+        />
+        <div className="mt-1 text-xs text-gray-600 break-words">{name}</div>
       </div>
     );
   };
@@ -346,14 +470,11 @@ export default function TratarTratativa() {
         .from("tratativas")
         .update({
           status: "Concluída",
-          // opcional: se você quiser guardar também no "tratativas" (coluna atual do registro),
-          // mantemos só se existir (não forçamos criação de coluna)
           anexo_tratativa: anexo_tratativa_url || t.anexo_tratativa || null,
         })
         .eq("id", t.id);
 
-      // se sua tabela tratativas NÃO tem anexo_tratativa, o update acima pode dar erro.
-      // Se isso acontecer, comente o campo anexo_tratativa no update e deixe só status.
+      // Se sua tabela tratativas NÃO tem anexo_tratativa, comente a linha acima e deixe só status.
       if (upd.error) throw upd.error;
 
       alert("Tratativa concluída com sucesso!");
@@ -829,8 +950,9 @@ export default function TratarTratativa() {
             }
           />
 
+          {/* ✅ EVIDÊNCIAS EM MINIATURA */}
           <div className="md:col-span-2">
-            {renderListaArquivosCompacta(
+            {renderEvidenciasGrid(
               evidenciasSolicitacao,
               "Evidências da solicitação (reclamação)"
             )}
@@ -896,36 +1018,58 @@ export default function TratarTratativa() {
           )}
         </div>
 
-        <div className="mt-4">
-          <label className="block text-sm text-gray-600 mb-1">Resumo / Observações</label>
-          <textarea
-            rows={4}
-            className="w-full rounded-md border px-3 py-2"
-            value={resumo}
-            onChange={(e) => setResumo(e.target.value)}
-          />
-        </div>
-
-        {/* ✅ APENAS Anexo da Tratativa */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">
-              Anexo da Tratativa (opcional) — imagem ou PDF
+        {/* ✅ Layout melhor: Observações + Anexo lado a lado */}
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Observações */}
+          <div className="rounded-lg border bg-gray-50 p-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Resumo / Observações
             </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
+            <textarea
+              rows={6}
+              className="w-full rounded-md border bg-white px-3 py-2"
+              value={resumo}
+              onChange={(e) => setResumo(e.target.value)}
+              placeholder="Descreva o que foi feito, conclusão, orientações, etc."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Este anexo fica salvo no histórico (tratativas_detalhes) como “anexo_tratativa”.
+            <p className="text-xs text-gray-500 mt-2">
+              Esse texto vai para <b>tratativas_detalhes.observacoes</b>.
             </p>
+          </div>
 
+          {/* Anexo */}
+          <div className="rounded-lg border bg-gray-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-semibold text-gray-700">
+                Anexo da Tratativa (opcional)
+              </label>
+              <span className="text-xs text-gray-500">imagem ou PDF</span>
+            </div>
+
+            <div className="mt-3 rounded-lg border-2 border-dashed bg-white p-4">
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setAnexoTratativa(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-gray-700
+                  file:mr-3 file:rounded-md file:border-0
+                  file:bg-blue-600 file:px-4 file:py-2
+                  file:text-white hover:file:bg-blue-700"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Será salvo no histórico como <b>tratativas_detalhes.anexo_tratativa</b>.
+              </p>
+
+              {/* ✅ Preview do selecionado */}
+              {renderPreviewSelecionado()}
+            </div>
+
+            {/* ✅ Já anexado (se houver) */}
             {renderArquivoOuThumb(t.anexo_tratativa || null, "Anexo já anexado (se houver)")}
           </div>
         </div>
 
-        <div className="mt-4 flex gap-3 flex-wrap">
+        <div className="mt-6 flex gap-3 flex-wrap">
           <button
             onClick={concluir}
             disabled={loading}
