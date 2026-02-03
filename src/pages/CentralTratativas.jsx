@@ -1,30 +1,40 @@
+// src/pages/CentralTratativas.jsx
+// ✅ NOVO:
+// - Ordenação clicando no cabeçalho da tabela (client-side)
+// - Filtro de Prioridade (dropdown)
+// - Botão topo: "VER TUDO" | "PENDENTES & ATRASADAS" (default = Pendentes & Atrasadas)
+// - SLA de atraso por prioridade (Gravíssima 1d, Alta 3d, Média 7d, Baixa 15d)
+// - Ordem padrão ao entrar: Prioridade (Gravíssima->Baixa) + Status + created_at desc
+// ✅ Mantém: applyCommonFilters, layout, contadores head (Total/Pendentes/Concluídas)
+// ⚠️ AtrasadasCount agora é calculado pela regra de SLA (client-side com base na lista carregada)
+
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 
 const VIEW = {
   OPEN_ONLY: "open_only", // Pendentes & Atrasadas
-  ALL: "all",             // Ver tudo
+  ALL: "all", // Ver tudo
 };
 
 // SLA por prioridade (dias)
 const SLA_DIAS = {
   "Gravíssima": 1,
-  "Gravissima": 1, // tolera sem acento
-  "Alta": 3,
+  Gravissima: 1, // tolera sem acento
+  Alta: 3,
   "Média": 7,
-  "Media": 7,
-  "Baixa": 15,
+  Media: 7,
+  Baixa: 15,
 };
 
 // Ordem de prioridade (maior urgência primeiro)
 const PRIORIDADE_RANK = {
   "Gravíssima": 0,
-  "Gravissima": 0,
-  "Alta": 1,
+  Gravissima: 0,
+  Alta: 1,
   "Média": 2,
-  "Media": 2,
-  "Baixa": 3,
+  Media: 2,
+  Baixa: 3,
 };
 
 function norm(s) {
@@ -49,11 +59,11 @@ function daysDiffFromNow(createdAtISO) {
 
 function getSlaDias(prioridade) {
   const p = norm(prioridade);
-  return SLA_DIAS[p] ?? 7; // default seguro = 7
+  return SLA_DIAS[p] ?? 7; // default seguro
 }
 
 function isAtrasadaBySLA(row) {
-  // Regra: atraso só faz sentido se estiver pendente
+  // atraso só faz sentido se estiver pendente
   if (!isPendente(row?.status)) return false;
   const sla = getSlaDias(row?.prioridade);
   return daysDiffFromNow(row?.created_at) > sla;
@@ -78,8 +88,9 @@ export default function CentralTratativas() {
     status: "",
     prioridade: "", // ✅ NOVO
   });
-
   const [loading, setLoading] = useState(false);
+
+  // ✅ Setores dinâmicos
   const [setores, setSetores] = useState([]);
 
   // ✅ Botão topo (default: Pendentes & Atrasadas)
@@ -88,7 +99,7 @@ export default function CentralTratativas() {
   // Ordenação da tabela
   const [sort, setSort] = useState({
     key: "default", // default | created_at | motorista_nome | tipo_ocorrencia | prioridade | setor_origem | status
-    dir: "asc",     // asc | desc  (para "default" ignoramos e usamos regra fixa)
+    dir: "asc", // asc | desc
   });
 
   // Contadores reais do banco (head:true)
@@ -142,6 +153,7 @@ export default function CentralTratativas() {
         return;
       }
 
+      // fallback: setores presentes nas tratativas
       const { data: trat, error: eTrat } = await supabase
         .from("tratativas")
         .select("setor_origem")
@@ -166,9 +178,7 @@ export default function CentralTratativas() {
     let query = supabase.from("tratativas").select("*").limit(100000);
     query = applyCommonFilters(query);
 
-    // Mantém um order base por created_at desc (boa prática), mas vamos reordenar no front conforme regra
     const { data, error } = await query.order("created_at", { ascending: false });
-
     if (!error) setTratativas(data || []);
     else console.error("Erro ao carregar lista de tratativas:", error);
   }
@@ -203,7 +213,6 @@ export default function CentralTratativas() {
     setConcluidasCount(conc || 0);
   }
 
-  // ✅ Aplica: lista + contadores head (e depois recalcula atrasadas SLA)
   async function aplicar() {
     setLoading(true);
     try {
@@ -222,8 +231,14 @@ export default function CentralTratativas() {
   }, []);
 
   function limparFiltros() {
-    setFiltros({ busca: "", dataInicio: "", dataFim: "", setor: "", status: "", prioridade: "" });
-    // mantém viewMode default (open_only)
+    setFiltros({
+      busca: "",
+      dataInicio: "",
+      dataFim: "",
+      setor: "",
+      status: "",
+      prioridade: "",
+    });
     setTimeout(() => aplicar(), 0);
   }
 
@@ -231,12 +246,10 @@ export default function CentralTratativas() {
   const tratativasView = useMemo(() => {
     const rows = Array.isArray(tratativas) ? tratativas : [];
     if (viewMode === VIEW.ALL) return rows;
-
-    // OPEN_ONLY: mostra apenas pendentes (inclui as atrasadas, que são subset de pendentes)
-    return rows.filter((r) => isPendente(r?.status));
+    return rows.filter((r) => isPendente(r?.status)); // OPEN_ONLY
   }, [tratativas, viewMode]);
 
-  // ✅ Recalcula atrasadasCount por SLA, respeitando viewMode e filtros já aplicados
+  // ✅ Recalcula atrasadasCount por SLA
   useEffect(() => {
     const rows = Array.isArray(tratativasView) ? tratativasView : [];
     const atr = rows.filter((r) => isAtrasadaBySLA(r)).length;
@@ -247,29 +260,21 @@ export default function CentralTratativas() {
   function defaultComparator(a, b) {
     const pa = PRIORIDADE_RANK[norm(a?.prioridade)] ?? 99;
     const pb = PRIORIDADE_RANK[norm(b?.prioridade)] ?? 99;
-    if (pa !== pb) return pa - pb; // menor rank = mais urgente
+    if (pa !== pb) return pa - pb;
 
     const sa = statusRank(a);
     const sb = statusRank(b);
     if (sa !== sb) return sa - sb;
 
-    // mais recentes primeiro
     const da = a?.created_at ? new Date(a.created_at).getTime() : 0;
     const db = b?.created_at ? new Date(b.created_at).getTime() : 0;
-    return db - da;
+    return db - da; // mais recente primeiro
   }
 
   function stringComparator(getter, dir, a, b) {
     const va = norm(getter(a)).toLowerCase();
     const vb = norm(getter(b)).toLowerCase();
     const r = va.localeCompare(vb, "pt-BR");
-    return dir === "asc" ? r : -r;
-  }
-
-  function numberComparator(getter, dir, a, b) {
-    const va = Number(getter(a) ?? 0);
-    const vb = Number(getter(b) ?? 0);
-    const r = va - vb;
     return dir === "asc" ? r : -r;
   }
 
@@ -322,20 +327,15 @@ export default function CentralTratativas() {
   function toggleSort(key) {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
-      // mesmo header: alterna asc/desc, e se estiver em desc volta pro default
       if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: "default", dir: "asc" };
+      return { key: "default", dir: "asc" }; // terceira volta ao padrão
     });
   }
 
   function SortIcon({ colKey }) {
     if (sort.key !== colKey) return <span className="ml-1 text-white/70">↕</span>;
     if (sort.key === "default") return <span className="ml-1 text-white/70">↕</span>;
-    return (
-      <span className="ml-1">
-        {sort.dir === "asc" ? "↑" : "↓"}
-      </span>
-    );
+    return <span className="ml-1">{sort.dir === "asc" ? "↑" : "↓"}</span>;
   }
 
   function badgePrioridade(p) {
@@ -361,7 +361,6 @@ export default function CentralTratativas() {
         </span>
       );
     }
-
     if (st.includes("pendente")) {
       return (
         <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -369,7 +368,6 @@ export default function CentralTratativas() {
         </span>
       );
     }
-
     if (st.includes("resolvido") || st.includes("conclu")) {
       return (
         <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
@@ -377,7 +375,6 @@ export default function CentralTratativas() {
         </span>
       );
     }
-
     return (
       <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
         {row?.status || "-"}
@@ -400,7 +397,6 @@ export default function CentralTratativas() {
                 ? "bg-blue-600 text-white border-blue-600"
                 : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
             ].join(" ")}
-            title="Mostrar todas"
           >
             VER TUDO
           </button>
@@ -413,7 +409,6 @@ export default function CentralTratativas() {
                 ? "bg-blue-600 text-white border-blue-600"
                 : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
             ].join(" ")}
-            title="Mostrar apenas pendentes (inclui atrasadas)"
           >
             PENDENTES & ATRASADAS
           </button>
@@ -504,14 +499,42 @@ export default function CentralTratativas() {
           </button>
         </div>
 
-        {/* ✅ Dica de ordenação */}
-        <div className="mt-3 text-xs text-gray-500">
-          Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>.  
-          Clique no cabeçalho da tabela para ordenar; clique novamente para inverter; terceira vez volta ao padrão.
+        {/* ✅ AQUI: Regras visíveis (Ordenação + SLA) */}
+        <div className="mt-4">
+          <div className="text-xs text-gray-500">
+            Ordenação padrão: <b>Prioridade</b> → <b>Status</b> → <b>Mais recentes</b>. Clique no
+            cabeçalho da tabela para ordenar; clique novamente para inverter; terceira vez volta ao
+            padrão.
+          </div>
+
+          <div className="mt-2 rounded-lg border bg-gray-50 px-3 py-2">
+            <div className="text-xs font-semibold text-gray-700">
+              Regra de SLA para considerar como <span className="text-red-700">ATRASO</span>
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium">
+                Gravíssima: 1 dia
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-medium">
+                Alta: 3 dias
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">
+                Média: 7 dias
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">
+                Baixa: 15 dias
+              </span>
+
+              <span className="text-gray-500 ml-1">
+                (Atraso é calculado apenas quando o status está <b>Pendente</b>)
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 🧾 Resumo abaixo dos filtros */}
+      {/* 🧾 Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <CardResumo titulo="Total" valor={totalCount} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes" valor={pendentesCount} cor="bg-yellow-100 text-yellow-700" />
@@ -527,7 +550,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("created_at")}
-                title="Ordenar por data"
               >
                 Data de Abertura <SortIcon colKey="created_at" />
               </th>
@@ -535,7 +557,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("motorista_nome")}
-                title="Ordenar por motorista"
               >
                 Motorista <SortIcon colKey="motorista_nome" />
               </th>
@@ -543,7 +564,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("tipo_ocorrencia")}
-                title="Ordenar por ocorrência"
               >
                 Ocorrência <SortIcon colKey="tipo_ocorrencia" />
               </th>
@@ -551,7 +571,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("prioridade")}
-                title="Ordenar por prioridade"
               >
                 Prioridade <SortIcon colKey="prioridade" />
               </th>
@@ -559,7 +578,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("setor_origem")}
-                title="Ordenar por setor"
               >
                 Setor <SortIcon colKey="setor_origem" />
               </th>
@@ -567,7 +585,6 @@ export default function CentralTratativas() {
               <th
                 className="py-2 px-3 text-left cursor-pointer select-none"
                 onClick={() => toggleSort("status")}
-                title="Ordenar por status (Atraso/Pendente/Concluída)"
               >
                 Status <SortIcon colKey="status" />
               </th>
@@ -608,7 +625,7 @@ export default function CentralTratativas() {
                     <td className="py-2 px-3">{badgeStatus(t)}</td>
 
                     <td className="py-2 px-3">
-                      {concluida ? (
+                      {conclida ? (
                         <button
                           onClick={() => navigate(`/consultar/${t.id}`)}
                           className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 text-sm"
