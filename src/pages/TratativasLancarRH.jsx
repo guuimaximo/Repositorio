@@ -74,104 +74,79 @@ function makeFileFromClipboardImage(blobFile) {
 /* =========================
    UI helpers
 ========================= */
-function Thumb({ url }) {
-  if (!url) return <span className="text-gray-400">—</span>;
-  const img = isImageUrl(url) && !isPdf(url);
 
-  return img ? (
-    <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir">
-      <img
-        src={url}
-        alt={fileNameFromUrl(url)}
-        className="h-14 w-14 rounded border object-cover hover:opacity-90"
-        loading="lazy"
-      />
-    </a>
-  ) : (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-blue-600 underline text-xs break-all"
-      title="Abrir"
-    >
-      {fileNameFromUrl(url)}
-    </a>
+// ✅ “Logo PDF” simples (tile) + nome embaixo
+function PdfTile({ name }) {
+  return (
+    <div className="rounded-lg border bg-white overflow-hidden hover:shadow-sm">
+      <div className="h-20 flex items-center justify-center bg-gray-50">
+        <div className="h-10 w-10 rounded-lg bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
+          PDF
+        </div>
+      </div>
+      <div className="px-2 py-1.5 text-xs text-gray-700 truncate">{name}</div>
+    </div>
   );
 }
 
-// ✅ Grid (miniaturas + cards PDF)
+function ImgTile({ src, name }) {
+  return (
+    <div className="rounded-lg border bg-white overflow-hidden hover:shadow-sm">
+      <img
+        src={src}
+        alt={name}
+        className="h-20 w-full object-cover"
+        loading="lazy"
+      />
+      <div className="px-2 py-1.5 text-xs text-gray-700 truncate">{name}</div>
+    </div>
+  );
+}
+
+// ✅ Grid de evidências (com PDF tile + nome embaixo)
 function EvidenciasGrid({ urls, label }) {
   const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
-  if (arr.length === 0) {
-    return (
-      <div>
-        <div className="text-sm text-gray-600 mb-2">{label}</div>
-        <div className="text-sm text-gray-400">—</div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <div className="text-sm text-gray-600 mb-2">{label}</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {arr.map((u, i) => {
-          const pdf = isPdf(u);
-          const img = isImageUrl(u) && !pdf;
-          const name = fileNameFromUrl(u);
 
-          if (img) {
+      {arr.length === 0 ? (
+        <div className="text-sm text-gray-400">—</div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {arr.map((u, i) => {
+            const name = fileNameFromUrl(u);
+            const pdf = isPdf(u);
+            const img = isImageUrl(u) && !pdf;
+
             return (
               <a
                 key={`${u}-${i}`}
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group rounded-lg border bg-white overflow-hidden hover:shadow-sm"
                 title="Abrir evidência"
+                className="block"
               >
-                <img
-                  src={u}
-                  alt={name}
-                  className="h-24 w-full object-cover group-hover:opacity-95"
-                  loading="lazy"
-                />
-                <div className="px-2 py-1.5 text-xs text-gray-700 truncate">{name}</div>
+                {img ? <ImgTile src={u} name={name} /> : <PdfTile name={name} />}
               </a>
             );
-          }
-
-          return (
-            <a
-              key={`${u}-${i}`}
-              href={u}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border bg-white p-3 hover:shadow-sm"
-              title="Abrir evidência"
-            >
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                {pdf ? "PDF" : "ARQ"}
-              </span>
-              <div className="mt-2 text-xs text-blue-700 underline break-words">{name}</div>
-            </a>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-/* =========================
-   Component
-========================= */
 export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [obsRH, setObsRH] = useState("");
   const [evidFile, setEvidFile] = useState(null);
 
   const modalRef = useRef(null);
+
+  // ✅ input ref (forma mais confiável de abrir seletor)
+  const fileInputRef = useRef(null);
 
   const titulo = "Lançar no Transnet (RH)";
 
@@ -210,7 +185,6 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
       const cd = e.clipboardData;
       if (!cd) return;
 
-      // 1) items (Chrome/Edge)
       const items = cd.items ? Array.from(cd.items) : [];
       const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
 
@@ -221,20 +195,18 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
         return;
       }
 
-      // 2) files (fallback)
       const files = cd.files ? Array.from(cd.files) : [];
       const imgFile = files.find((f) => f.type?.startsWith("image/"));
       if (imgFile) {
         e.preventDefault();
         setEvidFile(makeFileFromClipboardImage(imgFile));
-        return;
       }
     } catch {
       // noop
     }
   };
 
-  // ✅ listeners enquanto modal aberto (window + document)
+  // ✅ listeners enquanto modal aberto
   useEffect(() => {
     if (!aberto) return;
 
@@ -255,8 +227,6 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     if (aberto) {
       setObsRH("");
       setEvidFile(null);
-
-      // foco no modal para garantir paste chegando
       setTimeout(() => modalRef.current?.focus?.(), 150);
     }
   }, [aberto]);
@@ -285,7 +255,6 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
         `${grupo.tratativa_ids?.[0] || "rh"}/rh_transnet`
       );
 
-      // ✅ Fecha TODAS as tratativas consolidadas (1 lançamento fecha N tratativas)
       const payload = (grupo.tratativa_ids || []).map((tratativa_id) => ({
         tratativa_id,
         status_rh: "CONCLUIDA",
@@ -307,63 +276,24 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     }
   }
 
-  const FilePicker = ({ id, accept, onPick, selectedFile }) => (
-    <div className="flex items-center gap-3">
-      <input
-        id={id}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => onPick(e.target.files?.[0] || null)}
-      />
-      <label
-        htmlFor={id}
-        className="inline-flex cursor-pointer items-center justify-center rounded-md border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-      >
-        Escolher arquivo
-      </label>
-      <div className="text-xs text-gray-500 truncate">
-        {selectedFile?.name ? selectedFile.name : "Nenhum arquivo selecionado"}
-      </div>
-    </div>
-  );
-
-  // ✅ Preview RH (selecionado)
+  // ✅ Preview RH (selecionado): imagem thumb / PDF tile
   const renderPreviewRH = () => {
     if (!evidFile) return <div className="text-sm text-gray-400">—</div>;
 
-    const isPdfFile = evidFile.type === "application/pdf" || evidFile.name?.toLowerCase().endsWith(".pdf");
-    if (isPdfFile) {
-      return (
-        <div className="rounded-lg border bg-white p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-              PDF
-            </span>
-            <button
-              type="button"
-              className="text-xs text-red-600 hover:underline"
-              onClick={() => setEvidFile(null)}
-              disabled={loading}
-            >
-              Remover
-            </button>
-          </div>
-          <div className="mt-2 text-sm text-gray-700 break-words">{evidFile.name}</div>
-        </div>
-      );
-    }
+    const name = evidFile.name || "arquivo";
+    const isPdfFile =
+      evidFile.type === "application/pdf" || String(name).toLowerCase().endsWith(".pdf");
 
-    // imagem
     return (
       <div className="flex items-start gap-3">
-        <img
-          src={previewObjUrl}
-          alt={evidFile.name}
-          className="h-24 w-24 rounded-lg border object-cover"
-        />
+        <div className="w-32">
+          {isPdfFile ? <PdfTile name={name} /> : <ImgTile src={previewObjUrl} name={name} />}
+        </div>
+
         <div className="flex-1">
-          <div className="text-sm text-gray-700 break-words">{evidFile.name}</div>
+          <div className="text-xs text-gray-500">Selecionado</div>
+          <div className="text-sm text-gray-700 break-words">{name}</div>
+
           <button
             type="button"
             className="mt-2 text-xs text-red-600 hover:underline"
@@ -377,10 +307,15 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     );
   };
 
+  // ✅ botão confiável para abrir seletor
+  const openFileDialog = () => {
+    if (loading) return;
+    fileInputRef.current?.click?.();
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-      // ✅ captura paste antes dos inputs (muito mais confiável)
       onPasteCapture={handlePaste}
     >
       <div
@@ -391,7 +326,7 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
         {/* header */}
         <div className="p-4 border-b flex items-center justify-between">
           <div>
-            <div className="text-lg font-bold">{titulo}</div>
+            <div className="text-lg font-bold">Lançar no Transnet (RH)</div>
             <div className="text-xs text-gray-500">
               <span className="font-semibold">{grupo.acao_aplicada}</span> • {grupo.motorista_nome} ({grupo.motorista_chapa})
               {" "}• Arquivo: <span className="font-semibold">{grupo.arquivo_key}</span> • {grupo.qtd_tratativas} tratativa(s)
@@ -406,7 +341,7 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
         </div>
 
         <div className="p-4 space-y-4">
-          {/* tabela azul com tratativas consolidadas */}
+          {/* tabela azul */}
           <div className="bg-white shadow rounded-lg overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-blue-600 text-white">
@@ -434,7 +369,7 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
             </table>
           </div>
 
-          {/* ✅ evidências em miniatura (grid) */}
+          {/* ✅ miniaturas tratador */}
           <EvidenciasGrid urls={evidenciasTratador} label="Evidências (Tratador) — miniaturas" />
 
           <hr />
@@ -451,22 +386,42 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
               onChange={(e) => setObsRH(e.target.value)}
             />
 
-            {/* ✅ Layout melhor: anexar + colar + preview */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              {/* Arquivo */}
               <div className="space-y-2">
                 <div className="text-sm text-gray-600">Evidência (arquivo)</div>
 
                 <div className="rounded-lg border bg-gray-50 p-3">
-                  <FilePicker
-                    id="rh_evid_file"
+                  {/* ✅ input real + ref */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
                     accept="image/*,application/pdf"
-                    selectedFile={evidFile}
-                    onPick={setEvidFile}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setEvidFile(f);
+                      // ✅ permite selecionar o MESMO arquivo novamente depois
+                      e.target.value = "";
+                    }}
                   />
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openFileDialog();
+                    }}
+                    className="inline-flex cursor-pointer items-center justify-center rounded-md border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Escolher arquivo
+                  </button>
+
                   <div className="mt-3">{renderPreviewRH()}</div>
                 </div>
               </div>
 
+              {/* Print */}
               <div className="space-y-2">
                 <div className="text-sm text-gray-600">Evidência (print)</div>
 
@@ -480,21 +435,17 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
                 >
                   <div className="text-sm font-medium text-gray-700">Cole aqui o Print do Transnet</div>
                   <div className="mt-1 text-xs text-gray-500">
-                    Dica: com o modal aberto, use <b>Ctrl+V</b> (funciona mesmo sem clicar em um campo).
+                    Dica: com o modal aberto, use <b>Ctrl+V</b>.
                   </div>
 
-                  {!evidFile ? (
-                    <div className="mt-3 text-sm text-gray-400">Nenhum print colado ainda.</div>
-                  ) : (
-                    <div className="mt-3">{renderPreviewRH()}</div>
-                  )}
+                  <div className="mt-3">{renderPreviewRH()}</div>
                 </div>
               </div>
             </div>
 
             <div className="text-xs text-gray-500 mt-2">
-              Se não colar: confirme que você está copiando uma <b>imagem</b> (print) e não texto.
-              (Chrome/Edge ok; em alguns apps o “copiar” não envia imagem pro clipboard.)
+              Se o Ctrl+V não colar, geralmente é porque a origem não está copiando imagem para a área de transferência.
+              Nesse caso, use “Escolher arquivo”.
             </div>
           </div>
         </div>
