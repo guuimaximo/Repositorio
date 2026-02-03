@@ -71,6 +71,9 @@ function makeFileFromClipboardImage(blobFile) {
   return new File([blobFile], name, { type, lastModified: Date.now() });
 }
 
+/* =========================
+   UI helpers
+========================= */
 function Thumb({ url }) {
   if (!url) return <span className="text-gray-400">—</span>;
   const img = isImageUrl(url) && !isPdf(url);
@@ -85,52 +88,176 @@ function Thumb({ url }) {
       />
     </a>
   ) : (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 underline text-xs break-all"
+      title="Abrir"
+    >
       {fileNameFromUrl(url)}
     </a>
   );
 }
 
+// ✅ Grid (miniaturas + cards PDF)
+function EvidenciasGrid({ urls, label }) {
+  const arr = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  if (arr.length === 0) {
+    return (
+      <div>
+        <div className="text-sm text-gray-600 mb-2">{label}</div>
+        <div className="text-sm text-gray-400">—</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-sm text-gray-600 mb-2">{label}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {arr.map((u, i) => {
+          const pdf = isPdf(u);
+          const img = isImageUrl(u) && !pdf;
+          const name = fileNameFromUrl(u);
+
+          if (img) {
+            return (
+              <a
+                key={`${u}-${i}`}
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border bg-white overflow-hidden hover:shadow-sm"
+                title="Abrir evidência"
+              >
+                <img
+                  src={u}
+                  alt={name}
+                  className="h-24 w-full object-cover group-hover:opacity-95"
+                  loading="lazy"
+                />
+                <div className="px-2 py-1.5 text-xs text-gray-700 truncate">{name}</div>
+              </a>
+            );
+          }
+
+          return (
+            <a
+              key={`${u}-${i}`}
+              href={u}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border bg-white p-3 hover:shadow-sm"
+              title="Abrir evidência"
+            >
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                {pdf ? "PDF" : "ARQ"}
+              </span>
+              <div className="mt-2 text-xs text-blue-700 underline break-words">{name}</div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   Component
+========================= */
 export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [obsRH, setObsRH] = useState("");
   const [evidFile, setEvidFile] = useState(null);
 
-  const pasteBoxRef = useRef(null);
+  const modalRef = useRef(null);
 
   const titulo = "Lançar no Transnet (RH)";
 
   const evidenciasTratador = useMemo(() => {
-    const arr = Array.from(new Set([...(grupo?.evidencia_conclusao_urls || []), ...(grupo?.anexo_tratador_urls || [])]));
+    const arr = Array.from(
+      new Set([...(grupo?.evidencia_conclusao_urls || []), ...(grupo?.anexo_tratador_urls || [])])
+    );
     return arr.filter(Boolean);
   }, [grupo]);
 
-  // ✅ CTRL+V: listener global enquanto modal estiver aberto
+  // ✅ Preview do arquivo selecionado (objURL)
+  const [previewObjUrl, setPreviewObjUrl] = useState(null);
+  useEffect(() => {
+    if (!evidFile) {
+      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+      setPreviewObjUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(evidFile);
+    setPreviewObjUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evidFile]);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+    };
+  }, [previewObjUrl]);
+
+  // ✅ handler robusto de paste
+  const handlePaste = (e) => {
+    try {
+      const cd = e.clipboardData;
+      if (!cd) return;
+
+      // 1) items (Chrome/Edge)
+      const items = cd.items ? Array.from(cd.items) : [];
+      const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
+
+      if (imgItem) {
+        e.preventDefault();
+        const f = imgItem.getAsFile();
+        if (f) setEvidFile(makeFileFromClipboardImage(f));
+        return;
+      }
+
+      // 2) files (fallback)
+      const files = cd.files ? Array.from(cd.files) : [];
+      const imgFile = files.find((f) => f.type?.startsWith("image/"));
+      if (imgFile) {
+        e.preventDefault();
+        setEvidFile(makeFileFromClipboardImage(imgFile));
+        return;
+      }
+    } catch {
+      // noop
+    }
+  };
+
+  // ✅ listeners enquanto modal aberto (window + document)
   useEffect(() => {
     if (!aberto) return;
 
-    const onPasteGlobal = (e) => {
-      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
-      const imgItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
-      if (!imgItem) return;
+    const onPasteWindow = (e) => handlePaste(e);
+    const onPasteDoc = (e) => handlePaste(e);
 
-      // evita colar imagem como texto em algum input
-      e.preventDefault();
+    window.addEventListener("paste", onPasteWindow);
+    document.addEventListener("paste", onPasteDoc);
 
-      const f = imgItem.getAsFile();
-      if (!f) return;
-      setEvidFile(makeFileFromClipboardImage(f));
+    return () => {
+      window.removeEventListener("paste", onPasteWindow);
+      document.removeEventListener("paste", onPasteDoc);
     };
-
-    window.addEventListener("paste", onPasteGlobal);
-    return () => window.removeEventListener("paste", onPasteGlobal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto]);
 
   useEffect(() => {
     if (aberto) {
       setObsRH("");
       setEvidFile(null);
-      setTimeout(() => pasteBoxRef.current?.focus?.(), 200);
+
+      // foco no modal para garantir paste chegando
+      setTimeout(() => modalRef.current?.focus?.(), 150);
     }
   }, [aberto]);
 
@@ -153,9 +280,12 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
 
     setLoading(true);
     try {
-      const evidUrl = await uploadToTratativasBucket(evidFile, `${grupo.tratativa_ids?.[0] || "rh"}/rh_transnet`);
+      const evidUrl = await uploadToTratativasBucket(
+        evidFile,
+        `${grupo.tratativa_ids?.[0] || "rh"}/rh_transnet`
+      );
 
-      // ✅ Fecha TODAS as tratativas consolidadas (regra: 1 lançamento fecha N tratativas)
+      // ✅ Fecha TODAS as tratativas consolidadas (1 lançamento fecha N tratativas)
       const payload = (grupo.tratativa_ids || []).map((tratativa_id) => ({
         tratativa_id,
         status_rh: "CONCLUIDA",
@@ -198,48 +328,66 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
     </div>
   );
 
-  // caixa de paste (mantida) — agora funciona pq tem listener global
-  const PasteBox = ({ file, onClear, disabled }) => {
-    return (
-      <div
-        ref={pasteBoxRef}
-        tabIndex={disabled ? -1 : 0}
-        onClick={() => {
-          if (!disabled) pasteBoxRef.current?.focus?.();
-        }}
-        className={[
-          "rounded-md border p-3 bg-gray-50 cursor-pointer select-none outline-none",
-          disabled ? "opacity-60 cursor-not-allowed" : "border-dashed hover:bg-gray-100",
-        ].join(" ")}
-        title="Clique aqui e use Ctrl+V"
-      >
-        <div className="text-sm font-medium text-gray-700">Clique e cole o Print</div>
+  // ✅ Preview RH (selecionado)
+  const renderPreviewRH = () => {
+    if (!evidFile) return <div className="text-sm text-gray-400">—</div>;
 
-        {file ? (
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div className="text-xs text-gray-600 truncate">{file.name}</div>
+    const isPdfFile = evidFile.type === "application/pdf" || evidFile.name?.toLowerCase().endsWith(".pdf");
+    if (isPdfFile) {
+      return (
+        <div className="rounded-lg border bg-white p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+              PDF
+            </span>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear();
-              }}
               className="text-xs text-red-600 hover:underline"
-              disabled={disabled}
+              onClick={() => setEvidFile(null)}
+              disabled={loading}
             >
               Remover
             </button>
           </div>
-        ) : (
-          <div className="mt-1 text-xs text-gray-500">{disabled ? "—" : "Ctrl+V para colar (print)"}</div>
-        )}
+          <div className="mt-2 text-sm text-gray-700 break-words">{evidFile.name}</div>
+        </div>
+      );
+    }
+
+    // imagem
+    return (
+      <div className="flex items-start gap-3">
+        <img
+          src={previewObjUrl}
+          alt={evidFile.name}
+          className="h-24 w-24 rounded-lg border object-cover"
+        />
+        <div className="flex-1">
+          <div className="text-sm text-gray-700 break-words">{evidFile.name}</div>
+          <button
+            type="button"
+            className="mt-2 text-xs text-red-600 hover:underline"
+            onClick={() => setEvidFile(null)}
+            disabled={loading}
+          >
+            Remover
+          </button>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow-lg overflow-hidden">
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+      // ✅ captura paste antes dos inputs (muito mais confiável)
+      onPasteCapture={handlePaste}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="w-full max-w-4xl bg-white rounded-lg shadow-lg overflow-hidden outline-none"
+      >
         {/* header */}
         <div className="p-4 border-b flex items-center justify-between">
           <div>
@@ -249,7 +397,10 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
               {" "}• Arquivo: <span className="font-semibold">{grupo.arquivo_key}</span> • {grupo.qtd_tratativas} tratativa(s)
             </div>
           </div>
-          <button onClick={onClose} className="rounded-md bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300">
+          <button
+            onClick={onClose}
+            className="rounded-md bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300"
+          >
             Fechar
           </button>
         </div>
@@ -283,25 +434,8 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
             </table>
           </div>
 
-          {/* evidências em miniatura */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <div className="text-sm text-gray-600 mb-2">Evidências (Tratador) — miniaturas</div>
-              <div className="flex flex-wrap gap-2">
-                {evidenciasTratador.length === 0 ? (
-                  <div className="text-sm text-gray-400">—</div>
-                ) : (
-                  evidenciasTratador.map((u) => <Thumb key={u} url={u} />)
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-gray-600 mb-2">Anexo (Tratador)</div>
-              {/* mostramos também, mas já está no bloco acima; aqui só mantemos um “—” se quiser */}
-              <div className="text-sm text-gray-400">—</div>
-            </div>
-          </div>
+          {/* ✅ evidências em miniatura (grid) */}
+          <EvidenciasGrid urls={evidenciasTratador} label="Evidências (Tratador) — miniaturas" />
 
           <hr />
 
@@ -317,31 +451,60 @@ export default function TratativasLancarRH({ aberto, grupo, onClose, onSaved }) 
               onChange={(e) => setObsRH(e.target.value)}
             />
 
+            {/* ✅ Layout melhor: anexar + colar + preview */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <div className="space-y-2">
                 <div className="text-sm text-gray-600">Evidência (arquivo)</div>
-                <FilePicker
-                  id="rh_evid_file"
-                  accept="image/*,application/pdf"
-                  selectedFile={evidFile}
-                  onPick={setEvidFile}
-                />
+
+                <div className="rounded-lg border bg-gray-50 p-3">
+                  <FilePicker
+                    id="rh_evid_file"
+                    accept="image/*,application/pdf"
+                    selectedFile={evidFile}
+                    onPick={setEvidFile}
+                  />
+                  <div className="mt-3">{renderPreviewRH()}</div>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <div className="text-sm text-gray-600">Evidência (print)</div>
-                <PasteBox file={evidFile} onClear={() => setEvidFile(null)} disabled={false} />
+
+                <div
+                  className={[
+                    "rounded-lg border-2 border-dashed p-4 bg-gray-50",
+                    loading ? "opacity-60" : "hover:bg-gray-100",
+                  ].join(" ")}
+                  onClick={() => modalRef.current?.focus?.()}
+                  title="Com o modal aberto, pressione Ctrl+V"
+                >
+                  <div className="text-sm font-medium text-gray-700">Cole aqui o Print do Transnet</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    Dica: com o modal aberto, use <b>Ctrl+V</b> (funciona mesmo sem clicar em um campo).
+                  </div>
+
+                  {!evidFile ? (
+                    <div className="mt-3 text-sm text-gray-400">Nenhum print colado ainda.</div>
+                  ) : (
+                    <div className="mt-3">{renderPreviewRH()}</div>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="text-xs text-gray-500 mt-2">
-              Dica: com o modal aberto, você pode colar com <b>Ctrl+V</b> (mesmo sem clicar na caixa).
+              Se não colar: confirme que você está copiando uma <b>imagem</b> (print) e não texto.
+              (Chrome/Edge ok; em alguns apps o “copiar” não envia imagem pro clipboard.)
             </div>
           </div>
         </div>
 
         <div className="p-4 border-t flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded-md bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300" disabled={loading}>
+          <button
+            onClick={onClose}
+            className="rounded-md bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300"
+            disabled={loading}
+          >
             Cancelar
           </button>
 
