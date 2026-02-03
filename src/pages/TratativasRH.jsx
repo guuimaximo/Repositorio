@@ -22,6 +22,10 @@ function brDateTime(d) {
   return dt.toLocaleString("pt-BR");
 }
 
+function getTodayStr() {
+  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+}
+
 function fileNameFromUrl(u) {
   try {
     const raw = String(u || "");
@@ -34,43 +38,20 @@ function fileNameFromUrl(u) {
   }
 }
 
-/**
- * ✅ Regra de consolidação:
- * - pegar o NOME DO ARQUIVO "depois do segundo _"
- *   ex: conclusao_1770051345532_RIC.pdf -> RIC.pdf
- *       anexo_1768500017850_ada.pdf    -> ada.pdf
- * - se não tiver 2 "_" (ex: Sha.pdf), usa o filename inteiro
- */
 function tailAfterSecondUnderscore(filename) {
   const name = String(filename || "").trim();
   if (!name) return "";
   const parts = name.split("_").filter(Boolean);
-  if (parts.length >= 3) return parts.slice(2).join("_"); // depois do 2º "_"
+  if (parts.length >= 3) return parts.slice(2).join("_");
   return name;
 }
 
-/**
- * ✅ Precisa analisar "conclusao" OU "anexo" (às vezes anexaram no lugar errado)
- * -> tenta extrair tail dos dois e escolher um "chave"
- */
 function getConsolidationFileKey(evidUrl, anexoUrl) {
-  const a = tailAfterSecondUnderscore(fileNameFromUrl(evidUrl));
-  const b = tailAfterSecondUnderscore(fileNameFromUrl(anexoUrl));
-
-  // se os dois vazios -> SEM_EVIDENCIA
-  if (!a && !b) return "SEM_EVIDENCIA";
-
-  // se um vazio -> outro
-  if (a && !b) return a;
-  if (!a && b) return b;
-
-  // se os dois existem:
-  // se igual -> ok
-  if (a === b) return a;
-
-  // diferentes -> mantém o da evidência (conclusao) por prioridade (mais comum)
-  // (mas ainda exibimos ambos dentro do grupo)
-  return a || b;
+  const legacy = tailAfterSecondUnderscore(fileNameFromUrl(evidUrl));
+  const oficial = tailAfterSecondUnderscore(fileNameFromUrl(anexoUrl));
+  if (oficial) return oficial;
+  if (legacy) return legacy;
+  return "SEM_EVIDENCIA";
 }
 
 function BadgeAcao({ acao }) {
@@ -99,7 +80,6 @@ function StatusPill({ lancado }) {
   );
 }
 
-// Cards iguais ao Central (com cor)
 function CardResumo({ titulo, valor, cor }) {
   return (
     <div className={`${cor} rounded-lg shadow p-5 text-center`}>
@@ -110,27 +90,25 @@ function CardResumo({ titulo, valor, cor }) {
 }
 
 export default function TratativasRH() {
-  useContext(AuthContext); // mantém contexto
+  useContext(AuthContext);
 
-  // filtros (estilo Central)
+  // ✅ NOVO: Filtros de data (padrão inicio = Hoje)
   const [filtros, setFiltros] = useState({
     busca: "",
-    status: "", // "" | "PENDENTE" | "CONCLUIDA"
-    acao: "", // "" | "Advertência" | "Suspensão"
+    status: "",
+    acao: "",
+    dataInicio: getTodayStr(), // 2026-02-03
+    dataFim: "",
   });
 
-  // dados consolidados
   const [loading, setLoading] = useState(false);
   const [grupos, setGrupos] = useState([]);
-
-  // modal
   const [modalOpen, setModalOpen] = useState(false);
   const [grupoSel, setGrupoSel] = useState(null);
 
   async function load() {
     setLoading(true);
     try {
-      // 1) Busca detalhes que viram RH (Advertência/Suspensão)
       const { data, error } = await supabase
         .from("tratativas_detalhes")
         .select(
@@ -140,8 +118,8 @@ export default function TratativasRH() {
           tratativa_id,
           acao_aplicada,
           observacoes,
-          imagem_tratativa,
-          anexo_tratativa,
+          imagem_tratativa, 
+          anexo_tratativa, 
           tratado_por_login,
           tratado_por_nome,
           tratativas:tratativa_id (
@@ -169,7 +147,6 @@ export default function TratativasRH() {
       const detalhes = (data || []).filter((d) => d?.tratativas?.id);
       const tratativaIds = Array.from(new Set(detalhes.map((d) => d.tratativa_id))).filter(Boolean);
 
-      // 2) Carrega status RH por tratativa_id
       const rhMap = new Map();
       if (tratativaIds.length > 0) {
         const { data: rh, error: erh } = await supabase
@@ -183,13 +160,11 @@ export default function TratativasRH() {
         (rh || []).forEach((r) => rhMap.set(r.tratativa_id, r));
       }
 
-      // 3) Consolida por (chapa + ação + arquivoKey)
       const groupsMap = new Map();
 
       for (const d of detalhes) {
         const t = d.tratativas;
         const rh = rhMap.get(d.tratativa_id) || null;
-
         const fileKey = getConsolidationFileKey(d.imagem_tratativa, d.anexo_tratativa);
 
         const motoristaChapa = String(t?.motorista_chapa || "").trim();
@@ -207,31 +182,20 @@ export default function TratativasRH() {
             motorista_chapa: motoristaChapa || "",
             acao_aplicada: acao,
             arquivo_key: fileKey,
-
-            // agregados
             qtd_tratativas: 0,
             ultima_data: d.created_at || t?.created_at || null,
-
-            // urls (para exibir miniaturas no modal)
             evidencia_conclusao_urls: new Set(),
             anexo_tratador_urls: new Set(),
-
-            // RH (grupo)
             rh_lancado: rhLancado,
             rh_obs: rh?.observacao_rh || "",
             rh_evid_url: rh?.evidencia_transnet_url || null,
             rh_lancado_em: rh?.lancado_em || null,
-
-            // ids para fechar tudo junto
             tratativa_ids: new Set(),
-
-            // lista detalhada para a tabela no modal
             itens: [],
           });
         }
 
         const g = groupsMap.get(key);
-
         g.qtd_tratativas += 1;
         g.tratativa_ids.add(d.tratativa_id);
 
@@ -243,10 +207,8 @@ export default function TratativasRH() {
         if (d.imagem_tratativa) g.evidencia_conclusao_urls.add(d.imagem_tratativa);
         if (d.anexo_tratativa) g.anexo_tratador_urls.add(d.anexo_tratativa);
 
-        // status RH do grupo: se QUALQUER uma tratativa já estiver lançada -> considera lançado (e a gente padroniza salvando para todas)
         if (rhLancado) {
           g.rh_lancado = true;
-          // preferir preencher RH com o que tiver disponível
           if (rh?.observacao_rh) g.rh_obs = rh.observacao_rh;
           if (rh?.evidencia_transnet_url) g.rh_evid_url = rh.evidencia_transnet_url;
           if (rh?.lancado_em) g.rh_lancado_em = rh.lancado_em;
@@ -256,23 +218,19 @@ export default function TratativasRH() {
           detalhe_id: d.id,
           detalhe_created_at: d.created_at,
           tratativa_id: d.tratativa_id,
-
           tipo_ocorrencia: t?.tipo_ocorrencia || "",
           linha: t?.linha || "",
           prioridade: t?.prioridade || "",
           setor_origem: t?.setor_origem || "",
           data_ocorrido: t?.data_ocorrido || null,
           hora_ocorrido: t?.hora_ocorrido || "",
-
           observacoes_tratador: d.observacoes || "",
           tratado_por_nome: d.tratado_por_nome || d.tratado_por_login || "—",
-
           evidencia_conclusao_url: d.imagem_tratativa || null,
           anexo_tratador_url: d.anexo_tratativa || null,
         });
       }
 
-      // 4) normaliza sets e ordena
       const mergedGroups = Array.from(groupsMap.values()).map((g) => ({
         ...g,
         evidencia_conclusao_urls: Array.from(g.evidencia_conclusao_urls),
@@ -295,25 +253,40 @@ export default function TratativasRH() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // filtros
   const filtered = useMemo(() => {
     const q = norm(filtros.busca);
+    const di = filtros.dataInicio ? new Date(filtros.dataInicio) : null;
+    const df = filtros.dataFim ? new Date(filtros.dataFim) : null;
+
+    // Ajuste fim do dia para dataFim
+    if (df) {
+      df.setDate(df.getDate() + 1);
+      df.setMilliseconds(-1);
+    }
 
     return grupos.filter((g) => {
+      // 1. Filtro de Status
       if (filtros.status === "PENDENTE" && g.rh_lancado) return false;
       if (filtros.status === "CONCLUIDA" && !g.rh_lancado) return false;
 
+      // 2. Filtro de Ação
       if (filtros.acao && g.acao_aplicada !== filtros.acao) return false;
 
-      if (!q) return true;
+      // 3. ✅ Filtro de Data (baseado na ultima_data do grupo)
+      if (g.ultima_data) {
+        const dt = new Date(g.ultima_data);
+        if (di && dt < di) return false;
+        if (df && dt > df) return false;
+      }
 
+      // 4. Busca textual
+      if (!q) return true;
       const blob = norm(
         [
           g.motorista_nome,
           g.motorista_chapa,
           g.acao_aplicada,
           g.arquivo_key,
-          // inclui ocorrências (para buscar)
           ...(g.itens || []).map((i) => i.tipo_ocorrencia),
           ...(g.itens || []).map((i) => i.linha),
           ...(g.itens || []).map((i) => i.setor_origem),
@@ -321,7 +294,6 @@ export default function TratativasRH() {
           .filter(Boolean)
           .join(" ")
       );
-
       return blob.includes(q);
     });
   }, [grupos, filtros]);
@@ -332,7 +304,8 @@ export default function TratativasRH() {
     let adv = 0;
     let susp = 0;
 
-    grupos.forEach((g) => {
+    // Calcula baseado no filtered para refletir as datas
+    filtered.forEach((g) => {
       if (g.rh_lancado) concl += 1;
       else pend += 1;
 
@@ -340,11 +313,17 @@ export default function TratativasRH() {
       if (g.acao_aplicada === "Suspensão") susp += 1;
     });
 
-    return { pend, concl, adv, susp, total: grupos.length };
-  }, [grupos]);
+    return { pend, concl, adv, susp, total: filtered.length };
+  }, [filtered]);
 
   function limparFiltros() {
-    setFiltros({ busca: "", status: "", acao: "" });
+    setFiltros({
+      busca: "",
+      status: "",
+      acao: "",
+      dataInicio: "", // Limpa tudo
+      dataFim: "",
+    });
   }
 
   function openGroup(g) {
@@ -361,16 +340,33 @@ export default function TratativasRH() {
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4 text-gray-700">Tratativas RH</h1>
 
-      {/* 🔍 Filtros (igual Central) */}
+      {/* 🔍 Filtros */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        {/* Grid ajustado para caber datas */}
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input
             type="text"
-            placeholder="Buscar (motorista, chapa, ocorrência, arquivo...)"
+            placeholder="Buscar..."
             value={filtros.busca}
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
+            className="border rounded-md px-3 py-2 col-span-2"
+          />
+
+          {/* ✅ Inputs de Data */}
+          <input
+            type="date"
+            title="Data Início"
+            value={filtros.dataInicio}
+            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
+          <input
+            type="date"
+            title="Data Fim"
+            value={filtros.dataFim}
+            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
             className="border rounded-md px-3 py-2"
           />
 
@@ -379,7 +375,7 @@ export default function TratativasRH() {
             onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
             className="border rounded-md px-3 py-2 bg-white"
           >
-            <option value="">Todos os Status</option>
+            <option value="">Status</option>
             <option value="PENDENTE">Pendentes</option>
             <option value="CONCLUIDA">Concluídas</option>
           </select>
@@ -389,16 +385,18 @@ export default function TratativasRH() {
             onChange={(e) => setFiltros({ ...filtros, acao: e.target.value })}
             className="border rounded-md px-3 py-2 bg-white"
           >
-            <option value="">Todas (RH)</option>
+            <option value="">Ação</option>
             <option value="Advertência">Advertência</option>
             <option value="Suspensão">Suspensão</option>
           </select>
+        </div>
 
-          <div className="text-sm text-gray-600 flex items-center">
-            {loading ? "Carregando..." : `${filtered.length} registros`}
+        <div className="flex justify-between items-center mt-3">
+          <div className="text-sm text-gray-600">
+            {loading ? "Carregando..." : `${filtered.length} registros (Filtrados)`}
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex gap-2">
             <button
               onClick={limparFiltros}
               className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
@@ -416,7 +414,7 @@ export default function TratativasRH() {
         </div>
       </div>
 
-      {/* 🧾 Cards (com cor e estilo Central) */}
+      {/* 🧾 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
         <CardResumo titulo="Total" valor={counts.total} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes RH" valor={counts.pend} cor="bg-yellow-100 text-yellow-700" />
@@ -425,7 +423,7 @@ export default function TratativasRH() {
         <CardResumo titulo="Suspensões" valor={counts.susp} cor="bg-red-50 text-red-700" />
       </div>
 
-      {/* 📋 Lista (tabela azul igual Central) */}
+      {/* 📋 Lista */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
@@ -434,8 +432,7 @@ export default function TratativasRH() {
               <th className="py-2 px-3 text-left">Motorista</th>
               <th className="py-2 px-3 text-left">Chapa</th>
               <th className="py-2 px-3 text-left">Ação</th>
-              {/* ✅ removida coluna Arquivo */}
-              <th className="py-2 px-3 text-center">Qtd. Tratativas</th>
+              <th className="py-2 px-3 text-center">Qtd.</th>
               <th className="py-2 px-3 text-left">Status RH</th>
               <th className="py-2 px-3 text-left">Ações</th>
             </tr>
@@ -451,7 +448,7 @@ export default function TratativasRH() {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan="7" className="text-center p-4 text-gray-500">
-                  Nenhuma tratativa RH encontrada.
+                  Nenhuma tratativa RH encontrada neste período.
                 </td>
               </tr>
             ) : (
@@ -463,13 +460,10 @@ export default function TratativasRH() {
                   <td className="py-2 px-3">
                     <BadgeAcao acao={g.acao_aplicada} />
                   </td>
-
                   <td className="py-2 px-3 text-center font-semibold">{g.qtd_tratativas}</td>
-
                   <td className="py-2 px-3">
                     <StatusPill lancado={g.rh_lancado} />
                   </td>
-
                   <td className="py-2 px-3">
                     <button
                       onClick={() => openGroup(g)}
@@ -488,7 +482,6 @@ export default function TratativasRH() {
         </table>
       </div>
 
-      {/* MODAIS */}
       {modalOpen && grupoSel && !grupoSel.rh_lancado && (
         <TratativasLancarRH
           aberto={modalOpen}
