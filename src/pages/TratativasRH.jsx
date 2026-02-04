@@ -27,10 +27,6 @@ function brDateTime(d) {
   return dt.toLocaleString("pt-BR");
 }
 
-function getTodayStr() {
-  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-}
-
 function fileNameFromUrl(u) {
   try {
     const raw = String(u || "");
@@ -97,12 +93,12 @@ function CardResumo({ titulo, valor, cor }) {
 export default function TratativasRH() {
   useContext(AuthContext);
 
-  // Filtros
+  // ✅ Filtros: Regra de data fixa 03/02/2026
   const [filtros, setFiltros] = useState({
     busca: "",
     status: "",
     acao: "",
-    dataInicio: getTodayStr(), // 2026-02-03
+    dataInicio: "2026-02-03", 
     dataFim: "",
   });
 
@@ -111,13 +107,11 @@ export default function TratativasRH() {
   const [modalOpen, setModalOpen] = useState(false);
   const [grupoSel, setGrupoSel] = useState(null);
 
-  // ✅ Botão topo (default: Pendentes)
   const [viewMode, setViewMode] = useState(VIEW.OPEN_ONLY);
 
-  // ✅ Ordenação da tabela
   const [sort, setSort] = useState({
-    key: "default", // default | ultima_data | motorista_nome | motorista_chapa | acao_aplicada | qtd_tratativas | status
-    dir: "asc", // asc | desc
+    key: "default",
+    dir: "asc",
   });
 
   async function load() {
@@ -234,7 +228,6 @@ export default function TratativasRH() {
         itens: (g.itens || []).sort((a, b) => new Date(b.detalhe_created_at) - new Date(a.detalhe_created_at)),
       }));
 
-      // Ordenação padrão inicial (mais recente primeiro)
       mergedGroups.sort((a, b) => new Date(b.ultima_data || 0) - new Date(a.ultima_data || 0));
       setGrupos(mergedGroups);
     } catch (e) {
@@ -246,10 +239,8 @@ export default function TratativasRH() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ====== 1. Filtragem ======
   const filtered = useMemo(() => {
     const q = norm(filtros.busca);
     const di = filtros.dataInicio ? new Date(filtros.dataInicio) : null;
@@ -260,28 +251,22 @@ export default function TratativasRH() {
       df.setMilliseconds(-1);
     }
 
-    // Filtra primeiro pelo ViewMode (Botões do Topo)
     let list = grupos;
     if (viewMode === VIEW.OPEN_ONLY) {
       list = list.filter((g) => !g.rh_lancado);
     }
 
     return list.filter((g) => {
-      // Filtro de Status (Dropdown)
       if (filtros.status === "PENDENTE" && g.rh_lancado) return false;
       if (filtros.status === "CONCLUIDA" && !g.rh_lancado) return false;
-
-      // Filtro de Ação
       if (filtros.acao && g.acao_aplicada !== filtros.acao) return false;
 
-      // Filtro de Data
       if (g.ultima_data) {
         const dt = new Date(g.ultima_data);
         if (di && dt < di) return false;
         if (df && dt > df) return false;
       }
 
-      // Busca textual
       if (!q) return true;
       const blob = norm(
         [
@@ -300,22 +285,11 @@ export default function TratativasRH() {
     });
   }, [grupos, filtros, viewMode]);
 
-  // ====== 2. Ordenação ======
-  function stringComparator(getter, dir, a, b) {
-    const va = norm(getter(a)).toLowerCase();
-    const vb = norm(getter(b)).toLowerCase();
-    const r = va.localeCompare(vb, "pt-BR");
-    return dir === "asc" ? r : -r;
-  }
-
   const sortedGroups = useMemo(() => {
     const rows = [...filtered];
-
     if (sort.key === "default") {
-        // Default: Mais recentes primeiro
         return rows.sort((a, b) => new Date(b.ultima_data || 0) - new Date(a.ultima_data || 0));
     }
-
     rows.sort((a, b) => {
         if (sort.key === "ultima_data") {
             const da = a.ultima_data ? new Date(a.ultima_data).getTime() : 0;
@@ -324,20 +298,28 @@ export default function TratativasRH() {
             return sort.dir === "asc" ? r : -r;
         }
         if (sort.key === "motorista_nome") {
-            return stringComparator(x => x.motorista_nome, sort.dir, a, b);
+            const va = norm(a.motorista_nome);
+            const vb = norm(b.motorista_nome);
+            const r = va.localeCompare(vb, "pt-BR");
+            return sort.dir === "asc" ? r : -r;
         }
         if (sort.key === "motorista_chapa") {
-            return stringComparator(x => x.motorista_chapa, sort.dir, a, b);
+            const va = norm(a.motorista_chapa);
+            const vb = norm(b.motorista_chapa);
+            const r = va.localeCompare(vb, "pt-BR");
+            return sort.dir === "asc" ? r : -r;
         }
         if (sort.key === "acao_aplicada") {
-            return stringComparator(x => x.acao_aplicada, sort.dir, a, b);
+            const va = norm(a.acao_aplicada);
+            const vb = norm(b.acao_aplicada);
+            const r = va.localeCompare(vb, "pt-BR");
+            return sort.dir === "asc" ? r : -r;
         }
         if (sort.key === "qtd_tratativas") {
             const r = (a.qtd_tratativas || 0) - (b.qtd_tratativas || 0);
             return sort.dir === "asc" ? r : -r;
         }
         if (sort.key === "status") {
-            // false (pendente) < true (concluida)
             const sa = a.rh_lancado ? 1 : 0;
             const sb = b.rh_lancado ? 1 : 0;
             const r = sa - sb;
@@ -345,7 +327,6 @@ export default function TratativasRH() {
         }
         return 0;
     });
-
     return rows;
   }, [filtered, sort]);
 
@@ -353,42 +334,32 @@ export default function TratativasRH() {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
       if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: "default", dir: "asc" }; // terceira volta ao padrão
+      return { key: "default", dir: "asc" };
     });
   }
 
   function SortIcon({ colKey }) {
-    if (sort.key !== colKey) return <span className="ml-1 text-white/70">↕</span>;
-    if (sort.key === "default") return <span className="ml-1 text-white/70">↕</span>;
+    if (sort.key !== colKey || sort.key === "default") return <span className="ml-1 text-white/70">↕</span>;
     return <span className="ml-1">{sort.dir === "asc" ? "↑" : "↓"}</span>;
   }
 
-  // ====== 3. Contadores ======
   const counts = useMemo(() => {
-    let pend = 0;
-    let concl = 0;
-    let adv = 0;
-    let susp = 0;
-
-    // Calcula baseado no filtered (respeita datas e busca, mas ignora o toggle de viewMode apenas para o Total Global ser mais informativo, ou usamos filtered direto?)
-    // Vamos usar filtered direto para refletir o que está na tela
+    let pend = 0; let concl = 0; let adv = 0; let susp = 0;
     sortedGroups.forEach((g) => {
-      if (g.rh_lancado) concl += 1;
-      else pend += 1;
-
+      if (g.rh_lancado) concl += 1; else pend += 1;
       if (g.acao_aplicada === "Advertência") adv += 1;
       if (g.acao_aplicada === "Suspensão") susp += 1;
     });
-
     return { pend, concl, adv, susp, total: sortedGroups.length };
   }, [sortedGroups]);
 
+  // ✅ Limpar filtros voltando para a regra de 03/02/2026
   function limparFiltros() {
     setFiltros({
       busca: "",
       status: "",
       acao: "",
-      dataInicio: "",
+      dataInicio: "2026-02-03",
       dataFim: "",
     });
   }
@@ -407,39 +378,24 @@ export default function TratativasRH() {
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-2xl font-bold text-gray-700">Tratativas RH</h1>
-
-        {/* ✅ Botões simples no canto (Igual Central) */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode(VIEW.ALL)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
-              viewMode === VIEW.ALL
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+            className={["px-3 py-2 rounded-md text-sm border", viewMode === VIEW.ALL ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300"].join(" ")}
           >
             VER TUDO
           </button>
-
           <button
             onClick={() => setViewMode(VIEW.OPEN_ONLY)}
-            className={[
-              "px-3 py-2 rounded-md text-sm border",
-              viewMode === VIEW.OPEN_ONLY
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300",
-            ].join(" ")}
+            className={["px-3 py-2 rounded-md text-sm border", viewMode === VIEW.OPEN_ONLY ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300"].join(" ")}
           >
             PENDENTES DO RH
           </button>
         </div>
       </div>
 
-      {/* 🔍 Filtros */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Filtros</h2>
-
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input
             type="text"
@@ -448,22 +404,18 @@ export default function TratativasRH() {
             onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
             className="border rounded-md px-3 py-2 col-span-2"
           />
-
           <input
             type="date"
-            title="Data Início"
             value={filtros.dataInicio}
             onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
             className="border rounded-md px-3 py-2"
           />
           <input
             type="date"
-            title="Data Fim"
             value={filtros.dataFim}
             onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
             className="border rounded-md px-3 py-2"
           />
-
           <select
             value={filtros.status}
             onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
@@ -473,7 +425,6 @@ export default function TratativasRH() {
             <option value="PENDENTE">Pendentes</option>
             <option value="CONCLUIDA">Concluídas</option>
           </select>
-
           <select
             value={filtros.acao}
             onChange={(e) => setFiltros({ ...filtros, acao: e.target.value })}
@@ -484,36 +435,19 @@ export default function TratativasRH() {
             <option value="Suspensão">Suspensão</option>
           </select>
         </div>
-
         <div className="flex justify-between items-center mt-3">
           <div className="text-sm text-gray-600">
             {loading ? "Carregando..." : `${sortedGroups.length} registros (Filtrados)`}
           </div>
-
           <div className="flex gap-2">
-            <button
-              onClick={limparFiltros}
-              className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
-            >
-              Limpar
-            </button>
-            <button
-              onClick={load}
-              disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-            >
+            <button onClick={limparFiltros} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300">Limpar</button>
+            <button onClick={load} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
               {loading ? "Atualizando..." : "Atualizar"}
             </button>
           </div>
         </div>
-        
-        {/* Aviso de Ordenação */}
-        <div className="mt-4 text-xs text-gray-500">
-            Ordenação padrão: <b>Mais recentes</b>. Clique no cabeçalho da tabela para ordenar.
-        </div>
       </div>
 
-      {/* 🧾 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
         <CardResumo titulo="Total na Tela" valor={counts.total} cor="bg-blue-100 text-blue-700" />
         <CardResumo titulo="Pendentes RH" valor={counts.pend} cor="bg-yellow-100 text-yellow-700" />
@@ -522,90 +456,37 @@ export default function TratativasRH() {
         <CardResumo titulo="Suspensões" valor={counts.susp} cor="bg-red-50 text-red-700" />
       </div>
 
-      {/* 📋 Lista */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-blue-600 text-white">
             <tr>
-              <th 
-                className="py-2 px-3 text-left cursor-pointer select-none"
-                onClick={() => toggleSort("ultima_data")}
-              >
-                Data <SortIcon colKey="ultima_data" />
-              </th>
-              
-              <th 
-                className="py-2 px-3 text-left cursor-pointer select-none"
-                onClick={() => toggleSort("motorista_nome")}
-              >
-                Motorista <SortIcon colKey="motorista_nome" />
-              </th>
-
-              <th 
-                className="py-2 px-3 text-left cursor-pointer select-none"
-                onClick={() => toggleSort("motorista_chapa")}
-              >
-                Chapa <SortIcon colKey="motorista_chapa" />
-              </th>
-
-              <th 
-                className="py-2 px-3 text-left cursor-pointer select-none"
-                onClick={() => toggleSort("acao_aplicada")}
-              >
-                Ação <SortIcon colKey="acao_aplicada" />
-              </th>
-
-              <th 
-                className="py-2 px-3 text-center cursor-pointer select-none"
-                onClick={() => toggleSort("qtd_tratativas")}
-              >
-                Qtd. <SortIcon colKey="qtd_tratativas" />
-              </th>
-
-              <th 
-                className="py-2 px-3 text-left cursor-pointer select-none"
-                onClick={() => toggleSort("status")}
-              >
-                Status RH <SortIcon colKey="status" />
-              </th>
-
+              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("ultima_data")}>Data <SortIcon colKey="ultima_data" /></th>
+              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_nome")}>Motorista <SortIcon colKey="motorista_nome" /></th>
+              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("motorista_chapa")}>Chapa <SortIcon colKey="motorista_chapa" /></th>
+              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("acao_aplicada")}>Ação <SortIcon colKey="acao_aplicada" /></th>
+              <th className="py-2 px-3 text-center cursor-pointer select-none" onClick={() => toggleSort("qtd_tratativas")}>Qtd. <SortIcon colKey="qtd_tratativas" /></th>
+              <th className="py-2 px-3 text-left cursor-pointer select-none" onClick={() => toggleSort("status")}>Status RH <SortIcon colKey="status" /></th>
               <th className="py-2 px-3 text-left">Ações</th>
             </tr>
           </thead>
-
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
-                  Carregando...
-                </td>
-              </tr>
+              <tr><td colSpan="7" className="text-center p-4 text-gray-500">Carregando...</td></tr>
             ) : sortedGroups.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="text-center p-4 text-gray-500">
-                  Nenhuma tratativa RH encontrada neste período.
-                </td>
-              </tr>
+              <tr><td colSpan="7" className="text-center p-4 text-gray-500">Nenhuma tratativa encontrada para este período.</td></tr>
             ) : (
               sortedGroups.map((g) => (
                 <tr key={g.key} className="border-t hover:bg-gray-50">
                   <td className="py-2 px-3 text-gray-600">{brDateTime(g.ultima_data)}</td>
                   <td className="py-2 px-3 text-gray-700 font-medium">{g.motorista_nome || "—"}</td>
                   <td className="py-2 px-3 text-gray-700">{g.motorista_chapa || "—"}</td>
-                  <td className="py-2 px-3">
-                    <BadgeAcao acao={g.acao_aplicada} />
-                  </td>
+                  <td className="py-2 px-3"><BadgeAcao acao={g.acao_aplicada} /></td>
                   <td className="py-2 px-3 text-center font-semibold">{g.qtd_tratativas}</td>
-                  <td className="py-2 px-3">
-                    <StatusPill lancado={g.rh_lancado} />
-                  </td>
+                  <td className="py-2 px-3"><StatusPill lancado={g.rh_lancado} /></td>
                   <td className="py-2 px-3">
                     <button
                       onClick={() => openGroup(g)}
-                      className={[
-                        "px-3 py-1 rounded-md text-sm font-semibold text-white",
-                        g.rh_lancado ? "bg-gray-600 hover:bg-gray-700" : "bg-emerald-600 hover:bg-emerald-700",
-                      ].join(" ")}
+                      className={["px-3 py-1 rounded-md text-sm font-semibold text-white", g.rh_lancado ? "bg-gray-600 hover:bg-gray-700" : "bg-emerald-600 hover:bg-emerald-700"].join(" ")}
                     >
                       {g.rh_lancado ? "Consultar" : "Lançar"}
                     </button>
@@ -618,17 +499,8 @@ export default function TratativasRH() {
       </div>
 
       {modalOpen && grupoSel && !grupoSel.rh_lancado && (
-        <TratativasLancarRH
-          aberto={modalOpen}
-          grupo={grupoSel}
-          onClose={closeModal}
-          onSaved={async () => {
-            closeModal();
-            await load();
-          }}
-        />
+        <TratativasLancarRH aberto={modalOpen} grupo={grupoSel} onClose={closeModal} onSaved={async () => { closeModal(); await load(); }} />
       )}
-
       {modalOpen && grupoSel && grupoSel.rh_lancado && (
         <TratativasConsultarRH aberto={modalOpen} grupo={grupoSel} onClose={closeModal} />
       )}
