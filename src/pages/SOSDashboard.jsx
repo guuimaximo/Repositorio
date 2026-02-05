@@ -16,13 +16,12 @@ import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
 // ✅ CORES VIVAS (alerta) – bem contrastado no fundo escuro
 const COLORS = {
-  RECOLHEU: "#EF4444",      // vermelho vivo
-  SOS: "#F59E0B",           // amarelo/âmbar vivo
-  AVARIA: "#22C55E",        // verde vivo
-  TROCA: "#3B82F6",         // azul vivo
-  IMPROCEDENTE: "#E5E7EB",  // cinza claro
+  RECOLHEU: "#EF4444", // vermelho vivo
+  SOS: "#F59E0B", // amarelo/âmbar vivo
+  AVARIA: "#22C55E", // verde vivo
+  TROCA: "#3B82F6", // azul vivo
+  IMPROCEDENTE: "#E5E7EB", // cinza claro
 };
-
 
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
 
@@ -169,7 +168,7 @@ export default function SOSDashboard() {
 
   const [modoExibicao, setModoExibicao] = useState(false);
   const [realtimeOn, setRealtimeOn] = useState(false);
-  
+
   const debounceRef = useRef(null);
   const channelRef = useRef(null);
   const modoRef = useRef(false); // Para controlar FS vs State
@@ -399,8 +398,7 @@ export default function SOSDashboard() {
     ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
     : "min-h-screen bg-[#0b0f14] text-white p-3 overflow-y-scroll";
 
-  const panel =
-    "border border-white/10 rounded-xl bg-[#15191e] shadow-sm";
+  const panel = "border border-white/10 rounded-xl bg-[#15191e] shadow-sm";
   const smallText = "text-xs text-white/60 font-medium uppercase tracking-wider";
   const titleText = "text-sm font-bold text-white tracking-wide";
 
@@ -409,199 +407,276 @@ export default function SOSDashboard() {
   // =================================================================
   const ExibicaoLayout = (
     <div className="h-full w-full p-4 grid grid-cols-12 gap-4">
-      
       {/* --- COLUNA ESQUERDA (SIDEBAR) --- */}
       <div className="col-span-3 flex flex-col gap-4 h-full min-h-0">
-        
         {/* Lista de Ocorrências */}
         <div className={`${panel} flex-1 flex flex-col min-h-0 p-4`}>
           <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
             <span className={titleText}>OCORRÊNCIA</span>
             <span className={titleText}>TOTAL</span>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-             {TIPOS_GRAFICO.map((t) => (
-                <div
-                  key={t}
-                  className="flex items-center justify-between px-3 py-3 rounded-lg"
-                  style={{
-                    background: "rgba(255,255,255,0.03)",
-                    borderLeft: `4px solid ${COLORS[t]}`,
-                  }}
-                >
-                  <span className="text-sm font-medium text-gray-200">{t}</span>
-                  <span className="text-lg font-bold">{cards.porTipo?.[t] || 0}</span>
-                </div>
-              ))}
+            {TIPOS_GRAFICO.map((t) => (
+              <div
+                key={t}
+                className="flex items-center justify-between px-3 py-3 rounded-lg"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  borderLeft: `4px solid ${COLORS[t]}`,
+                }}
+              >
+                <span className="text-sm font-medium text-gray-200">{t}</span>
+                <span className="text-lg font-bold">
+                  {cards.porTipo?.[t] || 0}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* KPIs (Total e KM) */}
         <div className="grid grid-cols-2 gap-3 shrink-0">
-            <div className={`${panel} p-4 flex flex-col justify-center`}>
-              <div className={smallText}>TOTAL</div>
-              <div className="text-3xl font-extrabold text-white mt-1">{totalKPI}</div>
+          <div className={`${panel} p-4 flex flex-col justify-center`}>
+            <div className={smallText}>TOTAL</div>
+            <div className="text-3xl font-extrabold text-white mt-1">
+              {totalKPI}
             </div>
-            <div className={`${panel} p-4 flex flex-col justify-center`}>
-              <div className={smallText}>KM TOTAL</div>
-              <div className="text-xl font-extrabold text-white mt-1">
-                {Number(kmPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
-              </div>
+          </div>
+          <div className={`${panel} p-4 flex flex-col justify-center`}>
+            <div className={smallText}>KM TOTAL</div>
+            <div className="text-xl font-extrabold text-white mt-1">
+              {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                maximumFractionDigits: 0,
+              })}
             </div>
+          </div>
         </div>
 
         {/* MKBF + Checkbox Tempo Real */}
         <div className={`${panel} p-4 shrink-0`}>
-             <div className={smallText}>MKBF</div>
-             <div className="text-4xl font-extrabold text-white my-2">
-                {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
-             </div>
-             <div className="text-xs text-gray-400">
-                Ocorrências: <span className="text-white font-bold">{ocorrenciasValidasPeriodo || 0}</span>
-             </div>
+          <div className={smallText}>MKBF</div>
+          <div className="text-4xl font-extrabold text-white my-2">
+            {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+              maximumFractionDigits: 2,
+            })}
+          </div>
+          <div className="text-xs text-gray-400">
+            Ocorrências:{" "}
+            <span className="text-white font-bold">
+              {ocorrenciasValidasPeriodo || 0}
+            </span>
+          </div>
 
-             <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={realtimeOn}
-                    onChange={(e) => setRealtimeOn(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
-                  />
-                  Tempo real
-                </label>
-                
-                {/* Botão para sair se precisar */}
-                <button onClick={toggleModoExibicao} className="text-xs text-white/30 hover:text-white hover:underline">
-                  Sair
-                </button>
-             </div>
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
+              <input
+                type="checkbox"
+                checked={realtimeOn}
+                onChange={(e) => setRealtimeOn(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
+              />
+              Tempo real
+            </label>
+
+            {/* Botão para sair se precisar */}
+            <button
+              onClick={toggleModoExibicao}
+              className="text-xs text-white/30 hover:text-white hover:underline"
+            >
+              Sair
+            </button>
+          </div>
         </div>
       </div>
 
       {/* --- COLUNA DIREITA (CONTEÚDO) --- */}
       <div className="col-span-9 grid grid-rows-[55%_1fr] gap-4 h-full min-h-0">
-        
         {/* GRÁFICO */}
         <div className={`${panel} w-full h-full p-4 flex flex-col min-h-0`}>
-            <div className="flex items-center justify-between mb-2 shrink-0">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <span className={titleText}>Intervenções por dia</span>
-                    {/* Select Discreto para Mês */}
-                    <select
-                      value={mesRef}
-                      onChange={(e) => setMesRef(e.target.value)}
-                      className="bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-400 outline-none hover:bg-black/50 transition-colors"
-                    >
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const d = new Date();
-                        d.setMonth(d.getMonth() - i);
-                        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                        return <option key={ym} value={ym}>{ym}</option>;
-                      })}
-                    </select>
-                  </div>
-                  <div className={smallText + " mt-1"}>
-                    Acumulado do dia ({hoje}): <span className="font-bold text-white">{acumuladoDia}</span>
-                  </div>
-                </div>
-                <div className={smallText}>
-                    {lastUpdate ? lastUpdate.toLocaleTimeString() : ""}
-                </div>
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className={titleText}>Intervenções por dia</span>
+                {/* Select Discreto para Mês */}
+                <select
+                  value={mesRef}
+                  onChange={(e) => setMesRef(e.target.value)}
+                  className="bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-400 outline-none hover:bg-black/50 transition-colors"
+                >
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() - i);
+                    const ym = `${d.getFullYear()}-${String(
+                      d.getMonth() + 1
+                    ).padStart(2, "0")}`;
+                    return (
+                      <option key={ym} value={ym}>
+                        {ym}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div className={smallText + " mt-1"}>
+                Acumulado do dia ({hoje}):{" "}
+                <span className="font-bold text-white">{acumuladoDia}</span>
+              </div>
             </div>
-            
-            <div className="flex-1 min-h-0 w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={series} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis 
-                    dataKey="day" 
-                    tick={{ fontSize: 10, fill: "#9ca3af" }} 
-                    axisLine={false} 
-                    tickLine={false} 
-                    dy={10}
-                  />
-                  <YAxis 
-                    allowDecimals={false} 
-                    tick={{ fontSize: 10, fill: "#9ca3af" }} 
-                    axisLine={false} 
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ 
-                        background: "#111827", 
-                        border: "1px solid rgba(255,255,255,0.1)", 
-                        borderRadius: "8px",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.5)" 
-                    }}
-                    labelStyle={{ color: "#9ca3af", marginBottom: "0.5rem", fontSize: "12px" }}
-                  />
-                  <Legend verticalAlign="top" align="right" height={30} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "12px", color: "#9ca3af" }} />
-                  {TIPOS_GRAFICO.map((t) => (
-                    <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} maxBarSize={60}>
-                      <LabelList 
-                        dataKey={t} 
-                        position="center" 
-                        formatter={(v) => (v > 0 ? v : "")} 
-                        fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"} 
-                        fontSize={11} 
-                        fontWeight="bold" 
-                      />
-                    </Bar>
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+            <div className={smallText}>
+              {lastUpdate ? lastUpdate.toLocaleTimeString() : ""}
             </div>
+          </div>
+
+          <div className="flex-1 min-h-0 w-full mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={series}
+                margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.05)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                  contentStyle={{
+                    background: "#111827",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
+                  }}
+                  labelStyle={{
+                    color: "#9ca3af",
+                    marginBottom: "0.5rem",
+                    fontSize: "12px",
+                  }}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  height={30}
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "12px", color: "#9ca3af" }}
+                />
+                {TIPOS_GRAFICO.map((t) => (
+                  <Bar
+                    key={t}
+                    dataKey={t}
+                    stackId="a"
+                    fill={COLORS[t]}
+                    maxBarSize={60}
+                  >
+                    <LabelList
+                      dataKey={t}
+                      position="center"
+                      formatter={(v) => (v > 0 ? v : "")}
+                      fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
+                      fontSize={11}
+                      fontWeight="bold"
+                    />
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* TABELA */}
-        <div className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}>
-           <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">
-              <div className="font-semibold text-white text-sm">Intervenções do dia</div>
-              <div className="px-2 py-0.5 rounded bg-white/10 text-xs font-bold text-gray-300">
-                 Total hoje: {doDia.length}
-              </div>
-           </div>
-           
-           <div className="flex-1 overflow-auto">
-              <table className="w-full text-left text-sm text-gray-300">
-                <thead className="sticky top-0 bg-[#1a1f26] z-10 text-xs uppercase font-semibold text-gray-500">
-                  <tr>
-                    <th className="py-3 px-4">Etiqueta</th>
-                    <th className="py-3 px-4">Data</th>
-                    <th className="py-3 px-4">Hora</th>
-                    <th className="py-3 px-4">Reclamação</th>
-                    <th className="py-3 px-4 text-right">Tipo Ocorrência</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {loading ? (
-                    <tr><td colSpan="5" className="py-8 text-center text-gray-500">Carregando...</td></tr>
-                  ) : doDia.length === 0 ? (
-                     <tr><td colSpan="5" className="py-8 text-center text-gray-500">Nenhuma intervenção hoje.</td></tr>
-                  ) : (
-                    doDia.map((r) => (
-                      <tr key={r.id} className="hover:bg-white/5 transition-colors">
-                        <td className="py-2.5 px-4 font-mono text-white">{r.numero_sos || "-"}</td>
-                        <td className="py-2.5 px-4 text-gray-400">{r.data_sos || "-"}</td>
-                        <td className="py-2.5 px-4 text-gray-400">{r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}</td>
-                        <td className="py-2.5 px-4 text-white truncate max-w-[350px]" title={r.reclamacao_motorista}>{r.reclamacao_motorista || "-"}</td>
-                        <td className="py-2.5 px-4 text-right">
-                           <span className="font-bold text-xs uppercase tracking-wide" style={{ color: COLORS[normalizeTipo(r.ocorrencia)] || "#fff" }}>
-                              {labelOcorrenciaTabela(r.ocorrencia)}
-                           </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-           </div>
-        </div>
+        <div
+          className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}
+        >
+          <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">
+            <div className="font-semibold text-white text-sm">
+              Intervenções do dia
+            </div>
+            <div className="px-2 py-0.5 rounded bg-white/10 text-xs font-bold text-gray-300">
+              Total hoje: {doDia.length}
+            </div>
+          </div>
 
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-sm text-gray-300">
+              <thead className="sticky top-0 bg-[#1a1f26] z-10 text-xs uppercase font-semibold text-gray-500">
+                <tr>
+                  <th className="py-3 px-4">Etiqueta</th>
+                  <th className="py-3 px-4">Carro</th>
+                  <th className="py-3 px-4">Data</th>
+                  <th className="py-3 px-4">Hora</th>
+                  <th className="py-3 px-4">Reclamação</th>
+                  <th className="py-3 px-4 text-right">Tipo Ocorrência</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="py-8 text-center text-gray-500">
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : doDia.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="py-8 text-center text-gray-500">
+                      Nenhuma intervenção hoje.
+                    </td>
+                  </tr>
+                ) : (
+                  doDia.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="hover:bg-white/5 transition-colors"
+                    >
+                      <td className="py-2.5 px-4 font-mono text-white">
+                        {r.numero_sos || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 text-gray-300">
+                        {r.veiculo || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 text-gray-400">
+                        {r.data_sos || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 text-gray-400">
+                        {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}
+                      </td>
+                      <td
+                        className="py-2.5 px-4 text-white truncate max-w-[350px]"
+                        title={r.reclamacao_motorista}
+                      >
+                        {r.reclamacao_motorista || "-"}
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <span
+                          className="font-bold text-xs uppercase tracking-wide"
+                          style={{
+                            color:
+                              COLORS[normalizeTipo(r.ocorrencia)] || "#fff",
+                          }}
+                        >
+                          {labelOcorrenciaTabela(r.ocorrencia)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -840,6 +915,7 @@ export default function SOSDashboard() {
               >
                 <tr className="text-white/80">
                   <th className="py-2 px-3 text-left">ETIQUETA</th>
+                  <th className="py-2 px-3 text-left">CARRO</th>
                   <th className="py-2 px-3 text-left">DATA</th>
                   <th className="py-2 px-3 text-left">HORA</th>
                   <th className="py-2 px-3 text-left">RECLAMAÇÃO</th>
@@ -849,13 +925,13 @@ export default function SOSDashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-6 text-white/70">
+                    <td colSpan="6" className="text-center py-6 text-white/70">
                       Carregando...
                     </td>
                   </tr>
                 ) : doDia.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-6 text-white/70">
+                    <td colSpan="6" className="text-center py-6 text-white/70">
                       Nenhuma intervenção encontrada para hoje.
                     </td>
                   </tr>
@@ -867,6 +943,7 @@ export default function SOSDashboard() {
                       style={{ borderColor: "rgba(255,255,255,0.10)" }}
                     >
                       <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
+                      <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
                       <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
                       <td className="py-2 px-3">
                         {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
