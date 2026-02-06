@@ -12,7 +12,7 @@ import AnaliseResumoModal from "../components/desempenho/AnaliseResumoModal";
 function daysBetween(a, b) {
   try {
     const da = new Date(a);
-    const db = new Date(b);
+    const db = b instanceof Date ? b : new Date(b);
     const diff = db.getTime() - da.getTime();
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   } catch {
@@ -77,6 +77,24 @@ function CardResumo({ titulo, valor, cor, subtitulo = null }) {
       {subtitulo ? <p className="text-xs font-medium mt-1 text-gray-600">{subtitulo}</p> : null}
     </div>
   );
+}
+
+/* ===========================
+   Storage helpers (NOVO)
+   - A tela NÃO chama prontuário pelo backend; ela abre o arquivo do BUCKET via Signed URL
+=========================== */
+const DEFAULT_BUCKET = "ordens_acompanhamento";
+const SIGNED_URL_TTL_SECONDS = 60 * 5; // 5 min
+
+async function getSignedUrl(bucket, path) {
+  if (!bucket || !path) return null;
+
+  // remove barras iniciais
+  const cleanPath = String(path).replace(/^\/+/, "");
+
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(cleanPath, SIGNED_URL_TTL_SECONDS);
+  if (error) throw error;
+  return data?.signedUrl || null;
 }
 
 /* ===========================
@@ -156,6 +174,13 @@ export default function DesempenhoDieselAcompanhamento() {
           "ultimo_evento_em",
           "ultimo_evento_tipo",
           "ultimo_evento_obs",
+
+          // ✅ NOVO: campos da Ordem no bucket
+          "ordem_bucket",
+          "ordem_path",
+          "ordem_mime",
+          "ordem_tamanho_bytes",
+          "ordem_gerada_em",
         ].join(",")
       )
       .limit(100000);
@@ -274,12 +299,38 @@ export default function DesempenhoDieselAcompanhamento() {
     return list;
   }, [itens, filtros.ordenacao, metricas]);
 
+  // ✅ NOVO: abrir arquivo da ordem via bucket (Signed URL)
+  async function abrirOrdemAcompanhamento(item) {
+    try {
+      const bucket = item?.ordem_bucket || DEFAULT_BUCKET;
+      const path = item?.ordem_path;
+
+      if (!path) {
+        setErro("Este acompanhamento ainda não possui Ordem gerada no bucket.");
+        return;
+      }
+
+      const signedUrl = await getSignedUrl(bucket, path);
+      if (!signedUrl) {
+        setErro("Não foi possível gerar link assinado do arquivo.");
+        return;
+      }
+
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      console.error(e);
+      setErro(e?.message || "Erro ao abrir arquivo do bucket.");
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold mb-1 text-gray-700">Desempenho Diesel — Acompanhamento</h1>
-          <p className="text-sm text-gray-600">Central de lançamentos e monitoramento. Registro do instrutor inicia o acompanhamento real.</p>
+          <p className="text-sm text-gray-600">
+            Central de lançamentos e monitoramento. Aqui você consulta a Ordem no bucket (arquivo gerado).
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -315,11 +366,25 @@ export default function DesempenhoDieselAcompanhamento() {
             className="border rounded-md px-3 py-2"
           />
 
-          <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })} className="border rounded-md px-3 py-2" />
+          <input
+            type="date"
+            value={filtros.dataInicio}
+            onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
 
-          <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })} className="border rounded-md px-3 py-2" />
+          <input
+            type="date"
+            value={filtros.dataFim}
+            onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })}
+            className="border rounded-md px-3 py-2"
+          />
 
-          <select value={filtros.status} onChange={(e) => setFiltros({ ...filtros, status: e.target.value })} className="border rounded-md px-3 py-2 bg-white">
+          <select
+            value={filtros.status}
+            onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
             <option value="">Todos os Status</option>
             <option value="A_SER_ACOMPANHADO">A ser acompanhado</option>
             <option value="EM_ANALISE">Em análise</option>
@@ -329,7 +394,11 @@ export default function DesempenhoDieselAcompanhamento() {
             <option value="ENCERRADO">Encerrado</option>
           </select>
 
-          <select value={filtros.ordenacao} onChange={(e) => setFiltros({ ...filtros, ordenacao: e.target.value })} className="border rounded-md px-3 py-2 bg-white">
+          <select
+            value={filtros.ordenacao}
+            onChange={(e) => setFiltros({ ...filtros, ordenacao: e.target.value })}
+            className="border rounded-md px-3 py-2 bg-white"
+          >
             <option value="MAIS_RECENTE">Mais recente</option>
             <option value="MAIS_DIAS">Mais dias</option>
             <option value="PIOR_KML">Pior KM/L</option>
@@ -406,9 +475,13 @@ export default function DesempenhoDieselAcompanhamento() {
                 const podeAnalise = status === "EM_ANALISE";
                 const podeAnalisar = status === "AGUARDANDO_ANALISE";
 
+                const temOrdem = Boolean(x?.ordem_path);
+
                 return (
                   <tr key={x.id} className="border-t hover:bg-gray-50">
-                    <td className="py-2 px-3 text-gray-600">{x.created_at ? new Date(x.created_at).toLocaleDateString("pt-BR") : "-"}</td>
+                    <td className="py-2 px-3 text-gray-600">
+                      {x.created_at ? new Date(x.created_at).toLocaleDateString("pt-BR") : "-"}
+                    </td>
 
                     <td className="py-2 px-3 text-gray-700">
                       <div className="font-medium">{x.motorista_nome || "-"}</div>
@@ -446,6 +519,20 @@ export default function DesempenhoDieselAcompanhamento() {
 
                     <td className="py-2 px-3">
                       <div className="flex flex-wrap gap-2">
+                        {/* ✅ NOVO: abrir a ordem do bucket */}
+                        <button
+                          onClick={() => abrirOrdemAcompanhamento(x)}
+                          disabled={!temOrdem}
+                          className={`px-3 py-1 rounded-md text-sm ${
+                            temOrdem
+                              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                              : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                          }`}
+                          title={temOrdem ? "Abrir ordem (bucket)" : "Sem ordem gerada"}
+                        >
+                          Ver ordem
+                        </button>
+
                         {podeCheckpoint ? (
                           <button
                             onClick={() => navigate(`/desempenho-diesel-checkpoint/${x.id}`)}
@@ -489,6 +576,13 @@ export default function DesempenhoDieselAcompanhamento() {
                           Ver histórico
                         </button>
                       </div>
+
+                      {/* detalhe opcional do arquivo */}
+                      {temOrdem ? (
+                        <div className="mt-2 text-[11px] text-gray-500">
+                          Arquivo: <span className="font-mono">{String(x.ordem_path).split("/").pop()}</span>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 );
