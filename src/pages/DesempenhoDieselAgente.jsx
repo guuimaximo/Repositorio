@@ -1,5 +1,5 @@
 // src/pages/DesempenhoDieselAgente.jsx
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabase";
 import {
   FaBolt,
@@ -17,7 +17,17 @@ import {
   FaTimes,
 } from "react-icons/fa";
 
-const API_BASE = "https://agentediesel.onrender.com";
+/**
+ * ✅ ALINHAMENTO / AJUSTES IMPORTANTES
+ * - API_BASE via ENV (VITE_AGENTEDIESEL_API_BASE) com fallback
+ * - Proteção contra refresh do PDF (signedUrl expira): cria URL sempre que abrir modal
+ * - Identifica corretamente o PDF dentro da pasta do report (não assume nome fixo quando arquivo_nome já é PDF)
+ * - Ícone/status padronizado: PROCESSANDO/CONCLUIDO/ERRO/OUTROS
+ * - Evita setState após unmount (mountedRef)
+ * - "Gerar análise" já abre o PDF automaticamente quando possível
+ */
+
+const API_BASE = import.meta?.env?.VITE_AGENTEDIESEL_API_BASE || "https://agentediesel.onrender.com";
 const BUCKET = "relatorios";
 const TIPO_RELATORIO = "diesel_gerencial";
 const LIMIT_HISTORICO = 80;
@@ -80,7 +90,6 @@ function statusTextFrom({ loading, erro, ok }) {
 }
 
 function Pill({ tone = "neutral", icon = null, children }) {
-  // ✅ versão mais clara
   const toneCls = {
     neutral: "border-slate-200 bg-white/80 text-slate-700",
     blue: "border-cyan-200 bg-cyan-50 text-cyan-700",
@@ -105,7 +114,6 @@ function Pill({ tone = "neutral", icon = null, children }) {
 }
 
 function Card({ children, className = "" }) {
-  // ✅ versão mais clara
   return (
     <div
       className={clsx(
@@ -120,7 +128,6 @@ function Card({ children, className = "" }) {
 }
 
 function Modal({ open, title, onClose, children }) {
-  // ✅ header sticky + scroll interno + garante que o botão Fechar nunca “suma”
   if (!open) return null;
 
   return (
@@ -155,10 +162,7 @@ function Modal({ open, title, onClose, children }) {
               </button>
             </div>
 
-            <div
-              className="p-4 overflow-auto"
-              style={{ maxHeight: "calc(100vh - 24px - 52px)" }}
-            >
+            <div className="p-4 overflow-auto" style={{ maxHeight: "calc(100vh - 24px - 52px)" }}>
               {children}
             </div>
           </div>
@@ -166,6 +170,22 @@ function Modal({ open, title, onClose, children }) {
       </div>
     </div>
   );
+}
+
+function reportStatusTone(status) {
+  const s = String(status || "").toUpperCase();
+  if (s === "CONCLUIDO") return "green";
+  if (s === "ERRO") return "red";
+  if (s === "PROCESSANDO") return "yellow";
+  return "neutral";
+}
+
+function reportStatusIcon(status) {
+  const s = String(status || "").toUpperCase();
+  if (s === "CONCLUIDO") return <FaCheckCircle />;
+  if (s === "ERRO") return <FaTimesCircle />;
+  if (s === "PROCESSANDO") return <FaBolt />;
+  return <FaCloud />;
 }
 
 export default function DesempenhoDieselAgente() {
@@ -208,10 +228,22 @@ export default function DesempenhoDieselAgente() {
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
 
   // ✅ validação sem timezone (YYYY-MM-DD compara correto)
-  function validarPeriodo() {
+  const validarPeriodo = useCallback(() => {
     if (!periodoInicio || !periodoFim) return true;
     return String(periodoInicio) <= String(periodoFim);
-  }
+  }, [periodoInicio, periodoFim]);
+
+  const clearFilters = useCallback(() => {
+    setPeriodoInicio(fmtDateInput(primeiroDiaMes));
+    setPeriodoFim(fmtDateInput(hoje));
+  }, [primeiroDiaMes, hoje]);
+
+  const selectedMeta = useMemo(() => {
+    if (!selected) return null;
+    const ini = selected?.periodo_inicio ? String(selected.periodo_inicio) : "—";
+    const fim = selected?.periodo_fim ? String(selected.periodo_fim) : "—";
+    return { ini, fim };
+  }, [selected]);
 
   function labelRelatorio(it) {
     const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
@@ -220,7 +252,7 @@ export default function DesempenhoDieselAgente() {
     return `Agente Gerencial — ${periodo}`;
   }
 
-  async function carregarHistorico() {
+  const carregarHistorico = useCallback(async () => {
     setHistoricoLoading(true);
     setHistoricoErro(null);
 
@@ -247,63 +279,91 @@ export default function DesempenhoDieselAgente() {
     } finally {
       if (mountedRef.current) setHistoricoLoading(false);
     }
+  }, []);
+
+  /**
+   * ✅ Resolve paths (pdf/html/png) da pasta do report
+   * Regra:
+   * - se arquivo_path já for PDF, usa ele
+   * - senão tenta Relatorio_Gerencial.pdf na mesma pasta
+   * - html/png sempre por convenção na mesma pasta
+   */
+  function buildArtifactPathsFromReportRow(it) {
+    const arquivoPath = normalizePath(it?.arquivo_path || "");
+    if (!arquivoPath) return null;
+
+    const folder = getFolderFromPath(arquivoPath);
+
+    // PDF preferencial
+    let pdfPath = arquivoPath;
+    if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
+
+    // HTML / PNG por convenção
+    let htmlPath = arquivoPath;
+    if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
+
+    const pngPath = `${folder}/cluster_evolution_unificado.png`;
+
+    return { folder, pdfPath, htmlPath, pngPath };
   }
 
-  async function abrirRelatorio(it, { openPdf = false } = {}) {
-    setSelected(it);
-    setUrls(null);
-    setUrlsErro(null);
-    setUrlsLoading(true);
+  const abrirRelatorio = useCallback(
+    async (it, { openPdf = false } = {}) => {
+      setSelected(it);
+      setUrls(null);
+      setUrlsErro(null);
+      setUrlsLoading(true);
 
-    try {
-      const arquivoPath = normalizePath(it?.arquivo_path || "");
-      if (!arquivoPath) throw new Error("arquivo_path vazio no relatorios_gerados");
+      try {
+        const paths = buildArtifactPathsFromReportRow(it);
+        if (!paths) throw new Error("arquivo_path vazio no relatorios_gerados");
 
-      const folder = getFolderFromPath(arquivoPath);
+        const [pdfRes, htmlRes, pngRes] = await Promise.all([
+          makeUrlFromPath(paths.pdfPath, 3600),
+          makeUrlFromPath(paths.htmlPath, 3600),
+          makeUrlFromPath(paths.pngPath, 3600),
+        ]);
 
-      let pdfPath = arquivoPath;
-      if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
+        if (!mountedRef.current) return;
 
-      // mantém propriedades (html/png continuam existindo), mas não polui a página
-      let htmlPath = arquivoPath;
-      if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
-      const pngPath = `${folder}/cluster_evolution_unificado.png`;
+        const newUrls = {
+          pdf: pdfRes.url,
+          pdf_path_used: pdfRes.path,
+          pdf_mode: pdfRes.mode,
+          html: htmlRes?.url || null,
+          html_path_used: htmlRes?.path || null,
+          html_mode: htmlRes?.mode || null,
+          png: pngRes?.url || null,
+          folder: paths.folder,
+        };
 
-      const [pdfRes, htmlRes, pngRes] = await Promise.all([
-        makeUrlFromPath(pdfPath, 3600),
-        makeUrlFromPath(htmlPath, 3600),
-        makeUrlFromPath(pngPath, 3600),
-      ]);
+        setUrls(newUrls);
 
-      if (!mountedRef.current) return;
+        // ✅ se pediu abrir modal, abre aqui
+        if (openPdf && newUrls?.pdf) setPdfOpen(true);
+      } catch (e) {
+        if (!mountedRef.current) return;
+        setUrlsErro(String(e?.message || e));
+      } finally {
+        if (mountedRef.current) setUrlsLoading(false);
+      }
+    },
+    []
+  );
 
-      const newUrls = {
-        pdf: pdfRes.url,
-        pdf_path_used: pdfRes.path,
-        pdf_mode: pdfRes.mode,
-        html: htmlRes?.url || null,
-        html_path_used: htmlRes?.path || null,
-        html_mode: htmlRes?.mode || null,
-        png: pngRes?.url || null,
-        folder,
-      };
-
-      setUrls(newUrls);
-      if (openPdf && newUrls?.pdf) setPdfOpen(true);
-    } catch (e) {
-      if (!mountedRef.current) return;
-      setUrlsErro(String(e?.message || e));
-    } finally {
-      if (mountedRef.current) setUrlsLoading(false);
-    }
-  }
+  // ✅ Ao abrir o modal, renova o signedUrl do PDF (evita expirar no meio)
+  useEffect(() => {
+    if (!pdfOpen || !selected) return;
+    // se já tem url, renova mesmo assim (mais seguro)
+    abrirRelatorio(selected, { openPdf: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfOpen]);
 
   useEffect(() => {
     carregarHistorico();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [carregarHistorico]);
 
-  async function gerar() {
+  const gerar = useCallback(async () => {
     setLoading(true);
     setErro(null);
     setResp(null);
@@ -331,13 +391,15 @@ export default function DesempenhoDieselAgente() {
 
       if (!r.ok) {
         const detail = data?.error || data?.detail || `HTTP ${r.status}`;
-        setResp(data);
+        if (mountedRef.current) setResp(data);
         throw new Error(detail);
       }
 
-      setResp(data);
+      if (mountedRef.current) setResp(data);
+
       await carregarHistorico();
 
+      // ✅ auto-open do report gerado
       if (data?.report_id) {
         const { data: row, error } = await supabase
           .from("relatorios_gerados")
@@ -347,14 +409,16 @@ export default function DesempenhoDieselAgente() {
           .eq("id", data.report_id)
           .single();
 
-        if (!error && row) await abrirRelatorio(row, { openPdf: true });
+        if (!error && row) {
+          await abrirRelatorio(row, { openPdf: true });
+        }
       }
     } catch (e) {
-      setErro(String(e?.message || e));
+      if (mountedRef.current) setErro(String(e?.message || e));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }
+  }, [periodoInicio, periodoFim, validarPeriodo, carregarHistorico, abrirRelatorio]);
 
   const statusTone = useMemo(
     () => statusToneFrom({ loading, erro, ok: resp?.ok === true }),
@@ -388,23 +452,10 @@ export default function DesempenhoDieselAgente() {
 
   const visibleItems = useMemo(() => filteredItems.slice(0, showCount), [filteredItems, showCount]);
 
-  const clearFilters = () => {
-    setPeriodoInicio(fmtDateInput(primeiroDiaMes));
-    setPeriodoFim(fmtDateInput(hoje));
-  };
-
-  const selectedMeta = useMemo(() => {
-    if (!selected) return null;
-    const ini = selected?.periodo_inicio ? String(selected.periodo_inicio) : "—";
-    const fim = selected?.periodo_fim ? String(selected.periodo_fim) : "—";
-    return { ini, fim };
-  }, [selected]);
-
   const canOpenPdf = !!urls?.pdf;
 
   return (
     <div className="min-h-[calc(100vh-140px)]">
-      {/* ✅ Fundo mais claro */}
       <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/70 backdrop-blur-xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[radial-gradient(1000px_circle_at_10%_10%,rgba(56,189,248,0.18),transparent_55%),radial-gradient(900px_circle_at_90%_20%,rgba(217,70,239,0.14),transparent_60%)]" />
@@ -419,9 +470,7 @@ export default function DesempenhoDieselAgente() {
                 <FaBolt className="text-cyan-700" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                  Agente Diesel
-                </h2>
+                <h2 className="text-xl font-semibold tracking-tight text-slate-900">Agente Diesel</h2>
                 <p className="text-sm text-slate-600">Clean: datas + histórico + PDF em modal.</p>
               </div>
             </div>
@@ -471,14 +520,14 @@ export default function DesempenhoDieselAgente() {
 
             <button
               onClick={gerar}
-              disabled={loading}
+              disabled={loading || !validarPeriodo()}
               className={clsx(
                 "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition border",
-                loading
+                loading || !validarPeriodo()
                   ? "border-slate-200 bg-white text-slate-400 cursor-not-allowed"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               )}
-              title="Executa a geração do relatório na API"
+              title={!validarPeriodo() ? "Corrija o período" : "Executa a geração do relatório na API"}
             >
               <FaPlay />
               {loading ? "Gerando..." : "Gerar análise"}
@@ -714,25 +763,8 @@ export default function DesempenhoDieselAgente() {
                 visibleItems.map((it) => {
                   const isSel = selected?.id === it.id;
 
-                  const tone =
-                    it.status === "CONCLUIDO"
-                      ? "green"
-                      : it.status === "ERRO"
-                      ? "red"
-                      : it.status === "PROCESSANDO"
-                      ? "yellow"
-                      : "neutral";
-
-                  const icon =
-                    it.status === "CONCLUIDO" ? (
-                      <FaCheckCircle />
-                    ) : it.status === "ERRO" ? (
-                      <FaTimesCircle />
-                    ) : it.status === "PROCESSANDO" ? (
-                      <FaBolt />
-                    ) : (
-                      <FaCloud />
-                    );
+                  const tone = reportStatusTone(it.status);
+                  const icon = reportStatusIcon(it.status);
 
                   const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "—";
                   const fim = it?.periodo_fim ? String(it.periodo_fim) : "—";
@@ -744,9 +776,7 @@ export default function DesempenhoDieselAgente() {
                       onClick={() => abrirRelatorio(it)}
                       className={clsx(
                         "w-full text-left rounded-2xl border p-3 transition flex items-start justify-between gap-3",
-                        isSel
-                          ? "border-cyan-200 bg-cyan-50"
-                          : "border-slate-200 bg-white hover:bg-slate-50"
+                        isSel ? "border-cyan-200 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"
                       )}
                       title="Selecionar relatório"
                     >
@@ -770,7 +800,7 @@ export default function DesempenhoDieselAgente() {
                           ) : null}
                         </div>
 
-                        {it?.erro_msg && it.status === "ERRO" ? (
+                        {it?.erro_msg && String(it.status || "").toUpperCase() === "ERRO" ? (
                           <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700 break-all">
                             <span className="font-semibold">Erro:</span> {it.erro_msg}
                           </div>
@@ -837,11 +867,7 @@ export default function DesempenhoDieselAgente() {
       <Modal
         open={pdfOpen}
         onClose={() => setPdfOpen(false)}
-        title={
-          selectedMeta
-            ? `Agente Gerencial — ${selectedMeta.ini} → ${selectedMeta.fim}`
-            : "Agente Gerencial — PDF"
-        }
+        title={selectedMeta ? `Agente Gerencial — ${selectedMeta.ini} → ${selectedMeta.fim}` : "Agente Gerencial — PDF"}
       >
         {!canOpenPdf ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
@@ -852,23 +878,35 @@ export default function DesempenhoDieselAgente() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Viewer seguro (Signed URL)
+                Viewer seguro ({urls?.pdf_mode || "signed"})
               </div>
-              {urls?.pdf && (
-                <a
-                  href={urls.pdf}
-                  target="_blank"
-                  rel="noreferrer"
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => abrirRelatorio(selected)}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  title="Abrir PDF em nova aba"
+                  title="Renovar link"
                 >
-                  <FaFilePdf />
-                  Abrir
-                </a>
-              )}
+                  <FaSyncAlt />
+                  Renovar
+                </button>
+
+                {urls?.pdf && (
+                  <a
+                    href={urls.pdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    title="Abrir PDF em nova aba"
+                  >
+                    <FaFilePdf />
+                    Abrir
+                  </a>
+                )}
+              </div>
             </div>
 
-            {/* ✅ altura responsiva (evita estourar tela) */}
             <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
               <iframe
                 title="RelatorioPDF"
