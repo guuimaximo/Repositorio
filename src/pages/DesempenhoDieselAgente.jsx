@@ -1,37 +1,22 @@
 // src/pages/DesempenhoDieselAgente.jsx
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "../supabase";
 import {
   FaBolt,
-  FaCloud,
-  FaDatabase,
   FaCheckCircle,
   FaExclamationTriangle,
-  FaTimesCircle,
-  FaSyncAlt,
   FaPlay,
-  FaSearch,
-  FaFilePdf,
-  FaFilter,
-  FaBroom,
-  FaTimes,
 } from "react-icons/fa";
 
-/**
- * ALINHAMENTO / AJUSTES IMPORTANTES
- * - API_BASE via ENV (VITE_AGENTEDIESEL_API_BASE) com fallback
- * - Proteção contra refresh do PDF (signedUrl expira): cria URL sempre que abrir modal
- * - Identifica corretamente o PDF dentro da pasta do report
- * - Ícone/status padronizado
- * - Evita setState após unmount (mountedRef)
- */
-
+/* =========================
+   CONFIG
+========================= */
 const API_BASE =
-  import.meta?.env?.VITE_AGENTEDIESEL_API_BASE || "https://agentediesel.onrender.com";
-const BUCKET = "relatorios";
-const TIPO_RELATORIO = "diesel_gerencial";
-const LIMIT_HISTORICO = 80;
+  import.meta?.env?.VITE_AGENTEDIESEL_API_BASE ||
+  "https://agentediesel.onrender.com";
 
+/* =========================
+   HELPERS
+========================= */
 function clsx(...arr) {
   return arr.filter(Boolean).join(" ");
 }
@@ -43,145 +28,50 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function fmtBR(dt) {
-  try {
-    return new Date(dt).toLocaleString("pt-BR");
-  } catch {
-    return String(dt || "");
-  }
-}
-
-function normalizePath(p) {
-  if (!p) return "";
-  return String(p).replace(/^\/+/, "");
-}
-
-function getFolderFromPath(p) {
-  const parts = normalizePath(p).split("/").filter(Boolean);
-  if (parts.length <= 1) return "";
-  return parts.slice(0, -1).join("/");
-}
-
-async function makeUrlFromPath(path, expiresIn = 3600) {
-  const clean = normalizePath(path);
-  const { data, error } = await supabase
-    .storage
-    .from(BUCKET)
-    .createSignedUrl(clean, expiresIn);
-
-  if (!error && data?.signedUrl) {
-    return { url: data.signedUrl, mode: "signed", path: clean };
-  }
-
-  const pub = supabase.storage.from(BUCKET).getPublicUrl(clean);
-  return { url: pub?.data?.publicUrl, mode: "public", path: clean };
-}
-
-function statusToneFrom({ loading, erro, ok }) {
-  if (loading) return "yellow";
-  if (erro) return "red";
-  if (ok) return "green";
-  return "neutral";
-}
-
-function statusTextFrom({ loading, erro, ok }) {
-  if (loading) return "PROCESSANDO";
-  if (erro) return "FALHOU";
-  if (ok) return "SUCESSO";
-  return "PRONTO";
-}
-
-function Pill({ tone = "neutral", icon = null, children }) {
-  const toneCls = {
-    neutral: "border-slate-200 bg-white/80 text-slate-700",
-    blue: "border-cyan-200 bg-cyan-50 text-cyan-700",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    red: "border-rose-200 bg-rose-50 text-rose-700",
-    yellow: "border-amber-200 bg-amber-50 text-amber-800",
-    purple: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
-  }[tone];
-
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide",
-        toneCls
-      )}
-    >
-      {icon ? <span className="opacity-90">{icon}</span> : null}
-      <span className="truncate">{children}</span>
-    </span>
-  );
-}
-
-function Card({ children, className = "" }) {
-  return (
-    <div
-      className={clsx(
-        "rounded-2xl border border-slate-200 bg-white/75 backdrop-blur-xl",
-        "shadow-[0_0_0_1px_rgba(15,23,42,0.03),0_12px_40px_rgba(0,0,0,0.06)]",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Modal({ open, title, onClose, children }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-3">
-        <div className="w-full max-w-6xl">
-          <div className="rounded-2xl border bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <div className="font-semibold text-sm">{title}</div>
-              <button onClick={onClose} className="text-xs flex gap-2 items-center">
-                <FaTimes /> Fechar
-              </button>
-            </div>
-            <div className="p-4 overflow-auto">{children}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* =========================
+   COMPONENT
+========================= */
 export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
   useEffect(() => () => (mountedRef.current = false), []);
 
-  // ===== EXECUÇÃO =====
-  const [loading, setLoading] = useState(false);          // gerencial
-  const [loadingAcomp, setLoadingAcomp] = useState(false); // acompanhamento
-  const [resp, setResp] = useState(null);
-  const [erro, setErro] = useState(null);
-
-  // ===== PERÍODO =====
+  /* =========================
+     STATE
+  ========================= */
   const hoje = useMemo(() => new Date(), []);
   const primeiroDiaMes = useMemo(
     () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
     [hoje]
   );
 
-  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
+  const [periodoInicio, setPeriodoInicio] = useState(
+    fmtDateInput(primeiroDiaMes)
+  );
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
+
+  const [loadingGerencial, setLoadingGerencial] = useState(false);
+  const [loadingAcomp, setLoadingAcomp] = useState(false);
+
+  const [erro, setErro] = useState(null);
+  const [resp, setResp] = useState(null);
+
+  const [qtdAcompanhamentos, setQtdAcompanhamentos] = useState(10);
 
   const validarPeriodo = useCallback(
     () => !periodoInicio || !periodoFim || periodoInicio <= periodoFim,
     [periodoInicio, periodoFim]
   );
 
-  // ===== GERENCIAL =====
-  const gerar = useCallback(async () => {
-    setLoading(true);
+  /* =========================
+     GERENCIAL
+  ========================= */
+  const gerarGerencial = useCallback(async () => {
+    setLoadingGerencial(true);
     setErro(null);
+
     try {
       const payload = {
-        tipo: TIPO_RELATORIO,
+        tipo: "diesel_gerencial",
         periodo_inicio: periodoInicio,
         periodo_fim: periodoFim,
       };
@@ -193,76 +83,135 @@ export default function DesempenhoDieselAgente() {
       });
 
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Erro gerencial");
+      if (!r.ok) throw new Error(data?.error || "Erro no robô gerencial");
 
       if (mountedRef.current) setResp(data);
     } catch (e) {
       if (mountedRef.current) setErro(e.message);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) setLoadingGerencial(false);
     }
   }, [periodoInicio, periodoFim]);
 
-  // ===== ACOMPANHAMENTO =====
+  /* =========================
+     ACOMPANHAMENTO (LOTE)
+  ========================= */
   const gerarAcompanhamento = useCallback(async () => {
     setLoadingAcomp(true);
     setErro(null);
+
     try {
-      const r = await fetch(`${API_BASE}/acompanhamentos/gerar`, {
+      const payload = {
+        tipo: "prontuarios_acompanhamento",
+        qtd: qtdAcompanhamentos,
+      };
+
+      const r = await fetch(`${API_BASE}/relatorios/gerar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ qtd: 10 }),
+        body: JSON.stringify(payload),
       });
 
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Erro acompanhamento");
+      if (!r.ok)
+        throw new Error(data?.error || "Erro no robô de acompanhamento");
 
-      alert("Ordens de acompanhamento geradas com sucesso");
+      alert(`Lote ${data.lote_id} gerado com sucesso`);
     } catch (e) {
       if (mountedRef.current) setErro(e.message);
     } finally {
       if (mountedRef.current) setLoadingAcomp(false);
     }
-  }, []);
+  }, [qtdAcompanhamentos]);
 
-  const statusTone = statusToneFrom({ loading, erro, ok: resp?.ok });
-  const statusText = statusTextFrom({ loading, erro, ok: resp?.ok });
-
+  /* =========================
+     UI
+  ========================= */
   return (
-    <div className="p-6">
-      <div className="flex gap-2 mb-4">
-        <button className="px-4 py-2 rounded-xl border bg-cyan-50 text-cyan-800">
-          AGENTE GERENCIAL
+    <div className="p-6 space-y-6">
+      {/* ===== HEADER ===== */}
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-xl border flex items-center justify-center">
+          <FaBolt />
+        </div>
+        <h2 className="text-xl font-semibold">Agente Diesel</h2>
+      </div>
+
+      {/* ===== GERENCIAL ===== */}
+      <div className="rounded-2xl border p-4 space-y-3">
+        <h3 className="font-semibold">Agente Gerencial</h3>
+
+        <div className="flex gap-3">
+          <input
+            type="date"
+            value={periodoInicio}
+            onChange={(e) => setPeriodoInicio(e.target.value)}
+            className="border rounded-lg px-3 py-2"
+          />
+          <input
+            type="date"
+            value={periodoFim}
+            onChange={(e) => setPeriodoFim(e.target.value)}
+            className="border rounded-lg px-3 py-2"
+          />
+        </div>
+
+        <button
+          onClick={gerarGerencial}
+          disabled={loadingGerencial || !validarPeriodo()}
+          className={clsx(
+            "px-4 py-2 rounded-xl border flex items-center gap-2",
+            loadingGerencial
+              ? "text-slate-400"
+              : "bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
+          )}
+        >
+          <FaPlay />
+          {loadingGerencial ? "Gerando..." : "Gerar relatório gerencial"}
         </button>
+      </div>
+
+      {/* ===== ACOMPANHAMENTO ===== */}
+      <div className="rounded-2xl border p-4 space-y-3">
+        <h3 className="font-semibold">Agente de Acompanhamento</h3>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm">Qtd. de prontuários:</span>
+          <input
+            type="number"
+            min={1}
+            value={qtdAcompanhamentos}
+            onChange={(e) => setQtdAcompanhamentos(Number(e.target.value))}
+            className="border rounded-lg px-3 py-2 w-24"
+          />
+        </div>
 
         <button
           onClick={gerarAcompanhamento}
           disabled={loadingAcomp}
           className={clsx(
-            "px-4 py-2 rounded-xl border",
+            "px-4 py-2 rounded-xl border flex items-center gap-2",
             loadingAcomp
-              ? "bg-white text-slate-400"
+              ? "text-slate-400"
               : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
           )}
         >
-          {loadingAcomp ? "Gerando..." : "AGENTE ACOMPANHAMENTO"}
-        </button>
-
-        <button
-          onClick={gerar}
-          disabled={loading || !validarPeriodo()}
-          className="px-4 py-2 rounded-xl border"
-        >
-          <FaPlay /> {loading ? "Gerando..." : "Gerar análise"}
+          <FaPlay />
+          {loadingAcomp ? "Gerando..." : "Gerar acompanhamentos"}
         </button>
       </div>
 
-      <Pill tone={statusTone} icon={<FaBolt />}>
-        {statusText}
-      </Pill>
+      {/* ===== STATUS ===== */}
+      {resp?.ok && (
+        <div className="flex items-center gap-2 text-emerald-700">
+          <FaCheckCircle />
+          Execução iniciada com sucesso
+        </div>
+      )}
 
       {erro && (
-        <div className="mt-4 p-3 border border-rose-200 bg-rose-50 text-rose-700">
+        <div className="flex items-center gap-2 text-rose-700">
+          <FaExclamationTriangle />
           {erro}
         </div>
       )}
