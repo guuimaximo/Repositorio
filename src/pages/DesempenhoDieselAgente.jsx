@@ -1,20 +1,23 @@
 // src/pages/DesempenhoDieselAgente.jsx
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { FaBolt, FaCheckCircle, FaExclamationTriangle, FaPlay, FaSpinner, FaGithub } from "react-icons/fa";
+import { FaBolt, FaCheckCircle, FaExclamationTriangle, FaPlay, FaSpinner, FaGithub, FaFilePdf, FaFileCode, FaSync } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 
 /* =============================================================================
    CONFIGURAÇÃO GITHUB ACTIONS
-   Assegure-se que essas variaveis estao no .env do seu projeto React (Vite)
 ============================================================================= */
 const GH_USER = import.meta.env.VITE_GITHUB_USER;
 const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
-const GH_REF = "main"; // ou o branch que você usa
+const GH_REF = "main";
 
-// Nomes exatos dos arquivos .yml criados anteriormente
-const WF_GERENCIAL = "relatorio_gerencial.yml"; // Note o underline e sem 'diesel'
-const WF_ACOMP = "ordem-acompanhamento.yml";     // Note que não tem 'gerar-ordens-'
+const WF_GERENCIAL = "relatorio_gerencial.yml";
+const WF_ACOMP = "ordem-acompanhamento.yml";
+
+// URL Base do Bucket Público (Ajuste se necessário)
+// Pega do seu projeto Supabase: https://<PROJECT_REF>.supabase.co/storage/v1/object/public/relatorios/
+const SUPABASE_PROJECT_URL = import.meta.env.VITE_SUPABASE_URL; // Geralmente já existe no seu env
+const BUCKET_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/relatorios`;
 
 /* =========================
    HELPERS
@@ -30,14 +33,17 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// Função genérica para chamar a API do GitHub
+// Função para gerar URL pública
+function getPublicUrl(path) {
+  if (!path) return "#";
+  // Se o script salvou o caminho relativo (ex: acompanhamento/123/file.pdf)
+  // Concatenamos com a URL base do bucket público
+  return `${BUCKET_URL}/${path}`;
+}
+
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  if (!GH_USER || !GH_REPO || !GH_TOKEN) {
-    throw new Error("Credenciais do GitHub não configuradas (.env)");
-  }
-
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes");
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
-
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -46,12 +52,8 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      ref: GH_REF,
-      inputs: inputs
-    }),
+    body: JSON.stringify({ ref: GH_REF, inputs: inputs }),
   });
-
   if (response.status !== 204) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.message || `Erro GitHub: ${response.status}`);
@@ -63,62 +65,84 @@ export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
   useEffect(() => () => (mountedRef.current = false), []);
 
-  // --- Estados de Data ---
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(
-    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
-    [hoje]
-  );
+  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
+  
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
 
-  // --- Estados de Controle ---
-  const [loading, setLoading] = useState(false);
+  const [loadingGerencial, setLoadingGerencial] = useState(false);
+  const [loadingAcomp, setLoadingAcomp] = useState(false);
+  
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(null);
-
-  // --- Inputs Específicos ---
   const [qtdAcompanhamentos, setQtdAcompanhamentos] = useState(10);
   const [userSession, setUserSession] = useState(null);
 
-  // Auth
+  // --- NOVOS ESTADOS PARA LISTAGEM ---
+  const [listaRelatorios, setListaRelatorios] = useState([]);
+  const [listaProntuarios, setListaProntuarios] = useState([]);
+  const [loadingListas, setLoadingListas] = useState(false);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserSession(session);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => setUserSession(session));
+    buscarHistorico(); // Busca ao carregar a página
   }, []);
 
-  const validarPeriodo = useCallback(
-    () => !periodoInicio || !periodoFim || periodoInicio <= periodoFim,
-    [periodoInicio, periodoFim]
-  );
+  const validarPeriodo = useCallback(() => !periodoInicio || !periodoFim || periodoInicio <= periodoFim, [periodoInicio, periodoFim]);
 
   // =========================================================================
-  // LÓGICA 1: RELATÓRIO GERENCIAL
+  // 3. BUSCAR HISTÓRICO (LISTAGEM)
+  // =========================================================================
+  const buscarHistorico = async () => {
+    setLoadingListas(true);
+    try {
+      // 1. Relatórios Gerenciais (Últimos 5)
+      const { data: rels } = await supabase
+        .from("relatorios_gerados")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      
+      if (rels) setListaRelatorios(rels);
+
+      // 2. Prontuários Individuais (Últimos 10)
+      const { data: pronts } = await supabase
+        .from("diesel_acompanhamentos")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (pronts) setListaProntuarios(pronts);
+
+    } catch (error) {
+      console.error("Erro ao buscar histórico:", error);
+    } finally {
+      setLoadingListas(false);
+    }
+  };
+
+  // =========================================================================
+  // 1. DISPARO GERENCIAL
   // =========================================================================
   const dispararGerencial = async () => {
-    setLoading(true); setErro(null); setSucesso(null);
-
+    setLoadingGerencial(true); setErro(null); setSucesso(null);
     try {
       const userLogin = userSession?.user?.email || "sistema";
-      
-      // 1. Criar registro no Supabase (STATUS: CRIADO)
-      const { data: record, error: dbError } = await supabase
+      const { data: record, error } = await supabase
         .from("relatorios_gerados")
         .insert({
           tipo: "diesel_gerencial",
-          status: "PROCESSANDO", // Já marca processando para o usuário ver
+          status: "PROCESSANDO",
           periodo_inicio: periodoInicio,
           periodo_fim: periodoFim,
           solicitante_login: userLogin,
           solicitante_nome: userSession?.user?.user_metadata?.full_name
         })
-        .select("id")
-        .single();
+        .select("id").single();
 
-      if (dbError) throw new Error(`Erro Banco: ${dbError.message}`);
+      if (error) throw error;
 
-      // 2. Disparar GitHub Action passando o ID gerado
       await dispatchGitHubWorkflow(WF_GERENCIAL, {
         report_id: String(record.id),
         periodo_inicio: periodoInicio,
@@ -126,57 +150,46 @@ export default function DesempenhoDieselAgente() {
         report_tipo: "diesel_gerencial"
       });
 
-      if (mountedRef.current) {
-        setSucesso(`Relatório #${record.id} disparado no GitHub! Aguarde o processamento.`);
-      }
+      setSucesso(`Relatório #${record.id} disparado! Atualize a lista em instantes.`);
+      setTimeout(buscarHistorico, 2000); // Tenta atualizar a lista
 
     } catch (err) {
-      console.error(err);
-      if (mountedRef.current) setErro(err.message);
+      setErro(err.message);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      setLoadingGerencial(false);
     }
   };
 
   // =========================================================================
-  // LÓGICA 2: ACOMPANHAMENTO (PRONTUÁRIOS)
+  // 2. DISPARO ACOMPANHAMENTO
   // =========================================================================
   const dispararAcompanhamento = async () => {
-    setLoading(true); setErro(null); setSucesso(null);
-
+    setLoadingAcomp(true); setErro(null); setSucesso(null);
     try {
-      // 1. Criar lote no Supabase
-      const { data: lote, error: dbError } = await supabase
+      const { data: lote, error } = await supabase
         .from("acompanhamento_lotes")
-        .insert({
-          status: "PROCESSANDO",
-          qtd: Number(qtdAcompanhamentos)
-        })
-        .select("id")
-        .single();
+        .insert({ status: "PROCESSANDO", qtd: Number(qtdAcompanhamentos) })
+        .select("id").single();
 
-      if (dbError) throw new Error(`Erro Banco: ${dbError.message}`);
+      if (error) throw error;
 
-      // 2. Disparar GitHub Action passando o ID do lote
       await dispatchGitHubWorkflow(WF_ACOMP, {
         ordem_batch_id: String(lote.id),
         qtd: String(qtdAcompanhamentos)
       });
 
-      if (mountedRef.current) {
-        setSucesso(`Lote #${lote.id} disparado no GitHub! Acompanhe na lista.`);
-      }
+      setSucesso(`Lote #${lote.id} disparado! Atualize a lista em instantes.`);
+      setTimeout(buscarHistorico, 2000);
 
     } catch (err) {
-      console.error(err);
-      if (mountedRef.current) setErro(err.message);
+      setErro(err.message);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      setLoadingAcomp(false);
     }
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="p-6 space-y-8 max-w-5xl mx-auto">
       
       {/* HEADER */}
       <div className="flex items-center gap-3 border-b pb-4">
@@ -191,114 +204,144 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
+      {/* CONTROLES DE DISPARO */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* CARD GERENCIAL */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg text-slate-700">Relatório Gerencial</h3>
-            <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
-          </div>
-          
+        {/* Card Gerencial */}
+        <div className="bg-white rounded-2xl border p-6 shadow-sm">
+          <div className="flex justify-between mb-4"><h3 className="font-semibold text-slate-700">Relatório Gerencial</h3><span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span></div>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500">Início</label>
-                <input
-                  type="date"
-                  value={periodoInicio}
-                  onChange={(e) => setPeriodoInicio(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500">Fim</label>
-                <input
-                  type="date"
-                  value={periodoFim}
-                  onChange={(e) => setPeriodoFim(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
-                />
-              </div>
+              <div><label className="text-xs font-bold text-slate-500">Início</label><input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
+              <div><label className="text-xs font-bold text-slate-500">Fim</label><input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
             </div>
-
-            <button
-              onClick={dispararGerencial}
-              disabled={loading || !validarPeriodo()}
-              className={clsx(
-                "w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all",
-                loading
-                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-cyan-600 text-white hover:bg-cyan-700 shadow-lg shadow-cyan-200"
-              )}
-            >
-              {loading ? <FaSpinner className="animate-spin" /> : <FaPlay />}
-              {loading ? "Enviando..." : "DISPARAR RELATÓRIO"}
+            <button onClick={dispararGerencial} disabled={loadingGerencial || !validarPeriodo()} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingGerencial ? "bg-slate-100 text-slate-400" : "bg-cyan-600 text-white hover:bg-cyan-700")}>
+              {loadingGerencial ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingGerencial ? "Enviando..." : "DISPARAR RELATÓRIO"}
             </button>
           </div>
         </div>
 
-        {/* CARD ACOMPANHAMENTO */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg text-slate-700">Ordens de Monitoria</h3>
-            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold">INDIVIDUAL</span>
-          </div>
-
+        {/* Card Acompanhamento */}
+        <div className="bg-white rounded-2xl border p-6 shadow-sm">
+          <div className="flex justify-between mb-4"><h3 className="font-semibold text-slate-700">Ordens de Monitoria</h3><span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold">INDIVIDUAL</span></div>
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500">Qtd. de Motoristas (Piores Rankings)</label>
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={qtdAcompanhamentos}
-                  onChange={(e) => setQtdAcompanhamentos(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-                <span className="text-sm font-medium text-slate-600">Ordens</span>
-              </div>
-            </div>
-
-            <button
-              onClick={dispararAcompanhamento}
-              disabled={loading || qtdAcompanhamentos <= 0}
-              className={clsx(
-                "w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all",
-                loading
-                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
-              )}
-            >
-              {loading ? <FaSpinner className="animate-spin" /> : <FaPlay />}
-              {loading ? "Enviando..." : "GERAR PRONTUÁRIOS"}
+            <div><label className="text-xs font-bold text-slate-500">Qtd. Motoristas</label><input type="number" min={1} value={qtdAcompanhamentos} onChange={(e) => setQtdAcompanhamentos(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm mt-1" /></div>
+            <button onClick={dispararAcompanhamento} disabled={loadingAcomp} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingAcomp ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700")}>
+              {loadingAcomp ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingAcomp ? "Enviando..." : "GERAR PRONTUÁRIOS"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* FEEDBACK */}
-      <div className="mt-4">
-        {sucesso && (
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-3 animate-fade-in">
-            <FaCheckCircle className="text-xl" />
-            <div>
-              <p className="font-bold text-sm">Comando Aceito</p>
-              <p className="text-xs">{sucesso}</p>
-            </div>
-          </div>
-        )}
+      {/* FEEDBACK MSG */}
+      {(sucesso || erro) && (
+        <div className={clsx("p-4 rounded-xl border flex items-center gap-3", sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800")}>
+          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
+          <div><p className="font-bold text-sm">{sucesso ? "Sucesso" : "Erro"}</p><p className="text-xs">{sucesso || erro}</p></div>
+        </div>
+      )}
 
-        {erro && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-3 animate-fade-in">
-            <FaExclamationTriangle className="text-xl" />
-            <div>
-              <p className="font-bold text-sm">Falha no Disparo</p>
-              <p className="text-xs">{erro}</p>
+      {/* ======================= ÁREA DE LISTAGEM ======================= */}
+      <div className="border-t pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-slate-800">Arquivos Gerados</h2>
+          <button onClick={buscarHistorico} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar lista">
+            <FaSync className={clsx(loadingListas && "animate-spin")} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* TABELA 1: RELATÓRIOS GERENCIAIS */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">Relatórios Gerenciais</h3>
+            <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-bold">
+                  <tr>
+                    <th className="p-3">ID / Data</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Arquivo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {listaRelatorios.length === 0 ? (
+                    <tr><td colSpan="3" className="p-4 text-center text-slate-400">Nenhum relatório encontrado.</td></tr>
+                  ) : (
+                    listaRelatorios.map((rel) => (
+                      <tr key={rel.id} className="hover:bg-slate-50">
+                        <td className="p-3">
+                          <div className="font-bold">#{rel.id}</div>
+                          <div className="text-xs text-slate-400">{new Date(rel.created_at).toLocaleDateString()}</div>
+                        </td>
+                        <td className="p-3">
+                          <span className={clsx("px-2 py-1 rounded text-xs font-bold", 
+                            rel.status === "CONCLUIDO" ? "bg-green-100 text-green-700" :
+                            rel.status === "ERRO" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700")}>
+                            {rel.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          {rel.status === "CONCLUIDO" && rel.arquivo_pdf_path && (
+                            <a href={getPublicUrl(rel.arquivo_pdf_path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-cyan-600 font-bold hover:underline">
+                              <FaFilePdf /> Baixar
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+
+          {/* TABELA 2: PRONTUÁRIOS INDIVIDUAIS */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">Últimos Prontuários (Acompanhamento)</h3>
+            <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-600 font-bold">
+                  <tr>
+                    <th className="p-3">Motorista</th>
+                    <th className="p-3">Resultados</th>
+                    <th className="p-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {listaProntuarios.length === 0 ? (
+                    <tr><td colSpan="3" className="p-4 text-center text-slate-400">Nenhum prontuário encontrado.</td></tr>
+                  ) : (
+                    listaProntuarios.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="p-3">
+                          <div className="font-bold">{item.motorista_nome}</div>
+                          <div className="text-xs text-slate-400">Lote #{item.lote_id}</div>
+                        </td>
+                        <td className="p-3">
+                          <div className="text-xs">
+                            <span className="text-slate-500">Perda:</span> <b className="text-red-600">{item.perda_litros?.toFixed(0)} L</b>
+                          </div>
+                          <div className="text-xs">
+                            <span className="text-slate-500">Gap:</span> <b>{item.gap?.toFixed(2)}</b>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right space-x-2">
+                          {item.arquivo_html_path && (
+                            <a href={getPublicUrl(item.arquivo_html_path)} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-slate-800" title="Ver HTML"><FaFileCode /></a>
+                          )}
+                          {item.arquivo_pdf_path && (
+                            <a href={getPublicUrl(item.arquivo_pdf_path)} target="_blank" rel="noopener noreferrer" className="text-red-500 hover:text-red-700" title="Baixar PDF"><FaFilePdf /></a>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
