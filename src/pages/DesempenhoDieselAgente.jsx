@@ -13,8 +13,8 @@ const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main"; // ou o branch que você usa
 
 // Nomes exatos dos arquivos .yml criados anteriormente
-const WF_GERENCIAL = "relatorio-gerencial-diesel.yml";
-const WF_ACOMP = "gerar-ordens-acompanhamento.yml";
+const WF_GERENCIAL = "relatorio_gerencial.yml"; // Note o underline e sem 'diesel'
+const WF_ACOMP = "ordem-acompanhamento.yml";     // Note que não tem 'gerar-ordens-'
 
 /* =========================
    HELPERS
