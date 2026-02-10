@@ -18,16 +18,16 @@ import {
 } from "react-icons/fa";
 
 /**
- * ✅ ALINHAMENTO / AJUSTES IMPORTANTES
+ * ALINHAMENTO / AJUSTES IMPORTANTES
  * - API_BASE via ENV (VITE_AGENTEDIESEL_API_BASE) com fallback
  * - Proteção contra refresh do PDF (signedUrl expira): cria URL sempre que abrir modal
- * - Identifica corretamente o PDF dentro da pasta do report (não assume nome fixo quando arquivo_nome já é PDF)
- * - Ícone/status padronizado: PROCESSANDO/CONCLUIDO/ERRO/OUTROS
+ * - Identifica corretamente o PDF dentro da pasta do report
+ * - Ícone/status padronizado
  * - Evita setState após unmount (mountedRef)
- * - "Gerar análise" já abre o PDF automaticamente quando possível
  */
 
-const API_BASE = import.meta?.env?.VITE_AGENTEDIESEL_API_BASE || "https://agentediesel.onrender.com";
+const API_BASE =
+  import.meta?.env?.VITE_AGENTEDIESEL_API_BASE || "https://agentediesel.onrender.com";
 const BUCKET = "relatorios";
 const TIPO_RELATORIO = "diesel_gerencial";
 const LIMIT_HISTORICO = 80;
@@ -45,8 +45,7 @@ function fmtDateInput(d) {
 
 function fmtBR(dt) {
   try {
-    const d = new Date(dt);
-    return d.toLocaleString("pt-BR");
+    return new Date(dt).toLocaleString("pt-BR");
   } catch {
     return String(dt || "");
   }
@@ -65,12 +64,15 @@ function getFolderFromPath(p) {
 
 async function makeUrlFromPath(path, expiresIn = 3600) {
   const clean = normalizePath(path);
+  const { data, error } = await supabase
+    .storage
+    .from(BUCKET)
+    .createSignedUrl(clean, expiresIn);
 
-  // signed (bucket privado)
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(clean, expiresIn);
-  if (!error && data?.signedUrl) return { url: data.signedUrl, mode: "signed", path: clean };
+  if (!error && data?.signedUrl) {
+    return { url: data.signedUrl, mode: "signed", path: clean };
+  }
 
-  // fallback public
   const pub = supabase.storage.from(BUCKET).getPublicUrl(clean);
   return { url: pub?.data?.publicUrl, mode: "public", path: clean };
 }
@@ -105,7 +107,6 @@ function Pill({ tone = "neutral", icon = null, children }) {
         "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide",
         toneCls
       )}
-      title={typeof children === "string" ? children : undefined}
     >
       {icon ? <span className="opacity-90">{icon}</span> : null}
       <span className="truncate">{children}</span>
@@ -129,42 +130,19 @@ function Card({ children, className = "" }) {
 
 function Modal({ open, title, onClose, children }) {
   if (!open) return null;
-
   return (
     <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        role="button"
-        tabIndex={0}
-        aria-label="Fechar"
-      />
-      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-6">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center p-3">
         <div className="w-full max-w-6xl">
-          <div
-            className={clsx(
-              "rounded-2xl border border-slate-200/70 bg-white/85 backdrop-blur-xl",
-              "shadow-[0_25px_90px_rgba(0,0,0,0.25)] overflow-hidden"
-            )}
-            style={{ maxHeight: "calc(100vh - 24px)" }}
-          >
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200/70 bg-white/90">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-800 truncate">{title}</div>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                <FaTimes />
-                Fechar
+          <div className="rounded-2xl border bg-white overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <div className="font-semibold text-sm">{title}</div>
+              <button onClick={onClose} className="text-xs flex gap-2 items-center">
+                <FaTimes /> Fechar
               </button>
             </div>
-
-            <div className="p-4 overflow-auto" style={{ maxHeight: "calc(100vh - 24px - 52px)" }}>
-              {children}
-            </div>
+            <div className="p-4 overflow-auto">{children}</div>
           </div>
         </div>
       </div>
@@ -172,752 +150,122 @@ function Modal({ open, title, onClose, children }) {
   );
 }
 
-function reportStatusTone(status) {
-  const s = String(status || "").toUpperCase();
-  if (s === "CONCLUIDO") return "green";
-  if (s === "ERRO") return "red";
-  if (s === "PROCESSANDO") return "yellow";
-  return "neutral";
-}
-
-function reportStatusIcon(status) {
-  const s = String(status || "").toUpperCase();
-  if (s === "CONCLUIDO") return <FaCheckCircle />;
-  if (s === "ERRO") return <FaTimesCircle />;
-  if (s === "PROCESSANDO") return <FaBolt />;
-  return <FaCloud />;
-}
-
 export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  useEffect(() => () => (mountedRef.current = false), []);
 
-  // ====== Execução ======
-  const [loading, setLoading] = useState(false);
+  // ===== EXECUÇÃO =====
+  const [loading, setLoading] = useState(false);          // gerencial
+  const [loadingAcomp, setLoadingAcomp] = useState(false); // acompanhamento
   const [resp, setResp] = useState(null);
   const [erro, setErro] = useState(null);
 
-  // ====== Histórico ======
-  const [historicoLoading, setHistoricoLoading] = useState(false);
-  const [historicoErro, setHistoricoErro] = useState(null);
-  const [items, setItems] = useState([]);
-
-  // ====== Seleção / URLs ======
-  const [selected, setSelected] = useState(null);
-  const [urls, setUrls] = useState(null);
-  const [urlsLoading, setUrlsLoading] = useState(false);
-  const [urlsErro, setUrlsErro] = useState(null);
-
-  // ====== Modal PDF ======
-  const [pdfOpen, setPdfOpen] = useState(false);
-
-  // ====== UI ======
-  const [showFilters, setShowFilters] = useState(true);
-  const [searchText, setSearchText] = useState("");
-  const [showCount, setShowCount] = useState(12);
-
+  // ===== PERÍODO =====
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
+  const primeiroDiaMes = useMemo(
+    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
+    [hoje]
+  );
 
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
 
-  // ✅ validação sem timezone (YYYY-MM-DD compara correto)
-  const validarPeriodo = useCallback(() => {
-    if (!periodoInicio || !periodoFim) return true;
-    return String(periodoInicio) <= String(periodoFim);
-  }, [periodoInicio, periodoFim]);
-
-  const clearFilters = useCallback(() => {
-    setPeriodoInicio(fmtDateInput(primeiroDiaMes));
-    setPeriodoFim(fmtDateInput(hoje));
-  }, [primeiroDiaMes, hoje]);
-
-  const selectedMeta = useMemo(() => {
-    if (!selected) return null;
-    const ini = selected?.periodo_inicio ? String(selected.periodo_inicio) : "—";
-    const fim = selected?.periodo_fim ? String(selected.periodo_fim) : "—";
-    return { ini, fim };
-  }, [selected]);
-
-  function labelRelatorio(it) {
-    const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "";
-    const fim = it?.periodo_fim ? String(it.periodo_fim) : "";
-    const periodo = ini && fim ? `${ini} → ${fim}` : ini || fim ? ini || fim : "Sem período";
-    return `Agente Gerencial — ${periodo}`;
-  }
-
-  const carregarHistorico = useCallback(async () => {
-    setHistoricoLoading(true);
-    setHistoricoErro(null);
-
-    try {
-      const q = supabase
-        .from("relatorios_gerados")
-        .select(
-          "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
-        )
-        .eq("tipo", TIPO_RELATORIO)
-        .order("created_at", { ascending: false })
-        .limit(LIMIT_HISTORICO);
-
-      const { data, error } = await q;
-      if (error) throw error;
-
-      if (!mountedRef.current) return;
-      setItems(Array.isArray(data) ? data : []);
-      setShowCount(12);
-    } catch (e) {
-      if (!mountedRef.current) return;
-      setHistoricoErro(String(e?.message || e));
-      setItems([]);
-    } finally {
-      if (mountedRef.current) setHistoricoLoading(false);
-    }
-  }, []);
-
-  /**
-   * ✅ Resolve paths (pdf/html/png) da pasta do report
-   * Regra:
-   * - se arquivo_path já for PDF, usa ele
-   * - senão tenta Relatorio_Gerencial.pdf na mesma pasta
-   * - html/png sempre por convenção na mesma pasta
-   */
-  function buildArtifactPathsFromReportRow(it) {
-    const arquivoPath = normalizePath(it?.arquivo_path || "");
-    if (!arquivoPath) return null;
-
-    const folder = getFolderFromPath(arquivoPath);
-
-    // PDF preferencial
-    let pdfPath = arquivoPath;
-    if (!/\.pdf$/i.test(pdfPath)) pdfPath = `${folder}/Relatorio_Gerencial.pdf`;
-
-    // HTML / PNG por convenção
-    let htmlPath = arquivoPath;
-    if (!/\.html$/i.test(htmlPath)) htmlPath = `${folder}/Relatorio_Gerencial.html`;
-
-    const pngPath = `${folder}/cluster_evolution_unificado.png`;
-
-    return { folder, pdfPath, htmlPath, pngPath };
-  }
-
-  const abrirRelatorio = useCallback(
-    async (it, { openPdf = false } = {}) => {
-      setSelected(it);
-      setUrls(null);
-      setUrlsErro(null);
-      setUrlsLoading(true);
-
-      try {
-        const paths = buildArtifactPathsFromReportRow(it);
-        if (!paths) throw new Error("arquivo_path vazio no relatorios_gerados");
-
-        const [pdfRes, htmlRes, pngRes] = await Promise.all([
-          makeUrlFromPath(paths.pdfPath, 3600),
-          makeUrlFromPath(paths.htmlPath, 3600),
-          makeUrlFromPath(paths.pngPath, 3600),
-        ]);
-
-        if (!mountedRef.current) return;
-
-        const newUrls = {
-          pdf: pdfRes.url,
-          pdf_path_used: pdfRes.path,
-          pdf_mode: pdfRes.mode,
-          html: htmlRes?.url || null,
-          html_path_used: htmlRes?.path || null,
-          html_mode: htmlRes?.mode || null,
-          png: pngRes?.url || null,
-          folder: paths.folder,
-        };
-
-        setUrls(newUrls);
-
-        // ✅ se pediu abrir modal, abre aqui
-        if (openPdf && newUrls?.pdf) setPdfOpen(true);
-      } catch (e) {
-        if (!mountedRef.current) return;
-        setUrlsErro(String(e?.message || e));
-      } finally {
-        if (mountedRef.current) setUrlsLoading(false);
-      }
-    },
-    []
+  const validarPeriodo = useCallback(
+    () => !periodoInicio || !periodoFim || periodoInicio <= periodoFim,
+    [periodoInicio, periodoFim]
   );
 
-  // ✅ Ao abrir o modal, renova o signedUrl do PDF (evita expirar no meio)
-  useEffect(() => {
-    if (!pdfOpen || !selected) return;
-    // se já tem url, renova mesmo assim (mais seguro)
-    abrirRelatorio(selected, { openPdf: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfOpen]);
-
-  useEffect(() => {
-    carregarHistorico();
-  }, [carregarHistorico]);
-
+  // ===== GERENCIAL =====
   const gerar = useCallback(async () => {
     setLoading(true);
     setErro(null);
-    setResp(null);
-
     try {
-      if (!validarPeriodo()) throw new Error("Período inválido: Data início maior que Data fim.");
-
       const payload = {
         tipo: TIPO_RELATORIO,
-        periodo_inicio: periodoInicio ? String(periodoInicio) : null,
-        periodo_fim: periodoFim ? String(periodoFim) : null,
-        motorista: null,
-        linha: null,
-        veiculo: null,
-        cluster: null,
+        periodo_inicio: periodoInicio,
+        periodo_fim: periodoFim,
       };
 
-      const r = await fetch(`${API_BASE.replace(/\/$/, "")}/relatorios/gerar`, {
+      const r = await fetch(`${API_BASE}/relatorios/gerar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const data = await r.json().catch(() => null);
-
-      if (!r.ok) {
-        const detail = data?.error || data?.detail || `HTTP ${r.status}`;
-        if (mountedRef.current) setResp(data);
-        throw new Error(detail);
-      }
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || "Erro gerencial");
 
       if (mountedRef.current) setResp(data);
-
-      await carregarHistorico();
-
-      // ✅ auto-open do report gerado
-      if (data?.report_id) {
-        const { data: row, error } = await supabase
-          .from("relatorios_gerados")
-          .select(
-            "id, created_at, tipo, status, periodo_inicio, periodo_fim, arquivo_path, arquivo_nome, mime_type, tamanho_bytes, erro_msg"
-          )
-          .eq("id", data.report_id)
-          .single();
-
-        if (!error && row) {
-          await abrirRelatorio(row, { openPdf: true });
-        }
-      }
     } catch (e) {
-      if (mountedRef.current) setErro(String(e?.message || e));
+      if (mountedRef.current) setErro(e.message);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [periodoInicio, periodoFim, validarPeriodo, carregarHistorico, abrirRelatorio]);
+  }, [periodoInicio, periodoFim]);
 
-  const statusTone = useMemo(
-    () => statusToneFrom({ loading, erro, ok: resp?.ok === true }),
-    [loading, erro, resp]
-  );
-  const statusText = useMemo(
-    () => statusTextFrom({ loading, erro, ok: resp?.ok === true }),
-    [loading, erro, resp]
-  );
+  // ===== ACOMPANHAMENTO =====
+  const gerarAcompanhamento = useCallback(async () => {
+    setLoadingAcomp(true);
+    setErro(null);
+    try {
+      const r = await fetch(`${API_BASE}/acompanhamentos/gerar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qtd: 10 }),
+      });
 
-  const statusIcon = useMemo(() => {
-    if (loading) return <FaBolt className="text-amber-600" />;
-    if (erro) return <FaTimesCircle className="text-rose-600" />;
-    if (resp?.ok === true) return <FaCheckCircle className="text-emerald-600" />;
-    return <FaCloud className="text-cyan-600" />;
-  }, [loading, erro, resp]);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || "Erro acompanhamento");
 
-  const filteredItems = useMemo(() => {
-    const q = (searchText || "").trim().toLowerCase();
-    if (!q) return items;
+      alert("Ordens de acompanhamento geradas com sucesso");
+    } catch (e) {
+      if (mountedRef.current) setErro(e.message);
+    } finally {
+      if (mountedRef.current) setLoadingAcomp(false);
+    }
+  }, []);
 
-    return items.filter((it) => {
-      const a = String(it?.arquivo_nome || "").toLowerCase();
-      const b = String(it?.arquivo_path || "").toLowerCase();
-      const c = String(it?.status || "").toLowerCase();
-      const d = String(it?.periodo_inicio || "").toLowerCase();
-      const e = String(it?.periodo_fim || "").toLowerCase();
-      return a.includes(q) || b.includes(q) || c.includes(q) || d.includes(q) || e.includes(q);
-    });
-  }, [items, searchText]);
-
-  const visibleItems = useMemo(() => filteredItems.slice(0, showCount), [filteredItems, showCount]);
-
-  const canOpenPdf = !!urls?.pdf;
+  const statusTone = statusToneFrom({ loading, erro, ok: resp?.ok });
+  const statusText = statusTextFrom({ loading, erro, ok: resp?.ok });
 
   return (
-    <div className="min-h-[calc(100vh-140px)]">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/70 backdrop-blur-xl p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(1000px_circle_at_10%_10%,rgba(56,189,248,0.18),transparent_55%),radial-gradient(900px_circle_at_90%_20%,rgba(217,70,239,0.14),transparent_60%)]" />
-          <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(15,23,42,0.10)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.10)_1px,transparent_1px)] [background-size:56px_56px]" />
-        </div>
+    <div className="p-6">
+      <div className="flex gap-2 mb-4">
+        <button className="px-4 py-2 rounded-xl border bg-cyan-50 text-cyan-800">
+          AGENTE GERENCIAL
+        </button>
 
-        {/* Header */}
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center">
-                <FaBolt className="text-cyan-700" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-xl font-semibold tracking-tight text-slate-900">Agente Diesel</h2>
-                <p className="text-sm text-slate-600">Clean: datas + histórico + PDF em modal.</p>
-              </div>
-            </div>
+        <button
+          onClick={gerarAcompanhamento}
+          disabled={loadingAcomp}
+          className={clsx(
+            "px-4 py-2 rounded-xl border",
+            loadingAcomp
+              ? "bg-white text-slate-400"
+              : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+          )}
+        >
+          {loadingAcomp ? "Gerando..." : "AGENTE ACOMPANHAMENTO"}
+        </button>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Pill tone="blue" icon={<FaCloud />}>
-                API: {API_BASE}
-              </Pill>
-              <Pill tone="purple" icon={<FaDatabase />}>
-                Bucket: {BUCKET}
-              </Pill>
-              <Pill tone={statusTone} icon={statusIcon}>
-                {statusText}
-              </Pill>
-            </div>
-          </div>
-
-          {/* Botões topo */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-cyan-200 bg-cyan-50 text-cyan-800"
-                title="Ativo"
-              >
-                AGENTE GERENCIAL
-              </button>
-
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition border border-slate-200 bg-white text-slate-400 cursor-not-allowed"
-                title="Ainda não existe"
-              >
-                AGENTE ACOMPANHAMENTO (em breve)
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-              type="button"
-            >
-              <FaFilter />
-              {showFilters ? "Ocultar datas" : "Mostrar datas"}
-            </button>
-
-            <button
-              onClick={gerar}
-              disabled={loading || !validarPeriodo()}
-              className={clsx(
-                "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition border",
-                loading || !validarPeriodo()
-                  ? "border-slate-200 bg-white text-slate-400 cursor-not-allowed"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              )}
-              title={!validarPeriodo() ? "Corrija o período" : "Executa a geração do relatório na API"}
-            >
-              <FaPlay />
-              {loading ? "Gerando..." : "Gerar análise"}
-            </button>
-          </div>
-        </div>
-
-        {/* Datas */}
-        {showFilters && (
-          <div className="relative mt-5">
-            <Card className="p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <FaFilter className="text-slate-500" />
-                    <p className="text-sm font-semibold text-slate-800">Período</p>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">Somente datas (YYYY-MM-DD).</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  <FaBroom />
-                  Limpar
-                </button>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-500">Data início</label>
-                  <input
-                    type="date"
-                    value={periodoInicio}
-                    onChange={(e) => setPeriodoInicio(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-cyan-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-500">Data fim</label>
-                  <input
-                    type="date"
-                    value={periodoFim}
-                    onChange={(e) => setPeriodoFim(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-cyan-200"
-                  />
-                </div>
-              </div>
-
-              {!validarPeriodo() && (
-                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <FaExclamationTriangle />
-                    Período inválido
-                  </div>
-                  <div className="mt-1 text-xs text-rose-600">
-                    A data de início deve ser menor ou igual à data fim.
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-        )}
-
-        {/* Visualização */}
-        <div className="relative mt-5">
-          <Card className="p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <FaFilePdf className="text-slate-600" />
-                  <div className="text-sm font-semibold text-slate-800">Visualização</div>
-                </div>
-
-                {!selected ? (
-                  <div className="mt-1 text-xs text-slate-500">
-                    Selecione um item no histórico para habilitar o PDF.
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-1 text-xs text-slate-600">
-                    <div className="truncate">
-                      <span className="text-slate-800 font-semibold">Relatório:</span>{" "}
-                      <span className="text-slate-700">{labelRelatorio(selected)}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                      <div>
-                        <span className="text-slate-800 font-semibold">Gerado:</span>{" "}
-                        <span className="text-slate-700">{fmtBR(selected.created_at)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-800 font-semibold">Status:</span>{" "}
-                        <span className="text-slate-700">{String(selected.status || "")}</span>
-                      </div>
-                      {selectedMeta ? (
-                        <div>
-                          <span className="text-slate-800 font-semibold">Período:</span>{" "}
-                          <span className="text-slate-700">
-                            {selectedMeta.ini} → {selectedMeta.fim}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {urls?.pdf_path_used ? (
-                      <div className="text-[11px] text-slate-500 break-all">
-                        <span className="font-semibold text-slate-700">PDF path:</span>{" "}
-                        {urls.pdf_path_used} ({urls.pdf_mode})
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (canOpenPdf) setPdfOpen(true);
-                  }}
-                  disabled={!canOpenPdf || urlsLoading}
-                  className={clsx(
-                    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition border",
-                    !canOpenPdf || urlsLoading
-                      ? "border-slate-200 bg-white text-slate-400 cursor-not-allowed"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  )}
-                  title={!canOpenPdf ? "Selecione um relatório com PDF" : "Abrir PDF"}
-                >
-                  <FaFilePdf />
-                  PDF
-                </button>
-
-                {urls?.pdf ? (
-                  <a
-                    href={urls.pdf}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                    title="Abrir PDF em nova aba"
-                  >
-                    Abrir em nova aba
-                  </a>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={carregarHistorico}
-                  disabled={historicoLoading}
-                  className={clsx(
-                    "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition",
-                    historicoLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-slate-50"
-                  )}
-                  title="Recarregar histórico"
-                >
-                  <FaSyncAlt className={historicoLoading ? "animate-spin" : ""} />
-                  {historicoLoading ? "Atualizando..." : "Atualizar"}
-                </button>
-              </div>
-            </div>
-
-            {urlsLoading && (
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                <div className="flex items-center gap-2 font-semibold">
-                  <FaSyncAlt className="animate-spin" />
-                  Carregando URLs...
-                </div>
-              </div>
-            )}
-
-            {urlsErro && (
-              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                <div className="flex items-center gap-2 font-semibold">
-                  <FaTimesCircle />
-                  Falha ao preparar PDF
-                </div>
-                <div className="mt-1 text-xs text-rose-600 break-all">{urlsErro}</div>
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Histórico */}
-        <div className="relative mt-5">
-          <Card className="p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2">
-                <FaDatabase className="text-slate-600" />
-                <h3 className="text-sm font-semibold text-slate-800">Histórico</h3>
-                <span className="text-xs text-slate-500">({filteredItems.length} item(ns))</span>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-                  <input
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    placeholder="Buscar (status, período, arquivo, path...)"
-                    className="w-full sm:w-[360px] rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-200"
-                  />
-                </div>
-                {!!searchText && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchText("")}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    limpar
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {historicoErro && (
-              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                <div className="flex items-center gap-2 font-semibold">
-                  <FaTimesCircle />
-                  Erro ao carregar histórico
-                </div>
-                <div className="mt-1 text-xs text-rose-600 break-all">{historicoErro}</div>
-              </div>
-            )}
-
-            <div className="mt-3 space-y-2">
-              {!visibleItems.length ? (
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
-                  Nenhum relatório encontrado.
-                </div>
-              ) : (
-                visibleItems.map((it) => {
-                  const isSel = selected?.id === it.id;
-
-                  const tone = reportStatusTone(it.status);
-                  const icon = reportStatusIcon(it.status);
-
-                  const ini = it?.periodo_inicio ? String(it.periodo_inicio) : "—";
-                  const fim = it?.periodo_fim ? String(it.periodo_fim) : "—";
-
-                  return (
-                    <button
-                      key={it.id}
-                      type="button"
-                      onClick={() => abrirRelatorio(it)}
-                      className={clsx(
-                        "w-full text-left rounded-2xl border p-3 transition flex items-start justify-between gap-3",
-                        isSel ? "border-cyan-200 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      )}
-                      title="Selecionar relatório"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Pill tone={tone} icon={icon}>
-                            {String(it.status || "—")}
-                          </Pill>
-                          <div className="truncate text-sm font-semibold text-slate-800">
-                            {ini} → {fim}
-                          </div>
-                        </div>
-
-                        <div className="mt-1 text-xs text-slate-600">
-                          {fmtBR(it.created_at)}
-                          {it?.arquivo_nome ? (
-                            <>
-                              {" "}
-                              • <span className="text-slate-700">{it.arquivo_nome}</span>
-                            </>
-                          ) : null}
-                        </div>
-
-                        {it?.erro_msg && String(it.status || "").toUpperCase() === "ERRO" ? (
-                          <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700 break-all">
-                            <span className="font-semibold">Erro:</span> {it.erro_msg}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="shrink-0 flex flex-col items-end gap-2">
-                        {isSel && (
-                          <span className="text-[11px] text-cyan-800 border border-cyan-200 bg-cyan-50 rounded-full px-2 py-1">
-                            selecionado
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            {filteredItems.length > showCount && (
-              <div className="mt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => setShowCount((c) => Math.min(filteredItems.length, c + 12))}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  Ver mais
-                </button>
-              </div>
-            )}
-
-            {erro && (
-              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                <div className="flex items-center gap-2 font-semibold">
-                  <FaExclamationTriangle />
-                  Erro ao gerar
-                </div>
-                <div className="mt-1 text-xs text-rose-600 break-all">{erro}</div>
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {!!resp && (resp?.stderr || resp?.stdout || resp?.stdout_tail) && (
-          <div className="relative mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-4">
-              <div className="text-xs font-semibold text-slate-700">STDERR</div>
-              <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-slate-800">
-{resp?.stderr || "(vazio)"}
-              </pre>
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs font-semibold text-slate-700">STDOUT</div>
-              <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3 max-h-56 overflow-auto whitespace-pre-wrap text-slate-800">
-{resp?.stdout || resp?.stdout_tail || "(vazio)"}
-              </pre>
-            </Card>
-          </div>
-        )}
+        <button
+          onClick={gerar}
+          disabled={loading || !validarPeriodo()}
+          className="px-4 py-2 rounded-xl border"
+        >
+          <FaPlay /> {loading ? "Gerando..." : "Gerar análise"}
+        </button>
       </div>
 
-      {/* MODAL PDF */}
-      <Modal
-        open={pdfOpen}
-        onClose={() => setPdfOpen(false)}
-        title={selectedMeta ? `Agente Gerencial — ${selectedMeta.ini} → ${selectedMeta.fim}` : "Agente Gerencial — PDF"}
-      >
-        {!canOpenPdf ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
-            Nenhum PDF disponível para exibir.
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Viewer seguro ({urls?.pdf_mode || "signed"})
-              </div>
+      <Pill tone={statusTone} icon={<FaBolt />}>
+        {statusText}
+      </Pill>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => abrirRelatorio(selected)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  title="Renovar link"
-                >
-                  <FaSyncAlt />
-                  Renovar
-                </button>
-
-                {urls?.pdf && (
-                  <a
-                    href={urls.pdf}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                    title="Abrir PDF em nova aba"
-                  >
-                    <FaFilePdf />
-                    Abrir
-                  </a>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-slate-50/70" style={{ height: "calc(100vh - 24px - 52px - 140px)" }}>
-              <iframe
-                title="RelatorioPDF"
-                src={urls.pdf}
-                className="w-full h-full"
-                style={{ background: "transparent" }}
-              />
-            </div>
-          </div>
-        )}
-      </Modal>
+      {erro && (
+        <div className="mt-4 p-3 border border-rose-200 bg-rose-50 text-rose-700">
+          {erro}
+        </div>
+      )}
     </div>
   );
 }
