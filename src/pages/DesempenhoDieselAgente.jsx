@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { 
   FaBolt, FaCheckCircle, FaExclamationTriangle, FaPlay, FaSpinner, 
-  FaGithub, FaFilePdf, FaFileCode, FaSync, FaInfoCircle 
+  FaGithub, FaFilePdf, FaFileCode, FaSync, FaInfoCircle, FaExternalLinkAlt 
 } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 
@@ -14,13 +14,13 @@ const GH_REPO = import.meta.env.VITE_GITHUB_REPO;
 const GH_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GH_REF = "main";
 
-// Nomes EXATOS dos arquivos .yml no seu GitHub
 const WF_GERENCIAL = "relatorio_gerencial.yml";
 const WF_ACOMP = "ordem-acompanhamento.yml";
 
-// URL Base do Bucket (Ajuste a URL do seu projeto se necessário)
-const SUPABASE_PROJECT_URL = import.meta.env.VITE_SUPABASE_URL; 
-const BUCKET_URL = `${SUPABASE_PROJECT_URL}/storage/v1/object/public/relatorios`;
+// --- URL BASE DO SUPABASE ---
+const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL; 
+// Nome do bucket que você criou no Supabase Storage
+const BUCKET_NAME = "relatorios";
 
 /* =========================
    HELPERS
@@ -36,15 +36,23 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// --- FUNÇÃO DE URL CORRIGIDA ---
 function getPublicUrl(path) {
   if (!path) return null;
-  // Se já vier com http (raro), retorna direto
-  if (path.startsWith("http")) return path;
-  return `${BUCKET_URL}/${path}`;
+  if (path.startsWith("http")) return path; // Se já salvou com link completo
+
+  // Remove barra inicial se tiver
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  
+  // Monta a URL pública padrão do Supabase
+  // Formato: https://PROJECT.supabase.co/storage/v1/object/public/BUCKET/PATH
+  const fullUrl = `${SUPABASE_BASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${cleanPath}`;
+  
+  return fullUrl;
 }
 
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes");
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes (.env)");
   
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
   
@@ -96,13 +104,10 @@ export default function DesempenhoDieselAgente() {
 
   const validarPeriodo = useCallback(() => !periodoInicio || !periodoFim || periodoInicio <= periodoFim, [periodoInicio, periodoFim]);
 
-  // =========================================================================
-  // BUSCAR HISTÓRICO
-  // =========================================================================
   const buscarHistorico = async () => {
     setLoadingListas(true);
     try {
-      // 1. Relatórios Gerenciais
+      // 1. Relatórios
       const { data: rels } = await supabase
         .from("relatorios_gerados")
         .select("*")
@@ -110,8 +115,7 @@ export default function DesempenhoDieselAgente() {
         .limit(5);
       if (rels) setListaRelatorios(rels);
 
-      // 2. Prontuários Individuais
-      // Trazendo TUDO para debuggar se está vindo null
+      // 2. Prontuários
       const { data: pronts } = await supabase
         .from("diesel_acompanhamentos")
         .select("*")
@@ -120,19 +124,15 @@ export default function DesempenhoDieselAgente() {
       if (pronts) setListaProntuarios(pronts);
 
     } catch (error) {
-      console.error("Erro ao buscar histórico:", error);
+      console.error("Erro histórico:", error);
     } finally {
       setLoadingListas(false);
     }
   };
 
-  // =========================================================================
-  // DISPAROS
-  // =========================================================================
   const dispararGerencial = async () => {
     setLoadingGerencial(true); setErro(null); setSucesso(null);
     try {
-      const userLogin = userSession?.user?.email || "sistema";
       const { data: record, error } = await supabase
         .from("relatorios_gerados")
         .insert({
@@ -140,7 +140,7 @@ export default function DesempenhoDieselAgente() {
           status: "PROCESSANDO",
           periodo_inicio: periodoInicio,
           periodo_fim: periodoFim,
-          solicitante_login: userLogin,
+          solicitante_login: userSession?.user?.email || "sistema",
           solicitante_nome: userSession?.user?.user_metadata?.full_name
         })
         .select("id").single();
@@ -154,9 +154,8 @@ export default function DesempenhoDieselAgente() {
         report_tipo: "diesel_gerencial"
       });
 
-      setSucesso(`Relatório #${record.id} iniciado.`);
+      setSucesso(`Relatório #${record.id} enviado.`);
       setTimeout(buscarHistorico, 3000);
-
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -179,9 +178,8 @@ export default function DesempenhoDieselAgente() {
         qtd: String(qtdAcompanhamentos)
       });
 
-      setSucesso(`Lote #${lote.id} iniciado.`);
+      setSucesso(`Lote #${lote.id} enviado.`);
       setTimeout(buscarHistorico, 3000);
-
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -189,36 +187,23 @@ export default function DesempenhoDieselAgente() {
     }
   };
 
-  // =========================================================================
-  // RENDERIZAÇÃO
-  // =========================================================================
-  
-  // Componente interno para Status e Erro
   const StatusBadge = ({ status, erroMsg }) => {
-    if (status === "CONCLUIDO") {
-      return <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">CONCLUÍDO</span>;
-    }
-    if (status === "ERRO") {
-      return (
-        <div className="flex items-center gap-1 text-red-600">
-          <span className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700">ERRO</span>
-          {erroMsg && (
-            <div className="group relative">
-              <FaInfoCircle className="cursor-help" />
-              <div className="absolute bottom-full right-0 mb-2 w-64 p-2 bg-slate-800 text-white text-xs rounded shadow-lg hidden group-hover:block z-50 overflow-auto max-h-40">
-                {erroMsg}
-              </div>
-            </div>
-          )}
+    if (status === "CONCLUIDO") return <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">OK</span>;
+    if (status === "ERRO") return (
+      <div className="group relative inline-block">
+        <span className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 cursor-help flex items-center gap-1">
+          ERRO <FaInfoCircle />
+        </span>
+        <div className="absolute bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-xs rounded hidden group-hover:block z-50">
+          {erroMsg || "Erro desconhecido"}
         </div>
-      );
-    }
+      </div>
+    );
     return <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700 animate-pulse">{status}</span>;
   };
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
-      
       {/* HEADER */}
       <div className="flex items-center gap-3 border-b pb-4">
         <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
@@ -226,167 +211,109 @@ export default function DesempenhoDieselAgente() {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
-          <p className="text-sm text-slate-500 flex items-center gap-1">
-            <FaGithub /> Integração GitHub Actions + Supabase
-          </p>
+          <p className="text-sm text-slate-500">Operando via GitHub Actions</p>
         </div>
       </div>
 
       {/* CONTROLES */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* CARD GERENCIAL */}
+        {/* Card Gerencial */}
         <div className="bg-white rounded-2xl border p-6 shadow-sm">
-          <div className="flex justify-between mb-4">
-            <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
-            <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
+          <div className="flex justify-between mb-4"><h3 className="font-semibold text-slate-700">Relatório Gerencial</h3><span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span></div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div><label className="text-xs font-bold text-slate-500">Início</label><input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
+            <div><label className="text-xs font-bold text-slate-500">Fim</label><input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
           </div>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-bold text-slate-500">Início</label><input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
-              <div><label className="text-xs font-bold text-slate-500">Fim</label><input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
-            </div>
-            <button onClick={dispararGerencial} disabled={loadingGerencial || !validarPeriodo()} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingGerencial ? "bg-slate-100 text-slate-400" : "bg-cyan-600 text-white hover:bg-cyan-700")}>
-              {loadingGerencial ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingGerencial ? "Iniciando..." : "DISPARAR RELATÓRIO"}
-            </button>
-          </div>
-        </div>
-
-        {/* CARD ACOMPANHAMENTO */}
-        <div className="bg-white rounded-2xl border p-6 shadow-sm">
-          <div className="flex justify-between mb-4">
-            <h3 className="font-semibold text-slate-700">Ordens de Monitoria</h3>
-            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold">INDIVIDUAL</span>
-          </div>
-          <div className="space-y-4">
-            <div><label className="text-xs font-bold text-slate-500">Qtd. Motoristas</label><input type="number" min={1} value={qtdAcompanhamentos} onChange={(e) => setQtdAcompanhamentos(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm mt-1" /></div>
-            <button onClick={dispararAcompanhamento} disabled={loadingAcomp} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingAcomp ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700")}>
-              {loadingAcomp ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingAcomp ? "Iniciando..." : "GERAR PRONTUÁRIOS"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* FEEDBACK TOAST */}
-      {(sucesso || erro) && (
-        <div className={clsx("p-4 rounded-xl border flex items-center gap-3 animate-fade-in", sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800")}>
-          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
-          <div><p className="font-bold text-sm">{sucesso ? "Sucesso" : "Atenção"}</p><p className="text-xs">{sucesso || erro}</p></div>
-        </div>
-      )}
-
-      {/* ======================= TABELAS ======================= */}
-      <div className="border-t pt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-slate-800">Histórico de Execuções</h2>
-          <button onClick={buscarHistorico} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar lista">
-            <FaSync className={clsx(loadingListas && "animate-spin")} />
+          <button onClick={dispararGerencial} disabled={loadingGerencial || !validarPeriodo()} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingGerencial ? "bg-slate-100 text-slate-400" : "bg-cyan-600 text-white hover:bg-cyan-700")}>
+            {loadingGerencial ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingGerencial ? "Enviando..." : "DISPARAR RELATÓRIO"}
           </button>
         </div>
 
+        {/* Card Acompanhamento */}
+        <div className="bg-white rounded-2xl border p-6 shadow-sm">
+          <div className="flex justify-between mb-4"><h3 className="font-semibold text-slate-700">Ordens de Monitoria</h3><span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold">INDIVIDUAL</span></div>
+          <div className="mb-4">
+            <label className="text-xs font-bold text-slate-500">Qtd. Motoristas</label>
+            <input type="number" min={1} value={qtdAcompanhamentos} onChange={(e) => setQtdAcompanhamentos(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm mt-1" />
+          </div>
+          <button onClick={dispararAcompanhamento} disabled={loadingAcomp} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm", loadingAcomp ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700")}>
+            {loadingAcomp ? <FaSpinner className="animate-spin" /> : <FaPlay />} {loadingAcomp ? "Enviando..." : "GERAR PRONTUÁRIOS"}
+          </button>
+        </div>
+      </div>
+
+      {/* FEEDBACK */}
+      {(sucesso || erro) && (
+        <div className={clsx("p-4 rounded-xl border flex items-center gap-3 animate-fade-in", sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800")}>
+          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
+          <div><p className="font-bold text-sm">{sucesso ? "Sucesso" : "Status"}</p><p className="text-xs">{sucesso || erro}</p></div>
+        </div>
+      )}
+
+      {/* LISTAGEM */}
+      <div className="border-t pt-6">
+        <div className="flex justify-between mb-4">
+          <h2 className="text-xl font-bold text-slate-800">Histórico</h2>
+          <button onClick={buscarHistorico} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><FaSync className={clsx(loadingListas && "animate-spin")} /></button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* TABELA 1: RELATÓRIOS GERENCIAIS */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">Relatórios Gerenciais</h3>
-            <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-600 font-bold">
-                  <tr>
-                    <th className="p-3">ID / Data</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {listaRelatorios.length === 0 ? (
-                    <tr><td colSpan="3" className="p-4 text-center text-slate-400">Nenhum registro.</td></tr>
-                  ) : (
-                    listaRelatorios.map((rel) => {
-                      const urlPdf = getPublicUrl(rel.arquivo_pdf_path);
-                      return (
-                        <tr key={rel.id} className="hover:bg-slate-50">
-                          <td className="p-3">
-                            <div className="font-bold">#{rel.id}</div>
-                            <div className="text-xs text-slate-400">{new Date(rel.created_at).toLocaleDateString()}</div>
-                          </td>
-                          <td className="p-3">
-                            <StatusBadge status={rel.status} erroMsg={rel.erro_msg} />
-                          </td>
-                          <td className="p-3 text-right">
-                            {rel.status === "CONCLUIDO" && urlPdf ? (
-                              <a href={urlPdf} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-cyan-600 font-bold hover:underline">
-                                <FaFilePdf /> PDF
-                              </a>
-                            ) : rel.status === "CONCLUIDO" ? (
-                              <span className="text-xs text-red-400" title="Arquivo não foi salvo no banco">Link quebrado</span>
-                            ) : null}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* TABELA GERENCIAL */}
+          <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="bg-slate-50 p-3 border-b font-bold text-slate-600 text-xs uppercase">Relatórios Gerenciais</div>
+            <table className="w-full text-sm">
+              <tbody className="divide-y">
+                {listaRelatorios.map((rel) => {
+                  const url = getPublicUrl(rel.arquivo_pdf_path);
+                  return (
+                    <tr key={rel.id} className="hover:bg-slate-50">
+                      <td className="p-3">
+                        <div className="font-bold text-slate-700">#{rel.id}</div>
+                        <div className="text-xs text-slate-400">{new Date(rel.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td className="p-3"><StatusBadge status={rel.status} erroMsg={rel.erro_msg} /></td>
+                      <td className="p-3 text-right">
+                        {rel.status === "CONCLUIDO" && url && (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="text-cyan-600 font-bold hover:underline flex items-center justify-end gap-1">
+                            <FaFilePdf /> PDF
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
-          {/* TABELA 2: PRONTUÁRIOS */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">Prontuários Individuais</h3>
-            <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-600 font-bold">
-                  <tr>
-                    <th className="p-3">Motorista</th>
-                    <th className="p-3">Indicadores</th>
-                    <th className="p-3 text-right">Download</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {listaProntuarios.length === 0 ? (
-                    <tr><td colSpan="3" className="p-4 text-center text-slate-400">Nenhum prontuário.</td></tr>
-                  ) : (
-                    listaProntuarios.map((item) => {
-                      const urlHtml = getPublicUrl(item.arquivo_html_path);
-                      const urlPdf = getPublicUrl(item.arquivo_pdf_path);
-                      
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50">
-                          <td className="p-3">
-                            <div className="font-bold">{item.motorista_nome || "Desconhecido"}</div>
-                            <div className="text-xs text-slate-400">Lote #{item.lote_id}</div>
-                            {item.status === "ERRO" && <span className="text-xs text-red-500 font-bold">Erro ao gerar</span>}
-                          </td>
-                          <td className="p-3">
-                            <div className="text-xs">
-                              <span className="text-slate-500">Perda:</span> 
-                              {item.perda_litros !== null ? <b className="text-red-600"> {item.perda_litros?.toFixed(0)} L</b> : <span className="text-slate-300"> --</span>}
-                            </div>
-                            <div className="text-xs">
-                              <span className="text-slate-500">Gap:</span> 
-                              {item.gap !== null ? <b> {item.gap?.toFixed(2)}</b> : <span className="text-slate-300"> --</span>}
-                            </div>
-                          </td>
-                          <td className="p-3 text-right space-x-2">
-                            {urlHtml && (
-                              <a href={urlHtml} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-slate-800" title="Ver HTML"><FaFileCode /></a>
-                            )}
-                            {urlPdf && (
-                              <a href={urlPdf} target="_blank" rel="noopener noreferrer" className="text-red-500 hover:text-red-700" title="Baixar PDF"><FaFilePdf /></a>
-                            )}
-                            {(!urlHtml && !urlPdf && item.status !== "ERRO") && (
-                              <span className="text-xs text-slate-300">Processando...</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* TABELA PRONTUÁRIOS */}
+          <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="bg-slate-50 p-3 border-b font-bold text-slate-600 text-xs uppercase">Últimos Prontuários</div>
+            <table className="w-full text-sm">
+              <tbody className="divide-y">
+                {listaProntuarios.map((item) => {
+                  const htmlUrl = getPublicUrl(item.arquivo_html_path);
+                  const pdfUrl = getPublicUrl(item.arquivo_pdf_path);
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="p-3">
+                        <div className="font-bold text-slate-700 text-xs truncate max-w-[150px]">{item.motorista_nome}</div>
+                        <div className="text-[10px] text-slate-400">Lote #{item.lote_id}</div>
+                      </td>
+                      <td className="p-3 text-xs">
+                        <div>Perda: <b className="text-red-600">{item.perda_litros?.toFixed(0)} L</b></div>
+                        <div>Gap: <b>{item.gap?.toFixed(2)}</b></div>
+                      </td>
+                      <td className="p-3 text-right flex justify-end gap-3">
+                        {htmlUrl && <a href={htmlUrl} target="_blank" className="text-slate-500 hover:text-blue-600" title="Ver HTML"><FaFileCode size={16} /></a>}
+                        {pdfUrl && <a href={pdfUrl} target="_blank" className="text-red-500 hover:text-red-700" title="Baixar PDF"><FaFilePdf size={16} /></a>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-
         </div>
       </div>
     </div>
