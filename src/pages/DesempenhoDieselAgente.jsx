@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { FaBolt, FaCheckCircle, FaExclamationTriangle, FaPlay } from "react-icons/fa";
 
-import { supabase } from "../supabaseClient"; // ✅ aqui é o B NORMAL (INOVE)
+import { supabase } from "../supabaseClient"; // ✅ B normal (INOVE)
 
 /* =========================
    CONFIG (GITHUB ACTIONS)
@@ -35,7 +35,9 @@ function assertGithubEnv() {
   if (!GH_USER) missing.push("VITE_GITHUB_USER");
   if (!GH_REPO) missing.push("VITE_GITHUB_REPO");
   if (!GH_TOKEN) missing.push("VITE_GITHUB_TOKEN");
-  if (missing.length) throw new Error(`ENV do GitHub ausente: ${missing.join(", ")}`);
+  if (missing.length) {
+    throw new Error(`ENV do GitHub ausente: ${missing.join(", ")}`);
+  }
 }
 
 async function dispatchWorkflow({ workflowFile, ref, inputs }) {
@@ -57,6 +59,7 @@ async function dispatchWorkflow({ workflowFile, ref, inputs }) {
     }),
   });
 
+  // GitHub retorna 204 (No Content) quando aceita
   if (r.status === 204) return { ok: true };
 
   let msg = `Erro ao disparar workflow (${r.status})`;
@@ -67,22 +70,19 @@ async function dispatchWorkflow({ workflowFile, ref, inputs }) {
   throw new Error(msg);
 }
 
-/* =========================
-   SUPABASE B (NORMAL) -> relatorios_gerados
-========================= */
-async function criarRelatorioGeradoB({ tipo, periodo_inicio, periodo_fim }) {
-  if (!supabase) throw new Error("Supabase B (normal) não está configurado.");
-
+/**
+ * ✅ Cria um registro em public.relatorios_gerados (Supabase B)
+ * e retorna o ID para passar no workflow_dispatch.
+ *
+ * Ajuste campos aqui se a tabela tiver NOT NULL adicionais.
+ */
+async function criarRelatorioGerencialB({ periodoInicio, periodoFim }) {
+  // payload mínimo (mantém simples)
   const payload = {
-    tipo: tipo || "diesel_gerencial",
+    tipo: "diesel_gerencial",
     status: "PENDENTE",
-    periodo_inicio: periodo_inicio || null,
-    periodo_fim: periodo_fim || null,
-    metadata: {
-      origem: "inove",
-      disparo: "github_actions",
-      workflow: WF_GERENCIAL,
-    },
+    periodo_inicio: periodoInicio || null,
+    periodo_fim: periodoFim || null,
   };
 
   const { data, error } = await supabase
@@ -91,10 +91,13 @@ async function criarRelatorioGeradoB({ tipo, periodo_inicio, periodo_fim }) {
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message || "Erro ao criar relatorio_gerados (Supabase B).");
-  if (!data?.id) throw new Error("Falha ao obter ID do relatório criado (Supabase B).");
-
-  return String(data.id);
+  if (error) {
+    throw new Error(`Erro ao criar relatorio no Supabase B: ${error.message}`);
+  }
+  if (!data?.id) {
+    throw new Error("Relatório criado mas não retornou ID.");
+  }
+  return data.id;
 }
 
 /* =========================
@@ -127,9 +130,8 @@ export default function DesempenhoDieselAgente() {
   );
 
   /* =========================
-     GERENCIAL
-     1) cria relatorios_gerados no B (normal)
-     2) dispara workflow passando report_id
+     GERENCIAL (GITHUB)
+     - Cria report no Supabase B e usa o id no dispatch
   ========================= */
   const gerarGerencial = useCallback(async () => {
     setLoadingGerencial(true);
@@ -139,12 +141,13 @@ export default function DesempenhoDieselAgente() {
     try {
       if (!validarPeriodo()) throw new Error("Período inválido.");
 
-      const reportId = await criarRelatorioGeradoB({
-        tipo: "diesel_gerencial",
-        periodo_inicio: periodoInicio || null,
-        periodo_fim: periodoFim || null,
+      // 1) cria o registro no Supabase B
+      const reportId = await criarRelatorioGerencialB({
+        periodoInicio,
+        periodoFim,
       });
 
+      // 2) dispara workflow do GitHub passando o report_id
       await dispatchWorkflow({
         workflowFile: WF_GERENCIAL,
         inputs: {
@@ -164,7 +167,8 @@ export default function DesempenhoDieselAgente() {
   }, [periodoInicio, periodoFim, validarPeriodo]);
 
   /* =========================
-     ACOMPANHAMENTO (workflow direto)
+     ACOMPANHAMENTO (GITHUB)
+     - Só dispara workflow (GitHub responde 204)
   ========================= */
   const gerarAcompanhamento = useCallback(async () => {
     setLoadingAcomp(true);
@@ -175,7 +179,7 @@ export default function DesempenhoDieselAgente() {
         workflowFile: WF_ACOMP,
         inputs: {
           qtd: String(qtdAcompanhamentos),
-          ordem_batch_id: "",
+          ordem_batch_id: "", // opcional
         },
       });
 
@@ -228,12 +232,6 @@ export default function DesempenhoDieselAgente() {
           <FaPlay />
           {loadingGerencial ? "Disparando..." : "Disparar relatório gerencial"}
         </button>
-
-        {resp?.report_id && (
-          <div className="text-xs text-slate-600">
-            report_id criado: <b>{resp.report_id}</b>
-          </div>
-        )}
       </div>
 
       {/* ===== ACOMPANHAMENTO ===== */}
@@ -269,7 +267,7 @@ export default function DesempenhoDieselAgente() {
       {resp?.ok && (
         <div className="flex items-center gap-2 text-emerald-700">
           <FaCheckCircle />
-          Workflow disparado com sucesso (GitHub Actions)
+          Workflow disparado (report_id: <b>{resp.report_id}</b>)
         </div>
       )}
 
