@@ -1,18 +1,18 @@
 // src/pages/DesempenhoDieselAgente.jsx
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import {
-  FaBolt,
-  FaCheckCircle,
-  FaExclamationTriangle,
-  FaPlay,
-} from "react-icons/fa";
+import { FaBolt, FaCheckCircle, FaExclamationTriangle, FaPlay } from "react-icons/fa";
 
 /* =========================
-   CONFIG
+   CONFIG (GITHUB ACTIONS)
 ========================= */
-const API_BASE =
-  import.meta?.env?.VITE_AGENTEDIESEL_API_BASE ||
-  "https://agentediesel.onrender.com";
+const GH_USER = import.meta?.env?.VITE_GITHUB_USER;
+const GH_REPO = import.meta?.env?.VITE_GITHUB_REPO;
+const GH_REF = import.meta?.env?.VITE_GITHUB_REF || "main";
+const GH_TOKEN = import.meta?.env?.VITE_GITHUB_TOKEN;
+
+// ✅ nomes dos workflows (arquivo .yml/.yaml dentro de .github/workflows/)
+const WF_GERENCIAL = "relatorio-gerencial-diesel.yml";
+const WF_ACOMP = "gerar-ordens-acompanhamento.yml";
 
 /* =========================
    HELPERS
@@ -28,6 +28,46 @@ function fmtDateInput(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function assertGithubEnv() {
+  const missing = [];
+  if (!GH_USER) missing.push("VITE_GITHUB_USER");
+  if (!GH_REPO) missing.push("VITE_GITHUB_REPO");
+  if (!GH_TOKEN) missing.push("VITE_GITHUB_TOKEN");
+  if (missing.length) {
+    throw new Error(`ENV do GitHub ausente: ${missing.join(", ")}`);
+  }
+}
+
+async function dispatchWorkflow({ workflowFile, ref, inputs }) {
+  assertGithubEnv();
+
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
+
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GH_TOKEN}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ref: ref || GH_REF,
+      inputs: inputs || {},
+    }),
+  });
+
+  // GitHub retorna 204 (No Content) quando aceita
+  if (r.status === 204) return { ok: true };
+
+  let msg = `Erro ao disparar workflow (${r.status})`;
+  try {
+    const data = await r.json();
+    msg = data?.message || msg;
+  } catch {}
+  throw new Error(msg);
+}
+
 /* =========================
    COMPONENT
 ========================= */
@@ -35,18 +75,13 @@ export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
   useEffect(() => () => (mountedRef.current = false), []);
 
-  /* =========================
-     STATE
-  ========================= */
   const hoje = useMemo(() => new Date(), []);
   const primeiroDiaMes = useMemo(
     () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
     [hoje]
   );
 
-  const [periodoInicio, setPeriodoInicio] = useState(
-    fmtDateInput(primeiroDiaMes)
-  );
+  const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
 
   const [loadingGerencial, setLoadingGerencial] = useState(false);
@@ -63,29 +98,40 @@ export default function DesempenhoDieselAgente() {
   );
 
   /* =========================
-     GERENCIAL
+     GERENCIAL (GITHUB)
+     - Você PRECISA ter um report_id já criado no Supabase B.
+     - Se ainda não tem, o correto é criar antes (no INOVE) e passar aqui.
   ========================= */
   const gerarGerencial = useCallback(async () => {
     setLoadingGerencial(true);
     setErro(null);
+    setResp(null);
 
     try {
-      const payload = {
-        tipo: "diesel_gerencial",
-        periodo_inicio: periodoInicio,
-        periodo_fim: periodoFim,
-      };
+      // ✅ ajuste aqui: de onde vem o report_id?
+      // Opção 1: você já tem no INOVE e passa por state/props
+      // Opção 2: você cria no Supabase B antes e usa o id criado
+      //
+      // Por agora, vou exigir que você informe por env (ou você adapta para buscar do banco)
+      const REPORT_ID = import.meta?.env?.VITE_REPORT_ID_TEST; // opcional p/ teste
 
-      const r = await fetch(`${API_BASE}/relatorios/gerar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      if (!REPORT_ID) {
+        throw new Error(
+          "Faltou o report_id. Crie um registro em public.relatorios_gerados (Supabase B) e passe o ID no dispatch."
+        );
+      }
+
+      await dispatchWorkflow({
+        workflowFile: WF_GERENCIAL,
+        inputs: {
+          report_id: String(REPORT_ID),
+          periodo_inicio: String(periodoInicio || ""),
+          periodo_fim: String(periodoFim || ""),
+          report_tipo: "diesel_gerencial",
+        },
       });
 
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Erro no robô gerencial");
-
-      if (mountedRef.current) setResp(data);
+      if (mountedRef.current) setResp({ ok: true });
     } catch (e) {
       if (mountedRef.current) setErro(e.message);
     } finally {
@@ -94,29 +140,25 @@ export default function DesempenhoDieselAgente() {
   }, [periodoInicio, periodoFim]);
 
   /* =========================
-     ACOMPANHAMENTO (LOTE)
+     ACOMPANHAMENTO (GITHUB)
+     - Dispara workflow gerar ordens
+     - Aqui NÃO vai voltar lote_id no response (GitHub é 204).
+     - Então o alert vira “disparo enviado”.
   ========================= */
   const gerarAcompanhamento = useCallback(async () => {
     setLoadingAcomp(true);
     setErro(null);
 
     try {
-      const payload = {
-        tipo: "prontuarios_acompanhamento",
-        qtd: qtdAcompanhamentos,
-      };
-
-      const r = await fetch(`${API_BASE}/relatorios/gerar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      await dispatchWorkflow({
+        workflowFile: WF_ACOMP,
+        inputs: {
+          qtd: String(qtdAcompanhamentos),
+          ordem_batch_id: "", // opcional
+        },
       });
 
-      const data = await r.json();
-      if (!r.ok)
-        throw new Error(data?.error || "Erro no robô de acompanhamento");
-
-      alert(`Lote ${data.lote_id} gerado com sucesso`);
+      alert("Workflow disparado com sucesso (GitHub Actions).");
     } catch (e) {
       if (mountedRef.current) setErro(e.message);
     } finally {
@@ -124,12 +166,8 @@ export default function DesempenhoDieselAgente() {
     }
   }, [qtdAcompanhamentos]);
 
-  /* =========================
-     UI
-  ========================= */
   return (
     <div className="p-6 space-y-6">
-      {/* ===== HEADER ===== */}
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-xl border flex items-center justify-center">
           <FaBolt />
@@ -139,7 +177,7 @@ export default function DesempenhoDieselAgente() {
 
       {/* ===== GERENCIAL ===== */}
       <div className="rounded-2xl border p-4 space-y-3">
-        <h3 className="font-semibold">Agente Gerencial</h3>
+        <h3 className="font-semibold">Agente Gerencial (GitHub)</h3>
 
         <div className="flex gap-3">
           <input
@@ -167,13 +205,13 @@ export default function DesempenhoDieselAgente() {
           )}
         >
           <FaPlay />
-          {loadingGerencial ? "Gerando..." : "Gerar relatório gerencial"}
+          {loadingGerencial ? "Disparando..." : "Disparar relatório gerencial"}
         </button>
       </div>
 
       {/* ===== ACOMPANHAMENTO ===== */}
       <div className="rounded-2xl border p-4 space-y-3">
-        <h3 className="font-semibold">Agente de Acompanhamento</h3>
+        <h3 className="font-semibold">Agente de Acompanhamento (GitHub)</h3>
 
         <div className="flex items-center gap-3">
           <span className="text-sm">Qtd. de prontuários:</span>
@@ -197,15 +235,14 @@ export default function DesempenhoDieselAgente() {
           )}
         >
           <FaPlay />
-          {loadingAcomp ? "Gerando..." : "Gerar acompanhamentos"}
+          {loadingAcomp ? "Disparando..." : "Disparar acompanhamentos"}
         </button>
       </div>
 
-      {/* ===== STATUS ===== */}
       {resp?.ok && (
         <div className="flex items-center gap-2 text-emerald-700">
           <FaCheckCircle />
-          Execução iniciada com sucesso
+          Workflow disparado com sucesso (GitHub Actions)
         </div>
       )}
 
