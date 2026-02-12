@@ -57,20 +57,7 @@ function n(v) {
   return Number.isFinite(x) ? x : 0;
 }
 
-// Helper de Cluster (Mesma lógica do Python para consistência)
-function getCluster(veiculo) {
-    const v = String(veiculo || "").trim();
-    if (v.startsWith("2216")) return "C8";
-    if (v.startsWith("2222")) return "C9";
-    if (v.startsWith("2224")) return "C10";
-    if (v.startsWith("2425")) return "C11";
-    if (v.startsWith("W")) return "C6";
-    return "OUTROS";
-}
-
-// Metas aproximadas por Cluster (Fallback caso não tenha no banco)
-const METAS_CLUSTER = { "C6": 2.5, "C8": 2.6, "C9": 2.73, "C10": 2.8, "C11": 2.9, "OUTROS": 2.5 };
-
+// Disparo de GitHub Actions
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
   if (!GH_USER || !GH_REPO || !GH_TOKEN) {
     throw new Error("Credenciais GitHub ausentes.");
@@ -104,16 +91,18 @@ function StatusBadge({ status }) {
 // COMPONENTE DE GRÁFICO SVG (Simples e Leve)
 // =============================================================================
 const SimpleLineChart = ({ data }) => {
-    // data = [{ label: 'SEM 1', real: 2.3, meta: 2.7 }, ...]
-    if (!data || data.length === 0) return null;
+    // Espera data = [{ label: 'SEM 1', real: 2.3, meta: 2.7 }, ...]
+    if (!data || data.length === 0) return <div className="text-center text-xs text-slate-400 py-10">Sem dados gráficos disponíveis</div>;
 
     const width = 400;
     const height = 150;
     const padding = 20;
 
-    const maxVal = Math.max(...data.map(d => Math.max(d.real, d.meta))) * 1.1;
-    const minVal = Math.min(...data.map(d => Math.min(d.real, d.meta))) * 0.9;
-    const range = maxVal - minVal;
+    // Calcula escalas
+    const allValues = data.flatMap(d => [d.real, d.meta]);
+    const maxVal = Math.max(...allValues) * 1.1 || 5;
+    const minVal = Math.min(...allValues) * 0.9 || 0;
+    const range = maxVal - minVal || 1;
 
     const getX = (i) => padding + (i / (data.length - 1)) * (width - 2 * padding);
     const getY = (val) => height - padding - ((val - minVal) / range) * (height - 2 * padding);
@@ -138,13 +127,10 @@ const SimpleLineChart = ({ data }) => {
             {/* Pontos */}
             {data.map((d, i) => (
                 <g key={i}>
-                    {/* Ponto Real */}
                     <circle cx={getX(i)} cy={getY(d.real)} r="3" fill="#e11d48" />
                     <text x={getX(i)} y={getY(d.real) - 8} textAnchor="middle" fontSize="10" fill="#e11d48" fontWeight="bold">
-                        {d.real.toFixed(2)}
+                        {n(d.real).toFixed(2)}
                     </text>
-
-                     {/* Label X Axis */}
                      <text x={getX(i)} y={height - 5} textAnchor="middle" fontSize="9" fill="#64748b">
                         {d.label}
                     </text>
@@ -164,6 +150,7 @@ export default function DesempenhoDieselAgente() {
   const hoje = useMemo(() => new Date(), []);
   const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
 
+  // Estados de Filtro/Dados
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [userSession, setUserSession] = useState(null);
@@ -171,6 +158,7 @@ export default function DesempenhoDieselAgente() {
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(null);
 
+  // Dados do BD
   const [ultimoGerencial, setUltimoGerencial] = useState(null);
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({}); 
@@ -178,11 +166,15 @@ export default function DesempenhoDieselAgente() {
   
   // MODAL DETALHADO
   const [viewingDetails, setViewingDetails] = useState(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [detailsData, setDetailsData] = useState({ raioX: [], chartData: [] });
+  const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
+
+  const validarPeriodo = useCallback(() => {
+    if (!periodoInicio || !periodoFim) return true;
+    return periodoInicio <= periodoFim;
+  }, [periodoInicio, periodoFim]);
 
   // ---------------------------------------------------------------------------
-  // CARGA INICIAL
+  // CARREGAMENTO DE DADOS
   // ---------------------------------------------------------------------------
   async function carregarTela() {
     setLoading(true);
@@ -190,12 +182,17 @@ export default function DesempenhoDieselAgente() {
       const { data: sess } = await supabase.auth.getSession();
       setUserSession(sess?.session || null);
 
+      // 1. Último relatório gerencial
       const { data: rel } = await supabase.from("relatorios_gerados").select("*").eq("tipo", "diesel_gerencial").order("created_at", { ascending: false }).limit(1).maybeSingle();
       setUltimoGerencial(rel || null);
 
+      // 2. Sugestões (View ou Tabela)
+      // Importante: A view precisa trazer a coluna 'detalhes_json' se ela existir na tabela original
       const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
       setSugestoes(sug || []);
+
     } catch (e) {
+      console.error(e);
       setErro("Erro ao carregar dados: " + e.message);
     } finally {
       setLoading(false);
@@ -207,107 +204,40 @@ export default function DesempenhoDieselAgente() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // BUSCA DETALHADA (QUANDO CLICA NO 'i')
+  // ABRIR MODAL COM DADOS PRÉ-CALCULADOS
   // ---------------------------------------------------------------------------
-  const fetchDetalhesMotorista = async (chapa) => {
-    setLoadingDetails(true);
-    setDetailsData({ raioX: [], chartData: [] });
-    
-    try {
-        // Busca dados brutos dos últimos 30 dias para este motorista
-        const dataCorte = new Date();
-        dataCorte.setDate(dataCorte.getDate() - 30);
-        const strDataCorte = fmtDateInput(dataCorte);
+  const openModal = async (motorista) => {
+      // Tenta ler o JSON que já veio na consulta ou busca sob demanda se a view não tiver
+      let detalhes = motorista.detalhes_json;
 
-        const { data: raw, error } = await supabase
-            .from("premiacao_diaria")
-            .select('dia, motorista, veiculo, linha, km_rodado, combustivel_consumido')
-            .eq("motorista", chapa)
-            .gte("dia", strDataCorte)
-            .order("dia", { ascending: true });
+      // Se a view não trouxe o JSON, fazemos um fetch rápido na tabela original (Supabase B)
+      if (!detalhes) {
+          const { data } = await supabase
+              .from("diesel_sugestoes_acompanhamento")
+              .select("detalhes_json")
+              .eq("chapa", motorista.motorista_chapa)
+              .eq("mes_ref", motorista.mes_ref || new Date().toISOString().slice(0, 7)) // Fallback de segurança
+              .maybeSingle();
+          
+          if (data && data.detalhes_json) {
+              detalhes = data.detalhes_json;
+          }
+      }
 
-        if (error) throw error;
-        if (!raw || raw.length === 0) return;
-
-        // --- PROCESSA RAIO-X (Agrupar por Linha + Cluster) ---
-        const mapRaioX = {};
-        raw.forEach(row => {
-            const cluster = getCluster(row.veiculo);
-            const key = `${row.linha}||${cluster}`;
-            
-            if (!mapRaioX[key]) {
-                mapRaioX[key] = { 
-                    linha: row.linha, 
-                    cluster: cluster, 
-                    veiculos: new Set(),
-                    km: 0, 
-                    litros: 0 
-                };
-            }
-            mapRaioX[key].km += n(row.km_rodado);
-            mapRaioX[key].litros += n(row.combustivel_consumido);
-            mapRaioX[key].veiculos.add(row.veiculo);
-        });
-
-        const listaRaioX = Object.values(mapRaioX).map(item => {
-            const kmlReal = item.km / item.litros;
-            const kmlMeta = METAS_CLUSTER[item.cluster] || 2.5;
-            const litrosIdeal = item.km / kmlMeta;
-            const desperdicio = item.litros - litrosIdeal;
-            
-            return {
-                ...item,
-                veiculoExemplo: [...item.veiculos][0], // Pega um exemplo
-                kmlReal,
-                kmlMeta,
-                desperdicio: desperdicio > 0 ? desperdicio : 0
-            };
-        }).sort((a, b) => b.desperdicio - a.desperdicio); // Ordena por maior desperdício
-
-        // --- PROCESSA GRÁFICO (Agrupar por Semana) ---
-        const mapWeek = {};
-        raw.forEach(row => {
-            const d = new Date(row.dia);
-            // Pega o início da semana (Domingo)
-            const first = d.getDate() - d.getDay();
-            const weekStart = new Date(d.setDate(first)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            
-            if (!mapWeek[weekStart]) mapWeek[weekStart] = { km: 0, litros: 0, metaSoma: 0, count: 0 };
-            
-            mapWeek[weekStart].km += n(row.km_rodado);
-            mapWeek[weekStart].litros += n(row.combustivel_consumido);
-            
-            // Estimativa grosseira da meta daquela viagem baseada no veiculo
-            const metaViagem = METAS_CLUSTER[getCluster(row.veiculo)] || 2.5;
-            mapWeek[weekStart].metaSoma += metaViagem;
-            mapWeek[weekStart].count += 1;
-        });
-
-        const listaChart = Object.keys(mapWeek).map(label => {
-            const w = mapWeek[label];
-            return {
-                label,
-                real: w.litros > 0 ? w.km / w.litros : 0,
-                meta: w.count > 0 ? w.metaSoma / w.count : 2.5
-            };
-        });
-
-        setDetailsData({ raioX: listaRaioX, chartData: listaChart });
-
-    } catch (err) {
-        console.error("Erro detalhes:", err);
-    } finally {
-        setLoadingDetails(false);
-    }
-  };
-
-  const openModal = (motorista) => {
-    setViewingDetails(motorista);
-    fetchDetalhesMotorista(motorista.motorista_chapa);
+      setViewingDetails(motorista);
+      
+      if (detalhes) {
+          setModalContent({
+              raioX: detalhes.raio_x || [],
+              chartData: detalhes.grafico_semanal || []
+          });
+      } else {
+          setModalContent({ raioX: [], chartData: [] });
+      }
   };
 
   // ---------------------------------------------------------------------------
-  // ORDENAÇÃO E AÇÕES
+  // LÓGICA DE ORDENAÇÃO
   // ---------------------------------------------------------------------------
   const handleSort = (key) => {
     let direction = "asc";
@@ -343,27 +273,187 @@ export default function DesempenhoDieselAgente() {
   );
 
   // ---------------------------------------------------------------------------
-  // DISPAROS (Gerencial e Lotes)
+  // AÇÕES
   // ---------------------------------------------------------------------------
-  const dispararGerencial = async () => { /* ... Código existente mantido ... */ };
-  const gerarFormulariosSelecionados = async () => { /* ... Código existente mantido ... */ };
+  const dispararGerencial = async () => {
+    setErro(null); setSucesso(null);
+    try {
+      const { data: record, error } = await supabase
+        .from("relatorios_gerados")
+        .insert({
+          tipo: "diesel_gerencial",
+          status: "PROCESSANDO",
+          periodo_inicio: periodoInicio,
+          periodo_fim: periodoFim,
+          solicitante_login: userSession?.user?.email || "sistema",
+          solicitante_nome: userSession?.user?.user_metadata?.full_name,
+        })
+        .select("id")
+        .single();
 
-  // ... (Funções de toggle checkbox mantidas) ...
-  const toggleAll = () => { /* ... */ };
-  const toggleOne = (chapa) => { setSelected(prev => ({ ...prev, [chapa]: !prev[chapa] })); };
+      if (error) throw error;
 
+      await dispatchGitHubWorkflow(WF_GERENCIAL, {
+        report_id: String(record.id),
+        periodo_inicio: periodoInicio,
+        periodo_fim: periodoFim,
+        report_tipo: "diesel_gerencial",
+      });
+
+      setSucesso(`Relatório #${record.id} enviado.`);
+      setTimeout(carregarTela, 2000);
+    } catch (err) {
+      setErro(err?.message || String(err));
+    }
+  };
+
+  const gerarFormulariosSelecionados = async () => {
+    setErro(null); setSucesso(null);
+    const selecionados = sugestoes.filter((r) => selected[r.motorista_chapa]);
+    if (!selecionados.length) { setErro("Selecione pelo menos 1 motorista."); return; }
+
+    try {
+      const { data: lote, error: errL } = await supabase
+        .from("acompanhamento_lotes")
+        .insert({
+          status: "PROCESSANDO",
+          qtd: selecionados.length,
+          extra: { origem: "v_sugestoes_acompanhamento_30d", gerado_em: new Date().toISOString() },
+        })
+        .select("id").single();
+      if (errL) throw errL;
+
+      const itens = selecionados.map((r) => ({
+        lote_id: lote.id,
+        motorista_chapa: r.motorista_chapa,
+        linha_mais_rodada: r.linha_mais_rodada ?? null,
+        km_percorrido: n(r.km_percorrido),
+        combustivel_consumido: n(r.combustivel_consumido),
+        kml_realizado: n(r.kml_realizado),
+        kml_meta: n(r.kml_meta),
+        combustivel_desperdicado: n(r.combustivel_desperdicado),
+        extra: { motorista_nome: r.motorista_nome ?? null },
+      }));
+
+      const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert(itens);
+      if (errI) throw errI;
+
+      await dispatchGitHubWorkflow(WF_ACOMP, {
+        ordem_batch_id: String(lote.id),
+        qtd: String(selecionados.length),
+      });
+
+      setSucesso(`Lote #${lote.id} enviado. Processando...`);
+      setSelected({});
+      setTimeout(carregarTela, 2500);
+    } catch (err) {
+      setErro(err?.message || String(err));
+    }
+  };
+
+  const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+  const allChecked = useMemo(() => sugestoes.length && sugestoes.every((r) => selected[r.motorista_chapa]), [sugestoes, selected]);
+  const toggleAll = () => { if (allChecked) { setSelected({}); } else { const m = {}; sugestoes.forEach((r) => (m[r.motorista_chapa] = true)); setSelected(m); } };
+  const toggleOne = (chapa) => { setSelected((p) => ({ ...p, [chapa]: !p[chapa] })); };
+
+  // ===========================================================================
+  // RENDERIZAÇÃO
+  // ===========================================================================
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
-      {/* ... (Header e Cards Superiores mantidos iguais ao anterior) ... */}
       
-      {/* Tabela Principal */}
+      {/* 1. HEADER */}
+      <div className="flex items-center justify-between gap-4 border-b pb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
+            <FaBolt size={20} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
+            <p className="text-sm text-slate-500">Gerencial + Sugestões de Acompanhamento</p>
+          </div>
+        </div>
+        <button onClick={carregarTela} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar">
+          <FaSync className={clsx(loading && "animate-spin")} />
+        </button>
+      </div>
+
+      {/* 2. FEEDBACK MSG */}
+      {(sucesso || erro) && (
+        <div className={clsx("p-4 rounded-xl border flex items-center gap-3", sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800")}>
+          {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
+          <div>
+            <p className="font-bold text-sm">{sucesso ? "Sucesso" : "Atenção"}</p>
+            <p className="text-xs">{sucesso || erro}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 3. PAINEL GERENCIAL (A PARTE QUE TINHA SUMIDO) */}
+      <div className="bg-white rounded-2xl border p-6 shadow-sm">
+        <div className="flex justify-between mb-4">
+          <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
+          <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
+        </div>
+
+        <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 mb-4">
+          <div className="text-sm">
+            <span className="text-slate-500 font-bold">Último Relatório: </span>
+            {ultimoGerencial ? (
+              <>
+                <span className="font-extrabold text-slate-800">#{ultimoGerencial.id}</span>
+                <span className="text-slate-500 text-xs ml-2">
+                  {ultimoGerencial.created_at ? new Date(ultimoGerencial.created_at).toLocaleDateString() : "-"}
+                </span>
+                <span className="ml-3"><StatusBadge status={ultimoGerencial.status} /></span>
+              </>
+            ) : (
+              <span className="text-slate-500">Nenhum registro encontrado</span>
+            )}
+          </div>
+          {ultimoGerencial?.status === "CONCLUIDO" && ultimoPdfUrl && (
+            <a href={ultimoPdfUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-700 font-extrabold inline-flex items-center gap-2 hover:underline">
+              <FaFilePdf /> Abrir PDF
+            </a>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div>
+            <label className="text-xs font-bold text-slate-500">Início</label>
+            <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500">Fim</label>
+            <input type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <button onClick={dispararGerencial} disabled={!validarPeriodo()} className={clsx("w-full py-3 rounded-xl flex justify-center gap-2 font-bold text-sm transition-colors", "bg-cyan-600 text-white hover:bg-cyan-700 disabled:bg-slate-300")}>
+            <FaPlay /> DISPARAR RELATÓRIO
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Tabela Principal */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        {/* ... Header da Tabela ... */}
+        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
+          <div>
+            <h3 className="font-extrabold text-slate-800">Sugestões de Acompanhamento (30 dias)</h3>
+            <p className="text-xs text-slate-500">Selecione os motoristas e gere prontuários para iniciar o ciclo.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-600">Selecionados: <b>{selectedCount}</b></div>
+            <button onClick={gerarFormulariosSelecionados} disabled={selectedCount === 0} className={clsx("px-4 py-2 rounded-xl font-extrabold text-sm transition-colors", selectedCount === 0 ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700")}>
+              Gerar formulários
+            </button>
+          </div>
+        </div>
+
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase text-slate-500 bg-white border-b sticky top-0 z-10">
               <tr>
-                <th className="p-3 w-10 text-center"><input type="checkbox" /></th>
+                <th className="p-3 w-10 text-center"><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>
                 <th className="p-3 w-10"></th>
                 <ThSortable label="Chapa" columnKey="motorista_chapa" />
                 <ThSortable label="Linha" columnKey="linha_mais_rodada" />
@@ -398,7 +488,7 @@ export default function DesempenhoDieselAgente() {
       </div>
 
       {/* ================================================================== */}
-      {/* MODAL DE DETALHES AVANÇADO (RAIO-X + GRÁFICO) */}
+      {/* 5. MODAL DE DETALHES (LENDO DO JSON DO BANCO) */}
       {/* ================================================================== */}
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -412,10 +502,10 @@ export default function DesempenhoDieselAgente() {
                     <h3 className="text-lg font-bold">Auditoria de Eficiência</h3>
                 </div>
                 <p className="text-slate-300 text-sm mt-1">
-                   Motorista: <span className="font-mono bg-slate-700 px-1 rounded">{viewingDetails.motorista_chapa}</span> - {viewingDetails.motorista_nome || "Nome não identificado"}
+                   Motorista: <span className="font-mono bg-slate-700 px-1 rounded">{viewingDetails.motorista_chapa}</span> - {viewingDetails.motorista_nome}
                 </p>
                 <div className="text-xs text-slate-400 mt-1">
-                    Período Analisado: Últimos 30 dias
+                   Dados processados pela IA no momento da sugestão.
                 </div>
               </div>
               <button onClick={() => setViewingDetails(null)} className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-full transition">
@@ -426,10 +516,11 @@ export default function DesempenhoDieselAgente() {
             {/* Corpo Modal */}
             <div className="p-6 space-y-8 flex-1">
               
-              {loadingDetails ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3">
-                      <FaSpinner className="animate-spin text-3xl" />
-                      <p>Calculando Raio-X da operação...</p>
+              {(!modalContent.raioX || modalContent.raioX.length === 0) ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3 border-2 border-dashed rounded-xl bg-slate-50">
+                      <FaExclamationTriangle className="text-3xl text-slate-300" />
+                      <p>Detalhes não disponíveis para este registro.</p>
+                      <span className="text-xs">Execute o relatório novamente para gerar os dados detalhados.</span>
                   </div>
               ) : (
                 <>
@@ -454,22 +545,19 @@ export default function DesempenhoDieselAgente() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {detailsData.raioX.map((row, idx) => (
+                                    {modalContent.raioX.map((row, idx) => (
                                         <tr key={idx} className={row.desperdicio > 10 ? "bg-rose-50" : ""}>
                                             <td className="p-2 font-bold text-slate-700">{row.linha}</td>
                                             <td className="p-2 text-slate-500">{row.cluster}</td>
                                             <td className="p-2 text-right">{n(row.km).toFixed(0)}</td>
                                             <td className="p-2 text-right">{n(row.litros).toFixed(0)}</td>
-                                            <td className="p-2 text-right font-bold">{n(row.kmlReal).toFixed(2)}</td>
-                                            <td className="p-2 text-right text-slate-500">{n(row.kmlMeta).toFixed(2)}</td>
+                                            <td className="p-2 text-right font-bold">{n(row.kml_real).toFixed(2)}</td>
+                                            <td className="p-2 text-right text-slate-500">{n(row.kml_meta).toFixed(2)}</td>
                                             <td className={`p-2 text-right font-bold ${row.desperdicio > 0 ? "text-rose-600" : "text-emerald-600"}`}>
                                                 {n(row.desperdicio).toFixed(1)}
                                             </td>
                                         </tr>
                                     ))}
-                                    {detailsData.raioX.length === 0 && (
-                                        <tr><td colSpan={7} className="p-4 text-center text-slate-400">Sem dados detalhados para o período.</td></tr>
-                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -483,7 +571,7 @@ export default function DesempenhoDieselAgente() {
                         </div>
                         
                         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                             <SimpleLineChart data={detailsData.chartData} />
+                             <SimpleLineChart data={modalContent.chartData} />
                              
                              {/* Legenda do Gráfico */}
                              <div className="flex justify-center gap-6 mt-4 text-xs">
