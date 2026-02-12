@@ -1,18 +1,18 @@
+import express from "express";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+const router = express.Router();
 
-// ✅ Modo de emergência: se você setar VITE_SUPABASE_DISABLE_REFRESH="true" no Render,
-// o app para de tentar refresh e evita loop/erro CORS infinito.
-const DISABLE_REFRESH = String(import.meta.env.VITE_SUPABASE_DISABLE_REFRESH || "false").toLowerCase() === "true";
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storageKey: "sb-inove-auth",     // ✅ evita conflito com outro client/projeto
-    persistSession: true,
-    autoRefreshToken: !DISABLE_REFRESH, // ✅ liga/desliga sem mudar código
-    detectSessionInUrl: true,
-    flowType: "pkce",                 // ✅ mais estável no browser
-  },
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("❌ Supabase ENV ausente:", {
+    hasUrl: !!SUPABASE_URL,
+    hasServiceRole: !!SUPABASE_SERVICE_ROLE_KEY,
+  });
+}
+
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
 });
