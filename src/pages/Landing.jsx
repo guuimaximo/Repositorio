@@ -1,7 +1,7 @@
 // src/pages/Landing.jsx
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient"; // ajuste se seu client for outro path
+import { supabase } from "../supabase";
 
 const NIVEIS_GESTAO = new Set(["Gestor", "Administrador"]);
 
