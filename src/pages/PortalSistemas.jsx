@@ -1,7 +1,7 @@
 // src/pages/PortalSistemas.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabase";
 import { ExternalLink, LayoutGrid, ShieldAlert } from "lucide-react";
 
 export default function PortalSistemas() {
