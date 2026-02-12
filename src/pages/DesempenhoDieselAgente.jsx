@@ -58,9 +58,7 @@ function n(v) {
 
 // Disparo de GitHub Actions
 async function dispatchGitHubWorkflow(workflowFile, inputs) {
-  if (!GH_USER || !GH_REPO || !GH_TOKEN) {
-    throw new Error("Credenciais GitHub ausentes.");
-  }
+  if (!GH_USER || !GH_REPO || !GH_TOKEN) throw new Error("Credenciais GitHub ausentes.");
   const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/actions/workflows/${workflowFile}/dispatches`;
   const response = await fetch(url, {
     method: "POST",
@@ -82,17 +80,9 @@ async function dispatchGitHubWorkflow(workflowFile, inputs) {
 
 function StatusBadge({ status }) {
   if (status === "CONCLUIDO")
-    return (
-      <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">
-        OK
-      </span>
-    );
+    return <span className="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700">OK</span>;
   if (status === "ERRO")
-    return (
-      <span className="px-2 py-1 rounded text-xs font-bold bg-rose-100 text-rose-700">
-        ERRO
-      </span>
-    );
+    return <span className="px-2 py-1 rounded text-xs font-bold bg-rose-100 text-rose-700">ERRO</span>;
   return (
     <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700">
       {status || "PROCESSANDO"}
@@ -101,105 +91,50 @@ function StatusBadge({ status }) {
 }
 
 // =============================================================================
-// GRÁFICO ATUALIZADO (Com Labels na Meta)
+// GRÁFICO (com label de meta)
 // =============================================================================
 const SimpleLineChart = ({ data }) => {
-  // Espera data = [{ label: 'SEM 1', real: 2.3, meta: 2.7 }, ...]
-  if (!data || data.length === 0)
-    return (
-      <div className="text-center text-xs text-slate-400 py-10">
-        Sem dados gráficos disponíveis
-      </div>
-    );
+  if (!data || data.length === 0) {
+    return <div className="text-center text-xs text-slate-400 py-10">Sem dados gráficos disponíveis</div>;
+  }
 
   const width = 500;
   const height = 180;
   const padding = 30;
 
   const allValues = data.flatMap((d) => [d.real, d.meta]);
-  const maxVal = Math.max(...allValues) * 1.05 || 5;
-  const minVal = Math.min(...allValues) * 0.95 || 0;
+  const maxVal = (Math.max(...allValues) || 5) * 1.05;
+  const minVal = (Math.min(...allValues) || 0) * 0.95;
   const range = maxVal - minVal || 1;
 
-  const getX = (i) =>
-    padding + (i / (data.length - 1)) * (width - 2 * padding);
-  const getY = (val) =>
-    height - padding - ((val - minVal) / range) * (height - 2 * padding);
+  const getX = (i) => padding + (i / (data.length - 1)) * (width - 2 * padding);
+  const getY = (val) => height - padding - ((val - minVal) / range) * (height - 2 * padding);
 
   const pointsReal = data.map((d, i) => `${getX(i)},${getY(d.real)}`).join(" ");
   const pointsMeta = data.map((d, i) => `${getX(i)},${getY(d.meta)}`).join(" ");
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full h-auto border bg-white rounded-lg font-sans"
-    >
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto border bg-white rounded-lg font-sans">
       {[0, 0.5, 1].map((pct, i) => {
         const y = height - padding - pct * (height - 2 * padding);
-        return (
-          <line
-            key={i}
-            x1={padding}
-            y1={y}
-            x2={width - padding}
-            y2={y}
-            stroke="#f1f5f9"
-            strokeWidth="1"
-          />
-        );
+        return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#f1f5f9" strokeWidth="1" />;
       })}
 
-      {/* Linha Meta (Tracejada) */}
-      <polyline
-        fill="none"
-        stroke="#94a3b8"
-        strokeWidth="2"
-        strokeDasharray="4,4"
-        points={pointsMeta}
-      />
-      {/* Linha Real (Sólida) */}
-      <polyline
-        fill="none"
-        stroke="#dc2626"
-        strokeWidth="2"
-        points={pointsReal}
-      />
+      <polyline fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" points={pointsMeta} />
+      <polyline fill="none" stroke="#dc2626" strokeWidth="2" points={pointsReal} />
 
       {data.map((d, i) => (
         <g key={i}>
-          {/* Ponto Real */}
           <circle cx={getX(i)} cy={getY(d.real)} r="3" fill="#dc2626" />
-          <text
-            x={getX(i)}
-            y={getY(d.real) - 10}
-            textAnchor="middle"
-            fontSize="10"
-            fill="#dc2626"
-            fontWeight="bold"
-          >
+          <text x={getX(i)} y={getY(d.real) - 10} textAnchor="middle" fontSize="10" fill="#dc2626" fontWeight="bold">
             {n(d.real).toFixed(2)}
           </text>
 
-          {/* Label Meta */}
-          <text
-            x={getX(i)}
-            y={getY(d.meta) + 15}
-            textAnchor="middle"
-            fontSize="9"
-            fill="#64748b"
-          >
+          <text x={getX(i)} y={getY(d.meta) + 15} textAnchor="middle" fontSize="9" fill="#64748b">
             Ref: {n(d.meta).toFixed(2)}
           </text>
 
-          {/* Eixo X */}
-          <text
-            x={getX(i)}
-            y={height - 8}
-            textAnchor="middle"
-            fontSize="10"
-            fill="#475569"
-            fontWeight="500"
-          >
+          <text x={getX(i)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="500">
             {d.label}
           </text>
         </g>
@@ -213,18 +148,12 @@ const SimpleLineChart = ({ data }) => {
 // =============================================================================
 export default function DesempenhoDieselAgente() {
   const mountedRef = useRef(true);
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  useEffect(() => () => (mountedRef.current = false), []);
 
   const hoje = useMemo(() => new Date(), []);
-  const primeiroDiaMes = useMemo(
-    () => new Date(hoje.getFullYear(), hoje.getMonth(), 1),
-    [hoje]
-  );
+  const primeiroDiaMes = useMemo(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1), [hoje]);
 
+  // Estados
   const [periodoInicio, setPeriodoInicio] = useState(fmtDateInput(primeiroDiaMes));
   const [periodoFim, setPeriodoFim] = useState(fmtDateInput(hoje));
   const [userSession, setUserSession] = useState(null);
@@ -234,14 +163,11 @@ export default function DesempenhoDieselAgente() {
   const [sucesso, setSucesso] = useState(null);
 
   const [ultimoGerencial, setUltimoGerencial] = useState(null);
-
   const [sugestoes, setSugestoes] = useState([]);
   const [selected, setSelected] = useState({});
-  const [sortConfig, setSortConfig] = useState({
-    key: "combustivel_desperdicado",
-    direction: "desc",
-  });
+  const [sortConfig, setSortConfig] = useState({ key: "combustivel_desperdicado", direction: "desc" });
 
+  // Modal
   const [viewingDetails, setViewingDetails] = useState(null);
   const [modalContent, setModalContent] = useState({ raioX: [], chartData: [] });
 
@@ -251,83 +177,70 @@ export default function DesempenhoDieselAgente() {
   }, [periodoInicio, periodoFim]);
 
   // ---------------------------------------------------------------------------
-  // CARREGAMENTO DE DADOS
+  // CARREGAMENTO
   // ---------------------------------------------------------------------------
   async function carregarTela() {
     setLoading(true);
-    setErro(null);
     try {
       const { data: sess } = await supabase.auth.getSession();
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
-      const { data: rel, error: errRel } = await supabase
+      const { data: rel } = await supabase
         .from("relatorios_gerados")
         .select("*")
         .eq("tipo", "diesel_gerencial")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (errRel) throw errRel;
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
-      const { data: sug, error: errSug } = await supabase
-        .from("v_sugestoes_acompanhamento_30d")
-        .select("*")
-        .limit(500);
-      if (errSug) throw errSug;
+      const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
       if (!mountedRef.current) return;
       setSugestoes(sug || []);
     } catch (e) {
-      console.error(e);
       if (!mountedRef.current) return;
-      setErro("Erro ao carregar dados: " + (e?.message || String(e)));
+      setErro("Erro ao carregar: " + (e?.message || String(e)));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (!mountedRef.current) return;
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     carregarTela();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------------------------------
-  // ABRIR MODAL (busca detalhes_json sob demanda se view não trouxer)
+  // MODAL (com fallback que também pega nome)
   // ---------------------------------------------------------------------------
   const openModal = async (motorista) => {
-    try {
-      let detalhes = motorista?.detalhes_json;
+    let detalhes = motorista.detalhes_json || null;
+    let nomeFallback = motorista.motorista_nome || null;
 
-      if (!detalhes) {
-        const mesFallback = motorista?.mes_ref || new Date().toISOString().slice(0, 7);
+    if (!detalhes) {
+      const mesRef = motorista.mes_ref || new Date().toISOString().slice(0, 7);
 
-        const { data, error } = await supabase
-          .from("diesel_sugestoes_acompanhamento")
-          .select("detalhes_json")
-          .eq("chapa", motorista.motorista_chapa)
-          .eq("mes_ref", mesFallback)
-          .maybeSingle();
+      const { data } = await supabase
+        .from("diesel_sugestoes_acompanhamento")
+        .select("detalhes_json, motorista_nome")
+        .eq("chapa", motorista.motorista_chapa)
+        .eq("mes_ref", mesRef)
+        .maybeSingle();
 
-        if (error) throw error;
-        if (data?.detalhes_json) detalhes = data.detalhes_json;
-      }
+      if (data?.detalhes_json) detalhes = data.detalhes_json;
+      if (!nomeFallback && data?.motorista_nome) nomeFallback = data.motorista_nome;
+    }
 
-      setViewingDetails(motorista);
+    setViewingDetails({ ...motorista, motorista_nome: nomeFallback });
 
-      if (detalhes) {
-        setModalContent({
-          raioX: detalhes.raio_x || [],
-          chartData: detalhes.grafico_semanal || [],
-        });
-      } else {
-        setModalContent({ raioX: [], chartData: [] });
-      }
-    } catch (e) {
-      console.error(e);
-      setErro("Erro ao abrir detalhes: " + (e?.message || String(e)));
-      setViewingDetails(motorista);
+    if (detalhes) {
+      setModalContent({
+        raioX: detalhes.raio_x || [],
+        chartData: detalhes.grafico_semanal || [],
+      });
+    } else {
       setModalContent({ raioX: [], chartData: [] });
     }
   };
@@ -336,10 +249,10 @@ export default function DesempenhoDieselAgente() {
   // ORDENAÇÃO
   // ---------------------------------------------------------------------------
   const handleSort = (key) => {
-    setSortConfig((prev) => {
-      const nextDir = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      return { key, direction: nextDir };
-    });
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
   };
 
   const sortedSugestoes = useMemo(() => {
@@ -348,17 +261,10 @@ export default function DesempenhoDieselAgente() {
 
     if (sortConfig.key) {
       items.sort((a, b) => {
-        let aVal = a?.[sortConfig.key];
-        let bVal = b?.[sortConfig.key];
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
 
-        const nums = [
-          "km_percorrido",
-          "combustivel_consumido",
-          "kml_realizado",
-          "kml_meta",
-          "combustivel_desperdicado",
-        ];
-
+        const nums = ["km_percorrido", "combustivel_consumido", "kml_realizado", "kml_meta", "combustivel_desperdicado"];
         if (nums.includes(sortConfig.key)) {
           aVal = n(aVal);
           bVal = n(bVal);
@@ -376,31 +282,20 @@ export default function DesempenhoDieselAgente() {
     return items;
   }, [sugestoes, sortConfig]);
 
-  const ThSortable = ({ label, columnKey, align = "left" }) => {
-    const isActive = sortConfig.key === columnKey;
-    const isAsc = sortConfig.direction === "asc";
-
-    const thAlign = align === "right" ? "text-right" : "text-left";
-    const divAlign = align === "right" ? "justify-end" : "justify-start";
-
-    return (
-      <th
-        className={`p-3 cursor-pointer hover:bg-slate-100 ${thAlign}`}
-        onClick={() => handleSort(columnKey)}
-      >
-        <div className={`flex items-center gap-1 ${divAlign}`}>
-          {label}
-          {!isActive ? (
-            <FaSort className="text-slate-300" />
-          ) : isAsc ? (
-            <FaSortUp className="text-cyan-600" />
-          ) : (
-            <FaSortDown className="text-cyan-600" />
-          )}
-        </div>
-      </th>
-    );
-  };
+  const ThSortable = ({ label, columnKey, align = "left" }) => (
+    <th className={`p-3 cursor-pointer hover:bg-slate-100 text-${align}`} onClick={() => handleSort(columnKey)}>
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
+        {label}
+        {sortConfig.key !== columnKey ? (
+          <FaSort className="text-slate-300" />
+        ) : sortConfig.direction === "asc" ? (
+          <FaSortUp className="text-cyan-600" />
+        ) : (
+          <FaSortDown className="text-cyan-600" />
+        )}
+      </div>
+    </th>
+  );
 
   // ---------------------------------------------------------------------------
   // AÇÕES
@@ -408,7 +303,6 @@ export default function DesempenhoDieselAgente() {
   const dispararGerencial = async () => {
     setErro(null);
     setSucesso(null);
-
     try {
       const { data: record, error } = await supabase
         .from("relatorios_gerados")
@@ -435,7 +329,6 @@ export default function DesempenhoDieselAgente() {
       setSucesso(`Relatório #${record.id} enviado.`);
       setTimeout(carregarTela, 2000);
     } catch (err) {
-      console.error(err);
       setErro(err?.message || String(err));
     }
   };
@@ -444,7 +337,7 @@ export default function DesempenhoDieselAgente() {
     setErro(null);
     setSucesso(null);
 
-    const selecionados = (sugestoes || []).filter((r) => selected[r.motorista_chapa]);
+    const selecionados = sugestoes.filter((r) => selected[r.motorista_chapa]);
     if (!selecionados.length) {
       setErro("Selecione pelo menos 1 motorista.");
       return;
@@ -456,10 +349,7 @@ export default function DesempenhoDieselAgente() {
         .insert({
           status: "PROCESSANDO",
           qtd: selecionados.length,
-          extra: {
-            origem: "v_sugestoes_acompanhamento_30d",
-            gerado_em: new Date().toISOString(),
-          },
+          extra: { origem: "v_sugestoes_acompanhamento_30d", gerado_em: new Date().toISOString() },
         })
         .select("id")
         .single();
@@ -475,7 +365,7 @@ export default function DesempenhoDieselAgente() {
         kml_realizado: n(r.kml_realizado),
         kml_meta: n(r.kml_meta),
         combustivel_desperdicado: n(r.combustivel_desperdicado),
-        extra: { nome: r.nome ?? null },
+        extra: { motorista_nome: r.motorista_nome ?? null },
       }));
 
       const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert(itens);
@@ -490,73 +380,54 @@ export default function DesempenhoDieselAgente() {
       setSelected({});
       setTimeout(carregarTela, 2500);
     } catch (err) {
-      console.error(err);
       setErro(err?.message || String(err));
     }
   };
 
   // ---------------------------------------------------------------------------
-  // DERIVADOS
+  // CHECKBOX
   // ---------------------------------------------------------------------------
-  const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
-
-  const selectedCount = useMemo(
-    () => Object.values(selected).filter(Boolean).length,
-    [selected]
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+  const allChecked = useMemo(
+    () => sugestoes.length && sugestoes.every((r) => selected[r.motorista_chapa]),
+    [sugestoes, selected]
   );
-
-  const allChecked = useMemo(() => {
-    return sugestoes.length && sugestoes.every((r) => selected[r.motorista_chapa]);
-  }, [sugestoes, selected]);
-
   const toggleAll = () => {
     if (allChecked) {
       setSelected({});
     } else {
       const m = {};
-      (sugestoes || []).forEach((r) => (m[r.motorista_chapa] = true));
+      sugestoes.forEach((r) => (m[r.motorista_chapa] = true));
       setSelected(m);
     }
   };
-
-  const toggleOne = (chapa) => {
-    setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
-  };
+  const toggleOne = (chapa) => setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
 
   // ---------------------------------------------------------------------------
-  // CÁLCULOS TOTAIS DO MODAL
+  // MODAL TOTAIS
   // ---------------------------------------------------------------------------
-  const totalKm = modalContent?.raioX
-    ? modalContent.raioX.reduce((acc, r) => acc + n(r?.km), 0)
-    : 0;
-
-  const totalLitros = modalContent?.raioX
-    ? modalContent.raioX.reduce((acc, r) => acc + n(r?.litros), 0)
-    : 0;
-
-  const totalDesperdicio = modalContent?.raioX
-    ? modalContent.raioX.reduce((acc, r) => acc + n(r?.desperdicio), 0)
-    : 0;
+  const totalKm = modalContent.raioX?.reduce((acc, r) => acc + n(r.km), 0) || 0;
+  const totalLitros = modalContent.raioX?.reduce((acc, r) => acc + n(r.litros), 0) || 0;
+  const totalDesperdicio = modalContent.raioX?.reduce((acc, r) => acc + n(r.desperdicio), 0) || 0;
 
   const kmlGeralReal = totalLitros > 0 ? totalKm / totalLitros : 0;
 
-  // Meta Geral Ponderada (Harmônica): Soma KM / Soma (Litros Teóricos)
-  const litrosTeoricosTotal = modalContent?.raioX
-    ? modalContent.raioX.reduce((acc, r) => {
-        const km = n(r?.km);
-        const meta = n(r?.kml_meta);
-        return acc + (meta > 0 ? km / meta : 0);
-      }, 0)
-    : 0;
+  const litrosTeoricosTotal =
+    modalContent.raioX?.reduce((acc, r) => {
+      const metaLinha = n(r.kml_meta);
+      return acc + (metaLinha > 0 ? n(r.km) / metaLinha : 0);
+    }, 0) || 0;
 
   const kmlGeralMeta = litrosTeoricosTotal > 0 ? totalKm / litrosTeoricosTotal : 0;
+
+  const ultimoPdfUrl = getPublicUrl(ultimoGerencial?.arquivo_pdf_path);
 
   // ===========================================================================
   // RENDER
   // ===========================================================================
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto relative">
-      {/* 1. HEADER */}
+      {/* HEADER */}
       <div className="flex items-center justify-between gap-4 border-b pb-4">
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
@@ -564,28 +435,20 @@ export default function DesempenhoDieselAgente() {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Agente Diesel</h2>
-            <p className="text-sm text-slate-500">
-              Gerencial + Sugestões de Acompanhamento
-            </p>
+            <p className="text-sm text-slate-500">Gerencial + Sugestões de Acompanhamento</p>
           </div>
         </div>
-        <button
-          onClick={carregarTela}
-          className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"
-          title="Atualizar"
-        >
+        <button onClick={carregarTela} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full" title="Atualizar">
           <FaSync className={clsx(loading && "animate-spin")} />
         </button>
       </div>
 
-      {/* 2. FEEDBACK MSG */}
+      {/* FEEDBACK */}
       {(sucesso || erro) && (
         <div
           className={clsx(
             "p-4 rounded-xl border flex items-center gap-3",
-            sucesso
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : "bg-rose-50 border-rose-200 text-rose-800"
+            sucesso ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-rose-50 border-rose-200 text-rose-800"
           )}
         >
           {sucesso ? <FaCheckCircle /> : <FaExclamationTriangle />}
@@ -596,13 +459,11 @@ export default function DesempenhoDieselAgente() {
         </div>
       )}
 
-      {/* 3. PAINEL GERENCIAL */}
+      {/* PAINEL GERENCIAL */}
       <div className="bg-white rounded-2xl border p-6 shadow-sm">
         <div className="flex justify-between mb-4">
           <h3 className="font-semibold text-slate-700">Relatório Gerencial</h3>
-          <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">
-            MENSAL
-          </span>
+          <span className="text-xs bg-cyan-100 text-cyan-800 px-2 py-1 rounded font-bold">MENSAL</span>
         </div>
 
         <div className="flex items-center justify-between bg-slate-50 border rounded-xl px-4 py-3 mb-4">
@@ -610,13 +471,9 @@ export default function DesempenhoDieselAgente() {
             <span className="text-slate-500 font-bold">Último Relatório: </span>
             {ultimoGerencial ? (
               <>
-                <span className="font-extrabold text-slate-800">
-                  #{ultimoGerencial.id}
-                </span>
+                <span className="font-extrabold text-slate-800">#{ultimoGerencial.id}</span>
                 <span className="text-slate-500 text-xs ml-2">
-                  {ultimoGerencial.created_at
-                    ? new Date(ultimoGerencial.created_at).toLocaleDateString()
-                    : "-"}
+                  {ultimoGerencial.created_at ? new Date(ultimoGerencial.created_at).toLocaleDateString() : "-"}
                 </span>
                 <span className="ml-3">
                   <StatusBadge status={ultimoGerencial.status} />
@@ -649,7 +506,6 @@ export default function DesempenhoDieselAgente() {
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
           </div>
-
           <div>
             <label className="text-xs font-bold text-slate-500">Fim</label>
             <input
@@ -659,7 +515,6 @@ export default function DesempenhoDieselAgente() {
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
           </div>
-
           <button
             onClick={dispararGerencial}
             disabled={!validarPeriodo()}
@@ -673,18 +528,13 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
-      {/* 4. Tabela Principal */}
+      {/* TABELA */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b bg-slate-50">
           <div>
-            <h3 className="font-extrabold text-slate-800">
-              Sugestões de Acompanhamento (30 dias)
-            </h3>
-            <p className="text-xs text-slate-500">
-              Selecione os motoristas e gere prontuários para iniciar o ciclo.
-            </p>
+            <h3 className="font-extrabold text-slate-800">Sugestões de Acompanhamento (30 dias)</h3>
+            <p className="text-xs text-slate-500">Selecione os motoristas e gere prontuários para iniciar o ciclo.</p>
           </div>
-
           <div className="flex items-center gap-3">
             <div className="text-xs text-slate-600">
               Selecionados: <b>{selectedCount}</b>
@@ -694,9 +544,7 @@ export default function DesempenhoDieselAgente() {
               disabled={selectedCount === 0}
               className={clsx(
                 "px-4 py-2 rounded-xl font-extrabold text-sm transition-colors",
-                selectedCount === 0
-                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+                selectedCount === 0 ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
               )}
             >
               Gerar formulários
@@ -712,23 +560,13 @@ export default function DesempenhoDieselAgente() {
                   <input type="checkbox" checked={!!allChecked} onChange={toggleAll} />
                 </th>
                 <th className="p-3 w-10"></th>
-
                 <ThSortable label="Chapa" columnKey="motorista_chapa" />
-                <ThSortable label="Nome" columnKey="nome" />
+                <ThSortable label="Nome" columnKey="motorista_nome" />
                 <ThSortable label="Linha" columnKey="linha_mais_rodada" />
                 <ThSortable label="KM" columnKey="km_percorrido" align="right" />
-
-                {/* Se quiser recolocar Consumo, descomente:
-                <ThSortable label="Consumo" columnKey="combustivel_consumido" align="right" />
-                */}
-
                 <ThSortable label="Real" columnKey="kml_realizado" align="right" />
                 <ThSortable label="Meta" columnKey="kml_meta" align="right" />
-                <ThSortable
-                  label="Desperdício"
-                  columnKey="combustivel_desperdicado"
-                  align="right"
-                />
+                <ThSortable label="Desperdício" columnKey="combustivel_desperdicado" align="right" />
               </tr>
             </thead>
 
@@ -742,45 +580,20 @@ export default function DesempenhoDieselAgente() {
                       onChange={() => toggleOne(r.motorista_chapa)}
                     />
                   </td>
-
                   <td className="p-3 text-center">
-                    <button
-                      onClick={() => openModal(r)}
-                      className="text-slate-400 hover:text-cyan-600 transition-colors"
-                      title="Ver detalhes completos"
-                    >
+                    <button onClick={() => openModal(r)} className="text-slate-400 hover:text-cyan-600" title="Ver detalhes completos">
                       <FaInfoCircle size={18} />
                     </button>
                   </td>
-
                   <td className="p-3 font-bold text-slate-800">{r.motorista_chapa}</td>
-
-                  <td
-                    className="p-3 text-slate-600 text-xs truncate max-w-[220px]"
-                    title={r.nome}
-                  >
-                    {r.nome || "-"}
+                  <td className="p-3 text-slate-600 text-xs truncate max-w-[240px]" title={r.motorista_nome}>
+                    {r.motorista_nome || "-"}
                   </td>
-
                   <td className="p-3 text-slate-700">{r.linha_mais_rodada}</td>
-
                   <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
-
-                  {/* Se quiser recolocar Consumo, descomente:
-                  <td className="p-3 text-right">{n(r.combustivel_consumido).toFixed(0)}</td>
-                  */}
-
-                  <td className="p-3 text-right font-bold">
-                    {n(r.kml_realizado).toFixed(2)}
-                  </td>
-
-                  <td className="p-3 text-right text-slate-500">
-                    {n(r.kml_meta).toFixed(2)}
-                  </td>
-
-                  <td className="p-3 text-right text-rose-700 font-bold">
-                    {n(r.combustivel_desperdicado).toFixed(0)} L
-                  </td>
+                  <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
+                  <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
+                  <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
                 </tr>
               ))}
             </tbody>
@@ -788,57 +601,38 @@ export default function DesempenhoDieselAgente() {
         </div>
       </div>
 
-      {/* ================================================================== */}
-      {/* 5. MODAL DE DETALHES */}
-      {/* ================================================================== */}
+      {/* MODAL */}
       {viewingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 flex flex-col">
-            {/* Header Modal */}
             <div className="bg-slate-800 text-white p-5 flex justify-between items-start sticky top-0 z-20">
               <div>
-                <div className="flex items-center gap-2">
-                  <FaBolt className="text-yellow-400" />
-                  <h3 className="text-lg font-bold">Auditoria de Eficiência</h3>
-                </div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <FaBolt className="text-yellow-400" /> Auditoria de Eficiência
+                </h3>
                 <p className="text-slate-300 text-sm mt-1">
-                  Motorista:{" "}
-                  <span className="font-mono bg-slate-700 px-1 rounded">
-                    {viewingDetails.motorista_chapa}
-                  </span>{" "}
-                  - {viewingDetails.nome}
+                  {viewingDetails.motorista_chapa} - {viewingDetails.motorista_nome || "-"}
                 </p>
-                <div className="text-xs text-slate-400 mt-1">
-                  Dados processados pela IA no momento da sugestão.
-                </div>
+                <div className="text-xs text-slate-400 mt-1">Dados processados pela IA no momento da sugestão.</div>
               </div>
-              <button
-                onClick={() => setViewingDetails(null)}
-                className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-full transition"
-              >
+              <button onClick={() => setViewingDetails(null)} className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-full transition">
                 <FaTimes size={20} />
               </button>
             </div>
 
-            {/* Corpo Modal */}
             <div className="p-6 space-y-8 flex-1">
-              {!modalContent?.raioX || modalContent.raioX.length === 0 ? (
+              {!modalContent.raioX || modalContent.raioX.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-3 border-2 border-dashed rounded-xl bg-slate-50">
                   <FaExclamationTriangle className="text-3xl text-slate-300" />
                   <p>Detalhes não disponíveis para este registro.</p>
-                  <span className="text-xs">
-                    Execute o relatório novamente para gerar os dados detalhados.
-                  </span>
+                  <span className="text-xs">Execute o relatório novamente para gerar os dados detalhados.</span>
                 </div>
               ) : (
                 <>
-                  {/* SEÇÃO 1: RAIO-X DA OPERAÇÃO */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
                       <FaListAlt />
-                      <h4 className="font-bold text-sm uppercase tracking-wide">
-                        1. Raio-X da Operação
-                      </h4>
+                      <h4 className="font-bold text-sm uppercase">1. Raio-X da Operação</h4>
                     </div>
 
                     <div className="border rounded-lg overflow-hidden">
@@ -856,30 +650,19 @@ export default function DesempenhoDieselAgente() {
                         </thead>
 
                         <tbody className="divide-y">
-                          {modalContent.raioX.map((row, idx) => {
-                            const desp = n(row?.desperdicio);
-                            return (
-                              <tr key={idx} className={desp > 10 ? "bg-rose-50" : ""}>
-                                <td className="p-2 font-bold text-slate-700">{row.linha}</td>
-                                <td className="p-2 text-slate-500">{row.cluster}</td>
-                                <td className="p-2 text-right">{n(row.km).toFixed(0)}</td>
-                                <td className="p-2 text-right">{n(row.litros).toFixed(0)}</td>
-                                <td className="p-2 text-right font-bold">
-                                  {n(row.kml_real).toFixed(2)}
-                                </td>
-                                <td className="p-2 text-right text-slate-500">
-                                  {n(row.kml_meta).toFixed(2)}
-                                </td>
-                                <td
-                                  className={`p-2 text-right font-bold ${
-                                    desp > 0 ? "text-rose-600" : "text-emerald-600"
-                                  }`}
-                                >
-                                  {desp.toFixed(1)}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {modalContent.raioX.map((row, idx) => (
+                            <tr key={idx} className={n(row.desperdicio) > 10 ? "bg-rose-50" : ""}>
+                              <td className="p-2 font-bold text-slate-700">{row.linha}</td>
+                              <td className="p-2 text-slate-500">{row.cluster}</td>
+                              <td className="p-2 text-right">{n(row.km).toFixed(0)}</td>
+                              <td className="p-2 text-right">{n(row.litros).toFixed(0)}</td>
+                              <td className="p-2 text-right font-bold">{n(row.kml_real).toFixed(2)}</td>
+                              <td className="p-2 text-right text-slate-500">{n(row.kml_meta).toFixed(2)}</td>
+                              <td className={clsx("p-2 text-right font-bold", n(row.desperdicio) > 0 ? "text-rose-600" : "text-emerald-600")}>
+                                {n(row.desperdicio).toFixed(1)}
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
 
                         <tfoot className="bg-slate-800 text-white font-bold border-t-2 border-slate-900">
@@ -889,28 +672,19 @@ export default function DesempenhoDieselAgente() {
                             </td>
                             <td className="p-2 text-right">{totalKm.toFixed(0)}</td>
                             <td className="p-2 text-right">{totalLitros.toFixed(0)}</td>
-                            <td className="p-2 text-right text-yellow-400">
-                              {kmlGeralReal.toFixed(2)}
-                            </td>
-                            <td className="p-2 text-right text-slate-300">
-                              {kmlGeralMeta.toFixed(2)}
-                            </td>
-                            <td className="p-2 text-right bg-rose-900/50 text-rose-300">
-                              {totalDesperdicio.toFixed(1)}
-                            </td>
+                            <td className="p-2 text-right text-yellow-400">{kmlGeralReal.toFixed(2)}</td>
+                            <td className="p-2 text-right text-slate-300">{kmlGeralMeta.toFixed(2)}</td>
+                            <td className="p-2 text-right bg-rose-900/50 text-rose-300">{totalDesperdicio.toFixed(1)}</td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
                   </div>
 
-                  {/* SEÇÃO 2: GRÁFICO */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-slate-700 border-b pb-2">
                       <FaChartLine />
-                      <h4 className="font-bold text-sm uppercase tracking-wide">
-                        2. Evolução Semanal
-                      </h4>
+                      <h4 className="font-bold text-sm uppercase">2. Evolução Semanal</h4>
                     </div>
 
                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
