@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   FaBolt,
   FaSearch,
@@ -7,7 +7,9 @@ import {
   FaCalendarAlt,
   FaSync,
   FaExclamationCircle,
-  FaCheckCircle
+  FaCheckCircle,
+  FaTimesCircle,
+  FaClock
 } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 
@@ -19,21 +21,50 @@ function n(v) {
   return Number.isFinite(x) ? x : 0;
 }
 
+// Badge de Status da Ordem
 function StatusBadge({ status }) {
-  // O Python salva como "CONCLUIDO" quando gera o PDF.
-  // Aqui podemos interpretar isso como "Pronto para Aplicação".
-  if (status === "CONCLUIDO") {
+  // Padronização dos status vindos do Banco
+  const s = String(status || "").toUpperCase();
+
+  if (s === "CONCLUIDO") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
         <FaCheckCircle /> PRONTO
       </span>
     );
   }
+  if (s === "PENDENTE" || s === "PROCESSANDO") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+        <FaClock /> GERANDO...
+      </span>
+    );
+  }
+  if (s === "ERRO") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+        <FaTimesCircle /> FALHA
+      </span>
+    );
+  }
+  
+  // Status desconhecido
   return (
-    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">
-      {status}
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600">
+      {s}
     </span>
   );
+}
+
+// Badge de Prioridade (Baseado no desperdício)
+function PrioridadeBadge({ litros }) {
+    if (litros >= 100) {
+        return <span className="text-[10px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded uppercase tracking-wider">Alta</span>
+    }
+    if (litros >= 50) {
+        return <span className="text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded uppercase tracking-wider">Média</span>
+    }
+    return <span className="text-[10px] font-bold bg-slate-400 text-white px-2 py-0.5 rounded uppercase tracking-wider">Normal</span>
 }
 
 // =============================================================================
@@ -44,24 +75,25 @@ export default function DesempenhoDieselAcompanhamento() {
   const [lista, setLista] = useState([]);
   const [erro, setErro] = useState(null);
 
-  // Filtros
+  // --- FILTROS ---
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState(""); // Filtra pela data de geração da ordem
-
+  const [filtroStatus, setFiltroStatus] = useState("TODOS");
+  const [dataInicio, setDataInicio] = useState(""); // Data do input
+  
   // ---------------------------------------------------------------------------
-  // CARGA DE DADOS (Conectado à tabela diesel_acompanhamentos)
+  // CARGA DE DADOS
   // ---------------------------------------------------------------------------
   async function carregarOrdens() {
     setLoading(true);
     setErro(null);
     try {
-      // Busca na tabela onde o Python salvou os resultados
       let query = supabase
         .from("diesel_acompanhamentos")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(500); // Limite de segurança
+        .limit(1000); // Traz os últimos 1000 registros
 
+      // Filtro de data no Banco (mais eficiente)
       if (dataInicio) {
         query = query.gte("created_at", dataInicio);
       }
@@ -81,126 +113,136 @@ export default function DesempenhoDieselAcompanhamento() {
   useEffect(() => {
     carregarOrdens();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio]); // Recarrega se mudar a data de início
+  }, [dataInicio]); // Recarrega se mudar a data no calendário
 
   // ---------------------------------------------------------------------------
-  // FILTRAGEM LOCAL (Busca texto)
+  // FILTRAGEM LOCAL (Rápida)
   // ---------------------------------------------------------------------------
   const listaFiltrada = useMemo(() => {
-    if (!busca) return lista;
-    const q = busca.toLowerCase();
-    return lista.filter(
-      (item) =>
-        (item.motorista_nome || "").toLowerCase().includes(q) ||
-        (item.motorista_chapa || "").includes(q)
-    );
-  }, [lista, busca]);
+    return lista.filter((item) => {
+        // 1. Filtro de Texto
+        const termo = busca.toLowerCase();
+        const matchTexto = 
+            (item.motorista_nome || "").toLowerCase().includes(termo) ||
+            (item.motorista_chapa || "").includes(termo);
+
+        // 2. Filtro de Status
+        const statusItem = (item.status || "").toUpperCase();
+        const matchStatus = filtroStatus === "TODOS" 
+            ? true 
+            : statusItem === filtroStatus;
+
+        return matchTexto && matchStatus;
+    });
+  }, [lista, busca, filtroStatus]);
 
   // ---------------------------------------------------------------------------
-  // TOTAIS (KPIs do Painel)
+  // TOTAIS DOS FILTRADOS (KPI Dinâmico)
   // ---------------------------------------------------------------------------
   const totalOrdens = listaFiltrada.length;
-  const totalPerdaIdentificada = listaFiltrada.reduce((acc, item) => acc + n(item.perda_litros), 0);
+  const totalPerda = listaFiltrada.reduce((acc, item) => acc + n(item.perda_litros), 0);
 
   // ---------------------------------------------------------------------------
   // AÇÕES
   // ---------------------------------------------------------------------------
   const abrirPDF = (url) => {
-    if (!url) return alert("URL do PDF não disponível.");
+    if (!url) return alert("PDF ainda não foi gerado ou link indisponível.");
     window.open(url, "_blank");
   };
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-gray-50">
       
-      {/* 1. CABEÇALHO */}
+      {/* 1. HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <FaBolt className="text-yellow-500" />
-            Gestão de Ordens de Acompanhamento
+            Ordens de Acompanhamento
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Lista de prontuários gerados pela IA. Distribua para os instrutores aplicarem.
+            Gestão dos Prontuários Técnicos gerados pela IA.
           </p>
         </div>
         <button
           onClick={carregarOrdens}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition shadow-sm font-medium text-sm"
         >
-          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar Lista
+          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
         </button>
       </div>
 
-      {/* 2. KPIs RÁPIDOS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordens Emitidas</p>
-            <p className="text-2xl font-bold text-slate-800">{totalOrdens}</p>
-          </div>
-          <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-            <FaFilePdf size={20} />
-          </div>
+      {/* 2. PAINEL DE FILTROS */}
+      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 text-slate-700 font-bold text-sm">
+            <FaFilter /> Filtros de Busca
         </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            {/* Busca Texto */}
+            <div className="md:col-span-2">
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Motorista (Nome ou Chapa)</label>
+                <div className="relative">
+                    <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                    <input
+                    type="text"
+                    placeholder="Digite para buscar..."
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Potencial de Economia</p>
-            <p className="text-2xl font-bold text-rose-600">{totalPerdaIdentificada.toFixed(0)} L</p>
-            <p className="text-xs text-rose-400 mt-1">Desperdício mapeado</p>
-          </div>
-          <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center">
-            <FaExclamationCircle size={20} />
-          </div>
-        </div>
+            {/* Filtro Status */}
+            <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Status da Ordem</label>
+                <select
+                    value={filtroStatus}
+                    onChange={(e) => setFiltroStatus(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                    <option value="TODOS">Todos</option>
+                    <option value="CONCLUIDO">Prontos (Concluído)</option>
+                    <option value="PROCESSANDO">Gerando...</option>
+                    <option value="PENDENTE">Pendente</option>
+                    <option value="ERRO">Com Erro</option>
+                </select>
+            </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status da Aplicação</p>
-            <p className="text-2xl font-bold text-emerald-600">0%</p>
-            <p className="text-xs text-slate-400 mt-1">Em desenvolvimento</p>
-          </div>
-          <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-            <FaCheckCircle size={20} />
-          </div>
+            {/* Filtro Data */}
+            <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Gerado a partir de</label>
+                <div className="relative">
+                    <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
+                    <input
+                    type="date"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+            </div>
         </div>
       </div>
 
-      {/* 3. BARRA DE FILTROS */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-        <div className="flex-1 w-full">
-          <label className="text-xs font-bold text-slate-500 mb-1 block">Buscar Motorista</label>
-          <div className="relative">
-            <FaSearch className="absolute left-3 top-3 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Nome ou Chapa..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+      {/* 3. BARRA DE RESULTADOS (KPIs) */}
+      <div className="flex flex-wrap gap-4">
+          <div className="bg-white px-4 py-3 rounded-lg border border-gray-200 shadow-sm flex items-center gap-3">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><FaFilePdf /></div>
+              <div>
+                  <div className="text-xs text-slate-500 font-bold uppercase">Ordens Listadas</div>
+                  <div className="text-xl font-bold text-slate-800">{totalOrdens}</div>
+              </div>
           </div>
-        </div>
-        
-        <div>
-          <label className="text-xs font-bold text-slate-500 mb-1 block">Gerado a partir de</label>
-          <div className="relative">
-            <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          
+          <div className="bg-white px-4 py-3 rounded-lg border border-gray-200 shadow-sm flex items-center gap-3">
+              <div className="p-2 bg-rose-50 text-rose-600 rounded-lg"><FaExclamationCircle /></div>
+              <div>
+                  <div className="text-xs text-slate-500 font-bold uppercase">Desperdício Mapeado</div>
+                  <div className="text-xl font-bold text-rose-600">{totalPerda.toFixed(0)} L</div>
+              </div>
           </div>
-        </div>
-        
-        <div className="h-10 w-px bg-gray-200 hidden md:block mx-2"></div>
-        
-        <div className="flex items-center gap-2 text-xs text-gray-500 pb-2">
-          <FaFilter /> Mostrando {listaFiltrada.length} registros
-        </div>
       </div>
 
       {/* 4. TABELA DE RESULTADOS */}
@@ -217,18 +259,18 @@ export default function DesempenhoDieselAcompanhamento() {
               <tr>
                 <th className="px-6 py-4">Data Geração</th>
                 <th className="px-6 py-4">Motorista</th>
-                <th className="px-6 py-4 text-center">Tecnologia</th>
+                <th className="px-6 py-4 text-center">Foco</th>
                 <th className="px-6 py-4 text-right">KM/L Real</th>
                 <th className="px-6 py-4 text-right">Desperdício</th>
                 <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-center">Ação</th>
+                <th className="px-6 py-4 text-center">Prontuário</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
                   <td colSpan="7" className="px-6 py-10 text-center text-gray-400">
-                    <FaSync className="animate-spin inline mr-2" /> Carregando ordens...
+                    <FaSync className="animate-spin inline mr-2" /> Carregando lista...
                   </td>
                 </tr>
               ) : listaFiltrada.length === 0 ? (
@@ -239,41 +281,60 @@ export default function DesempenhoDieselAcompanhamento() {
                 </tr>
               ) : (
                 listaFiltrada.map((item) => (
-                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
+                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="px-6 py-4 text-gray-500">
-                      {new Date(item.created_at).toLocaleDateString('pt-BR')} <br/>
-                      <span className="text-xs opacity-60">{new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                      <div className="font-medium text-slate-700">{new Date(item.created_at).toLocaleDateString('pt-BR')}</div>
+                      <div className="text-xs opacity-60">{new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
                     </td>
+                    
                     <td className="px-6 py-4">
-                      <div className="font-bold text-slate-700">{item.motorista_nome || "Nome não reg."}</div>
-                      <div className="text-xs text-slate-400 font-mono bg-slate-100 inline-block px-1 rounded mt-1">
-                        {item.motorista_chapa}
+                      <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-bold text-slate-800 text-base">{item.motorista_nome || "Nome não registrado"}</div>
+                            <div className="text-xs text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded border border-slate-200 mt-1">
+                                {item.motorista_chapa}
+                            </div>
+                          </div>
+                          {/* Badge de Prioridade ao lado do nome */}
+                          <PrioridadeBadge litros={n(item.perda_litros)} />
                       </div>
                     </td>
+                    
                     <td className="px-6 py-4 text-center">
-                        {/* Se tiver vehicle_foco salvo, exibe, senão tenta extrair do metadata */}
-                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">
-                            {item.veiculo_foco || "N/A"}
+                        <div className="flex flex-col items-center">
+                            <span className="text-xs font-bold text-slate-600">{item.veiculo_foco || "-"}</span>
+                            <span className="text-[10px] text-slate-400">{item.linha_foco || "-"}</span>
+                        </div>
+                    </td>
+                    
+                    <td className="px-6 py-4 text-right">
+                        <span className="font-mono font-bold text-slate-700 text-base">
+                            {n(item.kml_real).toFixed(2)}
                         </span>
                     </td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-slate-700">
-                      {n(item.kml_real).toFixed(2)}
-                    </td>
+                    
                     <td className="px-6 py-4 text-right">
-                      <span className="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded">
+                      <span className="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded border border-rose-100">
                         -{n(item.perda_litros).toFixed(0)} L
                       </span>
                     </td>
+                    
                     <td className="px-6 py-4 text-center">
                       <StatusBadge status={item.status} />
                     </td>
+                    
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => abrirPDF(item.arquivo_pdf_path)}
-                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm"
+                        disabled={item.status !== "CONCLUIDO"}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm ${
+                            item.status === "CONCLUIDO" 
+                            ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer" 
+                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        }`}
                         title="Baixar Prontuário PDF"
                       >
-                        <FaFilePdf size={14} /> ABRIR
+                        <FaFilePdf size={14} /> ABRIR PDF
                       </button>
                     </td>
                   </tr>
