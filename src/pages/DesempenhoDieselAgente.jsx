@@ -14,7 +14,7 @@ import {
   FaChartLine,
   FaListAlt,
 } from "react-icons/fa";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabase";
 
 // =============================================================================
 // CONFIGURAÇÕES E ENV
