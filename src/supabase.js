@@ -1,18 +1,23 @@
-import express from "express";
 import { createClient } from "@supabase/supabase-js";
 
-const router = express.Router();
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
-const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("❌ Supabase ENV ausente:", {
-    hasUrl: !!SUPABASE_URL,
-    hasServiceRole: !!SUPABASE_SERVICE_ROLE_KEY,
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("❌ ENV Supabase ausente no FRONT:", {
+    hasUrl: !!supabaseUrl,
+    hasAnon: !!supabaseAnonKey,
   });
+  // opcional: travar para não dar erro mascarado
+  throw new Error("ENV do Supabase ausente (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)");
 }
 
-const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storageKey: "sb-inove-auth",
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
+  },
 });
