@@ -475,7 +475,7 @@ export default function DesempenhoDieselAgente() {
         kml_realizado: n(r.kml_realizado),
         kml_meta: n(r.kml_meta),
         combustivel_desperdicado: n(r.combustivel_desperdicado),
-        extra: { motorista_nome: r.motorista_nome ?? null },
+        extra: { nome: r.nome ?? null },
       }));
 
       const { error: errI } = await supabase.from("acompanhamento_lote_itens").insert(itens);
@@ -714,7 +714,7 @@ export default function DesempenhoDieselAgente() {
                 <th className="p-3 w-10"></th>
 
                 <ThSortable label="Chapa" columnKey="motorista_chapa" />
-                <ThSortable label="Nome" columnKey="motorista_nome" />
+                <ThSortable label="Nome" columnKey="nome" />
                 <ThSortable label="Linha" columnKey="linha_mais_rodada" />
                 <ThSortable label="KM" columnKey="km_percorrido" align="right" />
 
@@ -757,9 +757,9 @@ export default function DesempenhoDieselAgente() {
 
                   <td
                     className="p-3 text-slate-600 text-xs truncate max-w-[220px]"
-                    title={r.motorista_nome}
+                    title={r.nome}
                   >
-                    {r.motorista_nome || "-"}
+                    {r.nome || "-"}
                   </td>
 
                   <td className="p-3 text-slate-700">{r.linha_mais_rodada}</td>
@@ -806,7 +806,7 @@ export default function DesempenhoDieselAgente() {
                   <span className="font-mono bg-slate-700 px-1 rounded">
                     {viewingDetails.motorista_chapa}
                   </span>{" "}
-                  - {viewingDetails.motorista_nome}
+                  - {viewingDetails.nome}
                 </p>
                 <div className="text-xs text-slate-400 mt-1">
                   Dados processados pela IA no momento da sugestão.
