@@ -1,40 +1,32 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
-  FaBolt,
-  FaSearch,
-  FaFilePdf,
-  FaFilter,
-  FaCalendarAlt,
-  FaSync,
-  FaExclamationCircle,
-  FaCheckCircle
+  FaBolt, FaSearch, FaFilePdf, FaFilter, FaSync,
+  FaCheckCircle, FaTimesCircle, FaClock, FaHistory,
+  FaClipboardList, FaRoad, FaSave, FaTimes, FaPlay
 } from "react-icons/fa";
-import { supabase } from "../supabase";
+import { supabase } from "../supabaseClient";
 
 // =============================================================================
-// HELPERS
+// CONFIGURAÇÕES & HELPERS
 // =============================================================================
-function n(v) {
-  const x = Number(v);
-  return Number.isFinite(x) ? x : 0;
-}
+function n(v) { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
-function StatusBadge({ status }) {
-  // O Python salva como "CONCLUIDO" quando gera o PDF.
-  // Aqui podemos interpretar isso como "Pronto para Aplicação".
-  if (status === "CONCLUIDO") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-        <FaCheckCircle /> PRONTO
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">
-      {status}
-    </span>
-  );
-}
+// Opções do Checklist Técnico
+const CHECKLIST_ITENS = [
+    { id: "faixa_verde", label: "Operação na Faixa Verde (RPM)" },
+    { id: "antecipacao", label: "Antecipação de Parada/Trânsito" },
+    { id: "troca_marcha", label: "Troca de Marchas no Tempo Correto" },
+    { id: "uso_retarder", label: "Uso Correto do Freio Motor/Retarder" },
+    { id: "marcha_lenta", label: "Evitou Marcha Lenta Excessiva" },
+    { id: "topografia", label: "Aproveitamento de Inércia (Topografia)" }
+];
+
+// Níveis de Monitoramento
+const NIVEIS = {
+    1: { label: "Nível 1 (Leve)", dias: 5, color: "bg-blue-50 border-blue-200 text-blue-700" },
+    2: { label: "Nível 2 (Médio)", dias: 10, color: "bg-amber-50 border-amber-200 text-amber-700" },
+    3: { label: "Nível 3 (Crítico)", dias: 15, color: "bg-rose-50 border-rose-200 text-rose-700" }
+};
 
 // =============================================================================
 // COMPONENTE PRINCIPAL
@@ -42,247 +34,374 @@ function StatusBadge({ status }) {
 export default function DesempenhoDieselAcompanhamento() {
   const [loading, setLoading] = useState(false);
   const [lista, setLista] = useState([]);
-  const [erro, setErro] = useState(null);
-
+  
   // Filtros
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState(""); // Filtra pela data de geração da ordem
+  const [filtroStatus, setFiltroStatus] = useState("ATIVOS"); 
+
+  // Modais
+  const [modalLancarOpen, setModalLancarOpen] = useState(false);
+  const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
+  const [itemSelecionado, setItemSelecionado] = useState(null);
+  
+  // Histórico (Modal Consulta)
+  const [historico, setHistorico] = useState([]);
+  const [loadingHist, setLoadingHist] = useState(false);
+
+  // Formulário (Modal Lançar)
+  const [form, setForm] = useState({
+      horaInicio: "", horaFim: "",
+      kmInicio: "", kmFim: "",
+      mediaTeste: "",
+      nivel: 2, // Padrão
+      obs: "",
+      checklist: {} 
+  });
 
   // ---------------------------------------------------------------------------
-  // CARGA DE DADOS (Conectado à tabela diesel_acompanhamentos)
+  // CARGA DE DADOS
   // ---------------------------------------------------------------------------
   async function carregarOrdens() {
     setLoading(true);
-    setErro(null);
     try {
-      // Busca na tabela onde o Python salvou os resultados
       let query = supabase
         .from("diesel_acompanhamentos")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(500); // Limite de segurança
-
-      if (dataInicio) {
-        query = query.gte("created_at", dataInicio);
-      }
-
+        .limit(500);
+      
       const { data, error } = await query;
-
       if (error) throw error;
       setLista(data || []);
     } catch (e) {
-      console.error(e);
-      setErro("Erro ao carregar ordens: " + e.message);
+      alert("Erro ao carregar: " + e.message);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    carregarOrdens();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio]); // Recarrega se mudar a data de início
+  useEffect(() => { carregarOrdens(); }, []);
 
   // ---------------------------------------------------------------------------
-  // FILTRAGEM LOCAL (Busca texto)
+  // AÇÃO 1: CONSULTAR ANÁLISE (Resumo + Histórico)
   // ---------------------------------------------------------------------------
-  const listaFiltrada = useMemo(() => {
-    if (!busca) return lista;
-    const q = busca.toLowerCase();
-    return lista.filter(
-      (item) =>
-        (item.motorista_nome || "").toLowerCase().includes(q) ||
-        (item.motorista_chapa || "").includes(q)
-    );
-  }, [lista, busca]);
-
-  // ---------------------------------------------------------------------------
-  // TOTAIS (KPIs do Painel)
-  // ---------------------------------------------------------------------------
-  const totalOrdens = listaFiltrada.length;
-  const totalPerdaIdentificada = listaFiltrada.reduce((acc, item) => acc + n(item.perda_litros), 0);
-
-  // ---------------------------------------------------------------------------
-  // AÇÕES
-  // ---------------------------------------------------------------------------
-  const abrirPDF = (url) => {
-    if (!url) return alert("URL do PDF não disponível.");
-    window.open(url, "_blank");
+  const handleConsultar = async (item) => {
+      setItemSelecionado(item);
+      setModalConsultaOpen(true);
+      setLoadingHist(true);
+      
+      // Busca histórico de outras ordens desse mesmo motorista
+      const { data } = await supabase
+          .from("diesel_acompanhamentos")
+          .select("*")
+          .eq("motorista_chapa", item.motorista_chapa)
+          .neq("id", item.id) // Não traz a atual
+          .order("created_at", { ascending: false });
+          
+      setHistorico(data || []);
+      setLoadingHist(false);
   };
 
+  // ---------------------------------------------------------------------------
+  // AÇÃO 2: LANÇAR ACOMPANHAMENTO (Checklist)
+  // ---------------------------------------------------------------------------
+  const handleLancar = (item) => {
+      setItemSelecionado(item);
+      // Limpa formulário
+      setForm({
+          horaInicio: "", horaFim: "",
+          kmInicio: "", kmFim: "",
+          mediaTeste: "",
+          nivel: 2,
+          obs: "",
+          checklist: {}
+      });
+      setModalLancarOpen(true);
+  };
+
+  const toggleCheck = (id) => {
+      setForm(prev => ({
+          ...prev,
+          checklist: { ...prev.checklist, [id]: !prev.checklist[id] }
+      }));
+  };
+
+  const salvarIntervencao = async () => {
+      // Validação Básica
+      if (!form.horaInicio || !form.kmInicio || !form.mediaTeste) {
+          alert("Por favor, preencha os dados da Viagem de Teste (Hora, KM e Média).");
+          return;
+      }
+
+      const dias = NIVEIS[form.nivel].dias;
+      const dtFim = new Date();
+      dtFim.setDate(dtFim.getDate() + dias);
+
+      try {
+          const { error } = await supabase.from("diesel_acompanhamentos").update({
+              // Muda Status: Começa a contar
+              status: "EM_MONITORAMENTO",
+              
+              // Dados da Metodologia
+              nivel: form.nivel,
+              dias_monitoramento: dias,
+              dt_inicio_monitoramento: new Date().toISOString(),
+              dt_fim_previsao: dtFim.toISOString(),
+
+              // Dados da Aula Prática
+              intervencao_hora_inicio: form.horaInicio,
+              intervencao_hora_fim: form.horaFim,
+              intervencao_km_inicio: n(form.kmInicio),
+              intervencao_km_fim: n(form.kmFim),
+              intervencao_media_teste: n(form.mediaTeste),
+              intervencao_checklist: form.checklist,
+              intervencao_obs: form.obs
+
+          }).eq("id", itemSelecionado.id);
+
+          if (error) throw error;
+
+          setModalLancarOpen(false);
+          carregarOrdens(); // Recarrega a lista para sumir o botão
+          alert("Acompanhamento iniciado com sucesso!");
+
+      } catch (err) {
+          alert("Erro ao salvar: " + err.message);
+      }
+  };
+
+  // ---------------------------------------------------------------------------
+  // FILTROS
+  // ---------------------------------------------------------------------------
+  const listaFiltrada = useMemo(() => {
+    return lista.filter((item) => {
+        const q = busca.toLowerCase();
+        const matchTexto = (item.motorista_nome || "").toLowerCase().includes(q) || (item.motorista_chapa || "").includes(q);
+        
+        let status = (item.status || "AG_ACOMPANHAMENTO").toUpperCase();
+        if(status === "CONCLUIDO") status = "AG_ACOMPANHAMENTO"; // Legado do Python
+
+        if (filtroStatus === "ATIVOS") return matchTexto && ["AG_ACOMPANHAMENTO", "EM_MONITORAMENTO"].includes(status);
+        if (filtroStatus === "ENCERRADOS") return matchTexto && ["OK", "TRATATIVA", "REJEITADA"].includes(status);
+        
+        return matchTexto;
+    });
+  }, [lista, busca, filtroStatus]);
+
+  const abrirPDF = (url) => { if(url) window.open(url, "_blank"); };
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-gray-50">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#f8f9fa] font-sans text-slate-800">
       
-      {/* 1. CABEÇALHO */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+      {/* HEADER */}
+      <div className="flex justify-between items-center border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <FaBolt className="text-yellow-500" />
-            Gestão de Ordens de Acompanhamento
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Lista de prontuários gerados pela IA. Distribua para os instrutores aplicarem.
-          </p>
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+                <FaBolt className="text-yellow-500" /> Painel de Acompanhamento
+            </h1>
+            <p className="text-sm text-slate-500">Gestão de Ordens e Intervenções Técnicas</p>
         </div>
-        <button
-          onClick={carregarOrdens}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition shadow-sm font-medium text-sm"
-        >
-          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar Lista
+        <button onClick={carregarOrdens} className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm font-bold">
+            <FaSync /> Atualizar
         </button>
       </div>
 
-      {/* 2. KPIs RÁPIDOS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordens Emitidas</p>
-            <p className="text-2xl font-bold text-slate-800">{totalOrdens}</p>
+      {/* BARRA DE FILTROS */}
+      <div className="flex gap-4 mb-6 items-center bg-white p-3 rounded-lg border shadow-sm">
+          <div className="relative">
+             <FaSearch className="absolute left-3 top-3 text-gray-400" />
+             <input type="text" placeholder="Buscar Motorista..." value={busca} onChange={e => setBusca(e.target.value)} className="pl-9 p-2 border rounded w-64 text-sm outline-none focus:border-blue-500" />
           </div>
-          <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-            <FaFilePdf size={20} />
+          <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="p-2 border rounded text-sm bg-white outline-none focus:border-blue-500">
+              <option value="ATIVOS">⚡ Em Aberto / Monitorando</option>
+              <option value="ENCERRADOS">🏁 Encerrados (Histórico)</option>
+              <option value="TODOS">Todos</option>
+          </select>
+          <div className="ml-auto text-xs text-gray-500 font-medium">
+              Mostrando {listaFiltrada.length} registros
           </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Potencial de Economia</p>
-            <p className="text-2xl font-bold text-rose-600">{totalPerdaIdentificada.toFixed(0)} L</p>
-            <p className="text-xs text-rose-400 mt-1">Desperdício mapeado</p>
-          </div>
-          <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center">
-            <FaExclamationCircle size={20} />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status da Aplicação</p>
-            <p className="text-2xl font-bold text-emerald-600">0%</p>
-            <p className="text-xs text-slate-400 mt-1">Em desenvolvimento</p>
-          </div>
-          <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-            <FaCheckCircle size={20} />
-          </div>
-        </div>
       </div>
 
-      {/* 3. BARRA DE FILTROS */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-        <div className="flex-1 w-full">
-          <label className="text-xs font-bold text-slate-500 mb-1 block">Buscar Motorista</label>
-          <div className="relative">
-            <FaSearch className="absolute left-3 top-3 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Nome ou Chapa..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-        </div>
-        
-        <div>
-          <label className="text-xs font-bold text-slate-500 mb-1 block">Gerado a partir de</label>
-          <div className="relative">
-            <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        
-        <div className="h-10 w-px bg-gray-200 hidden md:block mx-2"></div>
-        
-        <div className="flex items-center gap-2 text-xs text-gray-500 pb-2">
-          <FaFilter /> Mostrando {listaFiltrada.length} registros
-        </div>
-      </div>
-
-      {/* 4. TABELA DE RESULTADOS */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        {erro && (
-          <div className="p-4 bg-rose-50 text-rose-700 text-sm border-b border-rose-100 flex items-center gap-2">
-            <FaExclamationCircle /> {erro}
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs border-b">
+      {/* TABELA PRINCIPAL */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-600 font-bold border-b text-xs uppercase">
               <tr>
-                <th className="px-6 py-4">Data Geração</th>
+                <th className="px-6 py-4">Data</th>
                 <th className="px-6 py-4">Motorista</th>
-                <th className="px-6 py-4 text-center">Tecnologia</th>
-                <th className="px-6 py-4 text-right">KM/L Real</th>
-                <th className="px-6 py-4 text-right">Desperdício</th>
+                <th className="px-6 py-4 text-center">Foco</th>
                 <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-center">Ação</th>
+                <th className="px-6 py-4 text-center">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-10 text-center text-gray-400">
-                    <FaSync className="animate-spin inline mr-2" /> Carregando ordens...
-                  </td>
-                </tr>
-              ) : listaFiltrada.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-10 text-center text-gray-400">
-                    Nenhuma ordem encontrada com estes filtros.
-                  </td>
-                </tr>
-              ) : (
-                listaFiltrada.map((item) => (
-                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-6 py-4 text-gray-500">
-                      {new Date(item.created_at).toLocaleDateString('pt-BR')} <br/>
-                      <span className="text-xs opacity-60">{new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-700">{item.motorista_nome || "Nome não reg."}</div>
-                      <div className="text-xs text-slate-400 font-mono bg-slate-100 inline-block px-1 rounded mt-1">
-                        {item.motorista_chapa}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                        {/* Se tiver vehicle_foco salvo, exibe, senão tenta extrair do metadata */}
-                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">
-                            {item.veiculo_foco || "N/A"}
-                        </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono font-bold text-slate-700">
-                      {n(item.kml_real).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded">
-                        -{n(item.perda_litros).toFixed(0)} L
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <StatusBadge status={item.status} />
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => abrirPDF(item.arquivo_pdf_path)}
-                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm"
-                        title="Baixar Prontuário PDF"
-                      >
-                        <FaFilePdf size={14} /> ABRIR
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+            <tbody className="divide-y">
+              {listaFiltrada.map(item => {
+                  const status = (item.status || "AG_ACOMPANHAMENTO").toUpperCase();
+                  // Botão Lançar só aparece se ainda não começou
+                  const showLancar = status === "AG_ACOMPANHAMENTO" || status === "CONCLUIDO"; 
+                  const diasRestantes = item.dt_fim_previsao ? Math.ceil((new Date(item.dt_fim_previsao) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                            {new Date(item.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4">
+                            <div className="font-bold text-slate-800">{item.motorista_nome}</div>
+                            <div className="text-xs text-slate-500 font-mono bg-slate-100 px-1 rounded w-fit mt-1">{item.motorista_chapa}</div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                            <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold border">{item.veiculo_foco || "Geral"}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                            {showLancar ? (
+                                <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-[10px] font-bold border border-amber-200 flex items-center justify-center gap-1">
+                                    <FaClock /> AGUARDANDO INSTRUTOR
+                                </span>
+                            ) : status === "EM_MONITORAMENTO" ? (
+                                <div className="flex flex-col items-center">
+                                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border border-blue-200">
+                                        EM MONITORAMENTO
+                                    </span>
+                                    <span className="text-[9px] text-gray-500 mt-1">Faltam {diasRestantes} dias</span>
+                                </div>
+                            ) : (
+                                <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold">{status}</span>
+                            )}
+                        </td>
+                        
+                        {/* OS 3 BOTÕES */}
+                        <td className="px-6 py-4">
+                            <div className="flex justify-center gap-2">
+                                {/* 1. PDF */}
+                                <button onClick={() => abrirPDF(item.arquivo_pdf_path)} className="p-2 text-rose-600 bg-white border border-rose-200 rounded hover:bg-rose-50 transition shadow-sm" title="Abrir Prontuário PDF">
+                                    <FaFilePdf />
+                                </button>
+
+                                {/* 2. CONSULTAR */}
+                                <button onClick={() => handleConsultar(item)} className="p-2 text-blue-600 bg-white border border-blue-200 rounded hover:bg-blue-50 transition shadow-sm" title="Consultar Histórico">
+                                    <FaHistory />
+                                </button>
+
+                                {/* 3. LANÇAR (Condicional) */}
+                                {showLancar && (
+                                    <button onClick={() => handleLancar(item)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold flex items-center gap-2 shadow-sm transition">
+                                        <FaPlay size={10} /> LANÇAR
+                                    </button>
+                                )}
+                            </div>
+                        </td>
+                    </tr>
+                  )
+              })}
             </tbody>
-          </table>
-        </div>
+        </table>
       </div>
+
+      {/* --- MODAL DE CONSULTA (HISTÓRICO) --- */}
+      {modalConsultaOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+                <div className="flex justify-between items-center p-5 border-b bg-slate-50">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaHistory /> Histórico do Motorista</h3>
+                    <button onClick={() => setModalConsultaOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500" /></button>
+                </div>
+                
+                <div className="p-6">
+                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                        <h4 className="font-bold text-blue-800 text-sm mb-2">Ordem Atual</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><span className="text-blue-500 font-bold">Motorista:</span> {itemSelecionado.motorista_nome}</div>
+                            <div><span className="text-blue-500 font-bold">KM/L Atual:</span> {n(itemSelecionado.kml_real).toFixed(2)}</div>
+                            <div><span className="text-blue-500 font-bold">Desperdício:</span> {n(itemSelecionado.perda_litros).toFixed(0)} L</div>
+                            <div><span className="text-blue-500 font-bold">Meta:</span> {n(itemSelecionado.kml_meta).toFixed(2)}</div>
+                        </div>
+                    </div>
+
+                    <h4 className="font-bold text-slate-700 text-sm mb-3 border-b pb-1">Acompanhamentos Anteriores</h4>
+                    {loadingHist ? <div className="text-center py-4"><FaSync className="animate-spin inline"/> Carregando...</div> : 
+                     historico.length === 0 ? <div className="text-center py-4 text-gray-400 text-sm">Nenhum histórico anterior encontrado.</div> : (
+                        <div className="space-y-3">
+                            {historico.map(h => (
+                                <div key={h.id} className="p-3 border rounded-lg flex justify-between items-center text-sm hover:bg-gray-50">
+                                    <div>
+                                        <div className="font-bold text-slate-700">{new Date(h.created_at).toLocaleDateString()}</div>
+                                        <div className="text-xs text-gray-500">{h.veiculo_foco || "Geral"}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className={`font-bold text-xs px-2 py-0.5 rounded ${h.status === 'OK' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>{h.status}</div>
+                                        <div className="text-xs text-gray-400 mt-1">Nível {h.nivel || "-"}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* --- MODAL DE LANÇAMENTO (CHECKLIST) --- */}
+      {modalLancarOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+                <div className="flex justify-between items-center p-5 border-b bg-slate-50">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><FaRoad /> Lançar Intervenção Técnica</h3>
+                    <button onClick={() => setModalLancarOpen(false)}><FaTimes className="text-gray-400 hover:text-red-500" /></button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    
+                    {/* SEÇÃO 1: DADOS DA VIAGEM */}
+                    <div className="p-4 border rounded-lg bg-gray-50">
+                        <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2"><FaClock /> Dados da Viagem de Teste</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div><label className="text-xs font-bold text-gray-500">Hora Início</label><input type="time" value={form.horaInicio} onChange={e => setForm({...form, horaInicio: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                            <div><label className="text-xs font-bold text-gray-500">Hora Fim</label><input type="time" value={form.horaFim} onChange={e => setForm({...form, horaFim: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                            <div><label className="text-xs font-bold text-gray-500">KM Início</label><input type="number" value={form.kmInicio} onChange={e => setForm({...form, kmInicio: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                            <div><label className="text-xs font-bold text-gray-500">KM Fim</label><input type="number" value={form.kmFim} onChange={e => setForm({...form, kmFim: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                        </div>
+                        <div className="mt-3">
+                            <label className="text-xs font-bold text-blue-600">MÉDIA REALIZADA NO TESTE (KM/L)</label>
+                            <input type="number" step="0.01" value={form.mediaTeste} onChange={e => setForm({...form, mediaTeste: e.target.value})} className="w-full p-2 border border-blue-300 rounded text-sm font-bold text-blue-800 bg-blue-50" placeholder="Ex: 2.80"/>
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO 2: CHECKLIST TÉCNICO */}
+                    <div>
+                        <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2"><FaClipboardList /> O que foi corrigido?</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {CHECKLIST_ITENS.map(chk => (
+                                <label key={chk.id} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${form.checklist[chk.id] ? "bg-emerald-50 border-emerald-300" : "hover:bg-gray-50"}`}>
+                                    <input type="checkbox" checked={!!form.checklist[chk.id]} onChange={() => toggleCheck(chk.id)} className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500" />
+                                    <span className="text-sm text-gray-700">{chk.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO 3: NÍVEL (CONTRATO) */}
+                    <div>
+                        <h4 className="font-bold text-slate-700 text-sm mb-3">Definir Nível de Monitoramento</h4>
+                        <div className="grid grid-cols-3 gap-3">
+                            {[1, 2, 3].map(n => (
+                                <button key={n} onClick={() => setForm({...form, nivel: n})} 
+                                    className={`p-3 rounded-lg border text-center transition ${form.nivel === n ? `ring-2 ring-offset-1 ${NIVEIS[n].color.replace('text', 'bg').replace('bg', 'text')}` : NIVEIS[n].color}`}>
+                                    <div className="font-bold">{NIVEIS[n].label}</div>
+                                    <div className="text-xs opacity-80">{NIVEIS[n].dias} Dias</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button onClick={salvarIntervencao} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md flex justify-center items-center gap-2 transition">
+                        <FaSave /> SALVAR E INICIAR MONITORAMENTO
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }
