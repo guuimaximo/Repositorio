@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   FaBolt,
   FaSearch,
@@ -7,64 +7,33 @@ import {
   FaCalendarAlt,
   FaSync,
   FaExclamationCircle,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaClock
+  FaCheckCircle
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 
 // =============================================================================
-// HELPERS VISUAIS
+// HELPERS
 // =============================================================================
-
-// Formata números
 function n(v) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
 }
 
-// Badge de Status da Ordem
 function StatusBadge({ status }) {
-  const s = String(status || "").toUpperCase();
-
-  if (s === "CONCLUIDO") {
+  // O Python salva como "CONCLUIDO" quando gera o PDF.
+  // Aqui podemos interpretar isso como "Pronto para Aplicação".
+  if (status === "CONCLUIDO") {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
         <FaCheckCircle /> PRONTO
       </span>
     );
   }
-  if (s === "PENDENTE" || s === "PROCESSANDO") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-        <FaClock /> GERANDO...
-      </span>
-    );
-  }
-  if (s === "ERRO") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-        <FaTimesCircle /> FALHA
-      </span>
-    );
-  }
-  
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600">
-      {s}
+    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">
+      {status}
     </span>
   );
-}
-
-// Badge de Prioridade (Baseado no desperdício em Litros)
-function PrioridadeBadge({ litros }) {
-    if (litros >= 100) {
-        return <span className="text-[10px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded uppercase tracking-wider ml-2 shadow-sm">Alta Prioridade</span>
-    }
-    if (litros >= 50) {
-        return <span className="text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded uppercase tracking-wider ml-2 shadow-sm">Média</span>
-    }
-    return null; // Não mostra nada se for baixo
 }
 
 // =============================================================================
@@ -75,23 +44,23 @@ export default function DesempenhoDieselAcompanhamento() {
   const [lista, setLista] = useState([]);
   const [erro, setErro] = useState(null);
 
-  // --- FILTROS ---
+  // Filtros
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("TODOS");
-  const [dataInicio, setDataInicio] = useState(""); 
-  
+  const [dataInicio, setDataInicio] = useState(""); // Filtra pela data de geração da ordem
+
   // ---------------------------------------------------------------------------
-  // CARGA DE DADOS
+  // CARGA DE DADOS (Conectado à tabela diesel_acompanhamentos)
   // ---------------------------------------------------------------------------
   async function carregarOrdens() {
     setLoading(true);
     setErro(null);
     try {
+      // Busca na tabela onde o Python salvou os resultados
       let query = supabase
         .from("diesel_acompanhamentos")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(1000);
+        .limit(500); // Limite de segurança
 
       if (dataInicio) {
         query = query.gte("created_at", dataInicio);
@@ -112,35 +81,32 @@ export default function DesempenhoDieselAcompanhamento() {
   useEffect(() => {
     carregarOrdens();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio]);
+  }, [dataInicio]); // Recarrega se mudar a data de início
 
   // ---------------------------------------------------------------------------
-  // FILTRAGEM E TOTAIS
+  // FILTRAGEM LOCAL (Busca texto)
   // ---------------------------------------------------------------------------
   const listaFiltrada = useMemo(() => {
-    return lista.filter((item) => {
-        const termo = busca.toLowerCase();
-        const matchTexto = 
-            (item.motorista_nome || "").toLowerCase().includes(termo) ||
-            (item.motorista_chapa || "").includes(termo);
+    if (!busca) return lista;
+    const q = busca.toLowerCase();
+    return lista.filter(
+      (item) =>
+        (item.motorista_nome || "").toLowerCase().includes(q) ||
+        (item.motorista_chapa || "").includes(q)
+    );
+  }, [lista, busca]);
 
-        const statusItem = (item.status || "").toUpperCase();
-        const matchStatus = filtroStatus === "TODOS" 
-            ? true 
-            : statusItem === filtroStatus;
-
-        return matchTexto && matchStatus;
-    });
-  }, [lista, busca, filtroStatus]);
-
+  // ---------------------------------------------------------------------------
+  // TOTAIS (KPIs do Painel)
+  // ---------------------------------------------------------------------------
   const totalOrdens = listaFiltrada.length;
-  const totalPerda = listaFiltrada.reduce((acc, item) => acc + n(item.perda_litros), 0);
+  const totalPerdaIdentificada = listaFiltrada.reduce((acc, item) => acc + n(item.perda_litros), 0);
 
   // ---------------------------------------------------------------------------
   // AÇÕES
   // ---------------------------------------------------------------------------
   const abrirPDF = (url) => {
-    if (!url) return alert("PDF ainda não foi gerado ou link indisponível.");
+    if (!url) return alert("URL do PDF não disponível.");
     window.open(url, "_blank");
   };
 
@@ -152,99 +118,88 @@ export default function DesempenhoDieselAcompanhamento() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <FaBolt className="text-yellow-500" />
-            Ordens de Acompanhamento
+            Gestão de Ordens de Acompanhamento
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Gestão dos Prontuários Técnicos gerados pela IA. Distribua para os instrutores.
+            Lista de prontuários gerados pela IA. Distribua para os instrutores aplicarem.
           </p>
         </div>
         <button
           onClick={carregarOrdens}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition shadow-sm font-medium text-sm"
         >
-          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
+          <FaSync className={loading ? "animate-spin" : ""} /> Atualizar Lista
         </button>
       </div>
 
       {/* 2. KPIs RÁPIDOS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white px-5 py-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-              <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Ordens na Lista</div>
-                  <div className="text-2xl font-bold text-slate-800 mt-1">{totalOrdens}</div>
-              </div>
-              <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><FaFilePdf /></div>
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ordens Emitidas</p>
+            <p className="text-2xl font-bold text-slate-800">{totalOrdens}</p>
           </div>
-          
-          <div className="bg-white px-5 py-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-              <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Desperdício Mapeado</div>
-                  <div className="text-2xl font-bold text-rose-600 mt-1">{totalPerda.toFixed(0)} L</div>
-                  <div className="text-[10px] text-gray-400">Potencial de economia nesta lista</div>
-              </div>
-              <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center"><FaExclamationCircle /></div>
+          <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+            <FaFilePdf size={20} />
           </div>
+        </div>
 
-          <div className="bg-white px-5 py-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-              <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Status Geral</div>
-                  <div className="text-sm font-medium text-slate-600 mt-1">Aguardando aplicação</div>
-              </div>
-              <div className="h-10 w-10 bg-gray-100 text-gray-500 rounded-lg flex items-center justify-center"><FaClock /></div>
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Potencial de Economia</p>
+            <p className="text-2xl font-bold text-rose-600">{totalPerdaIdentificada.toFixed(0)} L</p>
+            <p className="text-xs text-rose-400 mt-1">Desperdício mapeado</p>
           </div>
+          <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center">
+            <FaExclamationCircle size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status da Aplicação</p>
+            <p className="text-2xl font-bold text-emerald-600">0%</p>
+            <p className="text-xs text-slate-400 mt-1">Em desenvolvimento</p>
+          </div>
+          <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+            <FaCheckCircle size={20} />
+          </div>
+        </div>
       </div>
 
-      {/* 3. PAINEL DE FILTROS */}
-      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-        <div className="flex items-center gap-2 mb-4 text-slate-700 font-bold text-sm border-b pb-2">
-            <FaFilter /> Filtros Avançados
+      {/* 3. BARRA DE FILTROS */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+        <div className="flex-1 w-full">
+          <label className="text-xs font-bold text-slate-500 mb-1 block">Buscar Motorista</label>
+          <div className="relative">
+            <FaSearch className="absolute left-3 top-3 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Nome ou Chapa..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            {/* Busca Texto */}
-            <div className="md:col-span-2">
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Motorista (Nome ou Chapa)</label>
-                <div className="relative">
-                    <FaSearch className="absolute left-3 top-3 text-gray-400" />
-                    <input
-                    type="text"
-                    placeholder="Digite para buscar..."
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
-                    />
-                </div>
-            </div>
-
-            {/* Filtro Status */}
-            <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Status da Ordem</label>
-                <select
-                    value={filtroStatus}
-                    onChange={(e) => setFiltroStatus(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer"
-                >
-                    <option value="TODOS">Todos os Status</option>
-                    <option value="CONCLUIDO">✅ Prontos</option>
-                    <option value="PROCESSANDO">⏳ Gerando...</option>
-                    <option value="PENDENTE">⏸️ Pendente</option>
-                    <option value="ERRO">❌ Com Erro</option>
-                </select>
-            </div>
-
-            {/* Filtro Data */}
-            <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Gerado a partir de</label>
-                <div className="relative">
-                    <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
-                    <input
-                    type="date"
-                    value={dataInicio}
-                    onChange={(e) => setDataInicio(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-            </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 mb-1 block">Gerado a partir de</label>
+          <div className="relative">
+            <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+        
+        <div className="h-10 w-px bg-gray-200 hidden md:block mx-2"></div>
+        
+        <div className="flex items-center gap-2 text-xs text-gray-500 pb-2">
+          <FaFilter /> Mostrando {listaFiltrada.length} registros
         </div>
       </div>
 
@@ -260,89 +215,63 @@ export default function DesempenhoDieselAcompanhamento() {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs border-b">
               <tr>
-                <th className="px-6 py-4 w-40">Data Geração</th>
+                <th className="px-6 py-4">Data Geração</th>
                 <th className="px-6 py-4">Motorista</th>
-                <th className="px-6 py-4 text-center">Foco (Veículo/Linha)</th>
+                <th className="px-6 py-4 text-center">Tecnologia</th>
                 <th className="px-6 py-4 text-right">KM/L Real</th>
                 <th className="px-6 py-4 text-right">Desperdício</th>
                 <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-center w-32">Prontuário</th>
+                <th className="px-6 py-4 text-center">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                        <FaSync className="animate-spin text-2xl text-blue-500" /> 
-                        <span>Carregando ordens...</span>
-                    </div>
+                  <td colSpan="7" className="px-6 py-10 text-center text-gray-400">
+                    <FaSync className="animate-spin inline mr-2" /> Carregando ordens...
                   </td>
                 </tr>
               ) : listaFiltrada.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-400 bg-gray-50">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                        <FaFilter className="text-2xl text-gray-300" />
-                        <span>Nenhuma ordem encontrada com estes filtros.</span>
-                    </div>
+                  <td colSpan="7" className="px-6 py-10 text-center text-gray-400">
+                    Nenhuma ordem encontrada com estes filtros.
                   </td>
                 </tr>
               ) : (
                 listaFiltrada.map((item) => (
-                  <tr key={item.id} className="hover:bg-blue-50/40 transition-colors group">
+                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="px-6 py-4 text-gray-500">
-                      <div className="font-medium text-slate-700">{new Date(item.created_at).toLocaleDateString('pt-BR')}</div>
-                      <div className="text-[11px] opacity-60 flex items-center gap-1">
-                          <FaClock size={10} /> {new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
-                      </div>
+                      {new Date(item.created_at).toLocaleDateString('pt-BR')} <br/>
+                      <span className="text-xs opacity-60">{new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
                     </td>
-                    
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 text-base">{item.motorista_nome || "Nome não registrado"}</span>
-                            <PrioridadeBadge litros={n(item.perda_litros)} />
-                          </div>
-                          <span className="text-xs text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded border border-slate-200 mt-1 w-fit">
-                                {item.motorista_chapa}
-                          </span>
+                      <div className="font-bold text-slate-700">{item.motorista_nome || "Nome não reg."}</div>
+                      <div className="text-xs text-slate-400 font-mono bg-slate-100 inline-block px-1 rounded mt-1">
+                        {item.motorista_chapa}
                       </div>
                     </td>
-                    
                     <td className="px-6 py-4 text-center">
-                        <div className="flex flex-col items-center">
-                            <span className="text-xs font-bold text-slate-700 bg-gray-100 px-2 py-1 rounded">{item.veiculo_foco || "-"}</span>
-                            <span className="text-[10px] text-slate-400 mt-1">Linha {item.linha_foco || "-"}</span>
-                        </div>
-                    </td>
-                    
-                    <td className="px-6 py-4 text-right">
-                        <span className="font-mono font-bold text-slate-700 text-base border-b border-dotted border-slate-400">
-                            {n(item.kml_real).toFixed(2)}
+                        {/* Se tiver vehicle_foco salvo, exibe, senão tenta extrair do metadata */}
+                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">
+                            {item.veiculo_foco || "N/A"}
                         </span>
                     </td>
-                    
+                    <td className="px-6 py-4 text-right font-mono font-bold text-slate-700">
+                      {n(item.kml_real).toFixed(2)}
+                    </td>
                     <td className="px-6 py-4 text-right">
-                      <span className="text-rose-700 font-bold bg-rose-50 px-2 py-1 rounded border border-rose-100 shadow-sm whitespace-nowrap">
+                      <span className="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded">
                         -{n(item.perda_litros).toFixed(0)} L
                       </span>
                     </td>
-                    
                     <td className="px-6 py-4 text-center">
                       <StatusBadge status={item.status} />
                     </td>
-                    
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => abrirPDF(item.arquivo_pdf_path)}
-                        disabled={item.status !== "CONCLUIDO"}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm w-full justify-center ${
-                            item.status === "CONCLUIDO" 
-                            ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer transform active:scale-95" 
-                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                        }`}
-                        title={item.status === "CONCLUIDO" ? "Abrir PDF" : "Aguarde a geração"}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm"
+                        title="Baixar Prontuário PDF"
                       >
                         <FaFilePdf size={14} /> ABRIR
                       </button>
@@ -352,11 +281,6 @@ export default function DesempenhoDieselAcompanhamento() {
               )}
             </tbody>
           </table>
-        </div>
-        
-        {/* Rodapé da tabela */}
-        <div className="bg-gray-50 border-t border-gray-200 p-3 text-xs text-gray-500 text-center">
-            Mostrando {listaFiltrada.length} ordens de acompanhamento
         </div>
       </div>
     </div>
