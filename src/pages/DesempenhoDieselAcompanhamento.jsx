@@ -1,8 +1,16 @@
 import React, { useMemo, useState, useEffect } from "react";
 import {
-  FaBolt, FaSearch, FaFilePdf, FaSync,
-  FaClock, FaHistory,
-  FaClipboardList, FaRoad, FaSave, FaTimes, FaPlay
+  FaBolt,
+  FaSearch,
+  FaFilePdf,
+  FaSync,
+  FaClock,
+  FaHistory,
+  FaClipboardList,
+  FaRoad,
+  FaSave,
+  FaTimes,
+  FaPlay,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 
@@ -15,50 +23,45 @@ function n(v) {
 }
 
 function normalizeStatus(s) {
-  const st = String(s || "").toUpperCase().trim();
+  // Python manda AGUARDANDO_INSTRUTOR (underscore)
+  const st = String(s || "").toUpperCase().trim().replaceAll("_", " ");
 
-  // legado
-  if (st === "CONCLUIDO") return "AGUARDANDO_INSTRUTOR";
-  if (st === "AG_ACOMPANHAMENTO") return "AGUARDANDO_INSTRUTOR";
-  if (!st) return "AGUARDANDO_INSTRUTOR";
+  // legado / defaults
+  if (st === "CONCLUIDO") return "AGUARDANDO INSTRUTOR";
+  if (st === "AG ACOMPANHAMENTO") return "AGUARDANDO INSTRUTOR";
+  if (!st) return "AGUARDANDO INSTRUTOR";
 
-  // normaliza com/sem espaço
-  return st.replace(/\s+/g, "_");
-}
-
-function humanStatus(stNorm) {
-  return String(stNorm || "").replaceAll("_", " ");
+  return st;
 }
 
 function getFoco(item) {
-  // 1) coluna direta (se existir)
-  if (item?.foco) return item.foco;
+  // ✅ Python manda "motivo" como foco principal
+  if (item?.motivo) return item.motivo;
 
-  // 2) metadata.kpis.foco (padrão recomendado)
-  const focoMeta = item?.metadata?.kpis?.foco || item?.metadata?.foco;
+  // ✅ metadata.foco (Python novo)
+  const focoMeta = item?.metadata?.foco;
   if (focoMeta) return focoMeta;
 
-  // 3) tenta montar com cluster/linha
-  const cluster = item?.metadata?.kpis?.cluster || item?.cluster || item?.foco_cluster;
-  const linha = item?.metadata?.kpis?.linha || item?.linha || item?.linha_mais_rodada;
+  // fallback: monta com cluster/linha (metadata do Python)
+  const cluster = item?.metadata?.cluster_foco || item?.cluster || item?.foco_cluster;
+  const linha = item?.metadata?.linha_foco || item?.linha || item?.linha_mais_rodada;
   if (cluster && linha) return `${cluster} - Linha ${linha}`;
   if (linha) return `Linha ${linha}`;
 
   return "Geral";
 }
 
-function getPdfUrl(item) {
-  // ✅ suportar os dois modelos: url completa OU storage path
-  const url = item?.arquivo_pdf_url || item?.arquivo_pdf_path || null;
-  if (!url) return null;
+function getPublicUrlFromStoragePath(pathOrUrl) {
+  if (!pathOrUrl) return null;
+  const s = String(pathOrUrl);
 
-  // já é url
-  if (String(url).startsWith("http://") || String(url).startsWith("https://")) return url;
+  // ✅ Python já grava URL pública completa em arquivo_pdf_url / arquivo_html_url
+  if (s.startsWith("http://") || s.startsWith("https://")) return s;
 
-  // se for path do bucket
+  // fallback: se vier path do bucket
   try {
     const BUCKET = "relatorios";
-    const clean = String(url).startsWith("/") ? String(url).slice(1) : String(url);
+    const clean = s.startsWith("/") ? s.slice(1) : s;
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(clean);
     return data?.publicUrl || null;
   } catch {
@@ -74,11 +77,16 @@ function daysBetweenUTC(a, b) {
 
 function calcDiaXdeY(item) {
   const status = normalizeStatus(item?.status);
-  if (status !== "EM_MONITORAMENTO") return null;
+  if (status !== "EM MONITORAMENTO") return null;
 
-  const dtIni = item?.dt_inicio; // date
-  const dias = n(item?.dias_monitoramento);
+  // ✅ Python manda dt_inicio (date ISO), instrutor pode gravar dt_inicio_monitoramento depois
+  const dtIni =
+    item?.dt_inicio_monitoramento ||
+    item?.dt_inicio ||
+    item?.dt_inicio_planejado ||
+    item?.dt_inicio;
 
+  const dias = n(item?.dias_monitoramento) || null;
   if (!dtIni || !dias) return null;
 
   const ini = new Date(dtIni);
@@ -122,12 +130,11 @@ export default function DesempenhoDieselAcompanhamento() {
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
-  // Histórico (agora é EVENTOS + ordens anteriores)
+  // Histórico
   const [historico, setHistorico] = useState([]);
-  const [eventos, setEventos] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
 
-  // Formulário (vai virar EVENTO + update básico na ORDEM)
+  // Formulário
   const [form, setForm] = useState({
     horaInicio: "",
     horaFim: "",
@@ -165,18 +172,15 @@ export default function DesempenhoDieselAcompanhamento() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // AÇÃO: CONSULTAR (ordens anteriores + eventos desta ordem)
+  // AÇÃO: CONSULTAR (Resumo + Histórico)
   // ---------------------------------------------------------------------------
   const handleConsultar = async (item) => {
     setItemSelecionado(item);
     setModalConsultaOpen(true);
     setLoadingHist(true);
-    setHistorico([]);
-    setEventos([]);
 
     try {
-      // 1) ordens anteriores do mesmo motorista
-      const { data: ords, error: errOrds } = await supabase
+      const { data, error } = await supabase
         .from("diesel_acompanhamentos")
         .select("*")
         .eq("motorista_chapa", item.motorista_chapa)
@@ -184,27 +188,17 @@ export default function DesempenhoDieselAcompanhamento() {
         .order("created_at", { ascending: false })
         .limit(30);
 
-      if (!errOrds) setHistorico(ords || []);
-
-      // 2) eventos desta ordem (linha do tempo real)
-      const { data: evs, error: errEvs } = await supabase
-        .from("diesel_acompanhamento_eventos")
-        .select("*")
-        .eq("acompanhamento_id", item.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (!errEvs) setEventos(evs || []);
+      if (error) throw error;
+      setHistorico(data || []);
     } catch {
       setHistorico([]);
-      setEventos([]);
     } finally {
       setLoadingHist(false);
     }
   };
 
   // ---------------------------------------------------------------------------
-  // AÇÃO: LANÇAR (iniciar monitoramento)
+  // AÇÃO: LANÇAR (Checklist)
   // ---------------------------------------------------------------------------
   const handleLancar = (item) => {
     setItemSelecionado(item);
@@ -231,7 +225,6 @@ export default function DesempenhoDieselAcompanhamento() {
   const salvarIntervencao = async () => {
     if (!itemSelecionado?.id) return;
 
-    // validação mínima
     if (!form.horaInicio || !form.kmInicio || !form.mediaTeste) {
       alert("Preencha: Hora Início, KM Início e Média do Teste.");
       return;
@@ -239,72 +232,45 @@ export default function DesempenhoDieselAcompanhamento() {
 
     const dias = NIVEIS[form.nivel]?.dias || 10;
 
-    const hoje = new Date();
-    const dt_inicio = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())); // date-only estável
-    const dt_fim_planejado = new Date(dt_inicio);
-    dt_fim_planejado.setUTCDate(dt_fim_planejado.getUTCDate() + (dias - 1));
+    const dtInicio = new Date();
+    const dtFim = new Date();
+    dtFim.setDate(dtFim.getDate() + dias);
 
     try {
       const { data: sess } = await supabase.auth.getSession();
       const instrutorLogin = sess?.session?.user?.email || null;
       const instrutorNome = sess?.session?.user?.user_metadata?.full_name || null;
-      const instrutorId = sess?.session?.user?.id || null;
 
-      // 1) update básico na ORDEM (status + contrato)
-      const payloadUpdate = {
+      const payload = {
+        // ✅ status compatível com normalizeStatus
         status: "EM_MONITORAMENTO",
+
+        // contrato / monitoramento
         nivel: form.nivel,
         dias_monitoramento: dias,
-        dt_inicio: dt_inicio.toISOString().slice(0, 10), // YYYY-MM-DD
-        dt_fim_planejado: dt_fim_planejado.toISOString().slice(0, 10),
+        dt_inicio_monitoramento: dtInicio.toISOString(),
+        dt_fim_previsao: dtFim.toISOString(),
 
+        // auditoria instrutor
         instrutor_login: instrutorLogin,
         instrutor_nome: instrutorNome,
-        instrutor_id: instrutorId,
+
+        // dados da prova
+        intervencao_hora_inicio: form.horaInicio,
+        intervencao_hora_fim: form.horaFim || null,
+        intervencao_km_inicio: n(form.kmInicio),
+        intervencao_km_fim: form.kmFim ? n(form.kmFim) : null,
+        intervencao_media_teste: n(form.mediaTeste),
+
+        // checklist / obs
+        intervencao_checklist: form.checklist || {},
+        intervencao_obs: form.obs || null,
 
         updated_at: new Date().toISOString(),
       };
 
-      const { error: errUp } = await supabase
-        .from("diesel_acompanhamentos")
-        .update(payloadUpdate)
-        .eq("id", itemSelecionado.id);
-
-      if (errUp) throw errUp;
-
-      // 2) inserir EVENTO (garante rastreabilidade e evita criar mil colunas)
-      const evento = {
-        acompanhamento_id: itemSelecionado.id,
-        tipo: "ORIENTACAO", // ou CHECKPOINT; mas aqui é o “LANÇAR”
-        observacoes: form.obs || null,
-        km: form.kmFim ? n(form.kmFim) - n(form.kmInicio) : null,
-        kml: n(form.mediaTeste),
-        evidencias_urls: Array.isArray(itemSelecionado.evidencias_urls) ? itemSelecionado.evidencias_urls : [],
-        extra: {
-          action: "LANÇAR_MONITORAMENTO",
-          viagem_teste: {
-            hora_inicio: form.horaInicio,
-            hora_fim: form.horaFim || null,
-            km_inicio: n(form.kmInicio),
-            km_fim: form.kmFim ? n(form.kmFim) : null,
-            media_teste_kml: n(form.mediaTeste),
-          },
-          checklist: form.checklist || {},
-          nivel: form.nivel,
-          dias_monitoramento: dias,
-          instrutor: {
-            login: instrutorLogin,
-            nome: instrutorNome,
-            id: instrutorId,
-          },
-        },
-      };
-
-      const { error: errEv } = await supabase
-        .from("diesel_acompanhamento_eventos")
-        .insert(evento);
-
-      if (errEv) throw errEv;
+      const { error } = await supabase.from("diesel_acompanhamentos").update(payload).eq("id", itemSelecionado.id);
+      if (error) throw error;
 
       setModalLancarOpen(false);
       await carregarOrdens();
@@ -328,17 +294,17 @@ export default function DesempenhoDieselAcompanhamento() {
       const st = normalizeStatus(item.status);
 
       if (filtroStatus === "ATIVOS") {
-        return matchTexto && ["AGUARDANDO_INSTRUTOR", "EM_MONITORAMENTO"].includes(st);
+        return matchTexto && ["AGUARDANDO INSTRUTOR", "EM MONITORAMENTO"].includes(st);
       }
       if (filtroStatus === "ENCERRADOS") {
-        return matchTexto && ["OK", "ENCERRADO", "PIOROU_TRATATIVA", "CANCELADO"].includes(st);
+        return matchTexto && ["OK", "ENCERRADO", "TRATATIVA", "REJEITADA"].includes(st);
       }
       return matchTexto; // TODOS
     });
   }, [lista, busca, filtroStatus]);
 
-  const abrirPDF = (item) => {
-    const url = getPdfUrl(item);
+  const abrirPDF = (pathOrUrl) => {
+    const url = getPublicUrlFromStoragePath(pathOrUrl);
     if (!url) {
       alert("PDF não disponível para este registro.");
       return;
@@ -412,10 +378,11 @@ export default function DesempenhoDieselAcompanhamento() {
 
           <tbody className="divide-y">
             {listaFiltrada.map((item) => {
-              const st = normalizeStatus(item.status);
-              const showLancar = st === "AGUARDANDO_INSTRUTOR";
+              const status = normalizeStatus(item.status);
+              const showLancar = status === "AGUARDANDO INSTRUTOR";
               const foco = getFoco(item);
-              const diaXY = calcDiaXdeY(item);
+
+              const diaXY = calcDiaXdeY(item); // {dia, dias} ou null
 
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition">
@@ -429,6 +396,7 @@ export default function DesempenhoDieselAcompanhamento() {
                       {item.motorista_chapa || "-"}
                     </div>
 
+                    {/* prioridade (por perda litros) */}
                     {n(item.perda_litros) >= 80 && (
                       <div className="mt-2 inline-flex items-center text-[10px] font-extrabold px-2 py-1 rounded border bg-rose-50 border-rose-200 text-rose-700">
                         PRIORIDADE ALTA
@@ -443,14 +411,14 @@ export default function DesempenhoDieselAcompanhamento() {
                   </td>
 
                   <td className="px-6 py-4 text-center">
-                    {st === "AGUARDANDO_INSTRUTOR" ? (
+                    {showLancar ? (
                       <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-[10px] font-bold border border-amber-200 inline-flex items-center justify-center gap-1">
-                        <FaClock /> {humanStatus(st)}
+                        <FaClock /> AGUARDANDO INSTRUTOR
                       </span>
-                    ) : st === "EM_MONITORAMENTO" ? (
+                    ) : status === "EM MONITORAMENTO" ? (
                       <div className="flex flex-col items-center">
                         <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border border-blue-200">
-                          {humanStatus(st)}
+                          EM MONITORAMENTO
                         </span>
                         {diaXY ? (
                           <span className="text-[9px] text-gray-500 mt-1">
@@ -462,16 +430,16 @@ export default function DesempenhoDieselAcompanhamento() {
                       </div>
                     ) : (
                       <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold">
-                        {humanStatus(st)}
+                        {status}
                       </span>
                     )}
                   </td>
 
                   <td className="px-6 py-4">
                     <div className="flex justify-center gap-2">
-                      {/* PDF */}
+                      {/* PDF (Python: arquivo_pdf_url) */}
                       <button
-                        onClick={() => abrirPDF(item)}
+                        onClick={() => abrirPDF(item.arquivo_pdf_url || item.arquivo_pdf_path)}
                         className="p-2 text-rose-600 bg-white border border-rose-200 rounded hover:bg-rose-50 transition shadow-sm"
                         title="Abrir Prontuário PDF"
                       >
@@ -507,7 +475,7 @@ export default function DesempenhoDieselAcompanhamento() {
                 <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
                   Nenhum registro encontrado com os filtros atuais.
                   <div className="text-xs mt-2">
-                    Dica: ordens novas chegam como <b>AGUARDANDO INSTRUTOR</b>.
+                    Dica: se você gerou ordens agora, elas chegam como <b>AGUARDANDO INSTRUTOR</b>.
                   </div>
                 </td>
               </tr>
@@ -539,75 +507,33 @@ export default function DesempenhoDieselAcompanhamento() {
                     {itemSelecionado.motorista_nome || "-"} ({itemSelecionado.motorista_chapa || "-"})
                   </div>
                   <div>
-                    <span className="text-blue-500 font-bold">Foco:</span>{" "}
-                    {getFoco(itemSelecionado)}
+                    <span className="text-blue-500 font-bold">Foco:</span> {getFoco(itemSelecionado)}
                   </div>
                   <div>
-                    <span className="text-blue-500 font-bold">KM/L Inicial:</span>{" "}
+                    <span className="text-blue-500 font-bold">KM/L Real:</span>{" "}
                     {n(itemSelecionado.kml_inicial).toFixed(2)}
                   </div>
                   <div>
-                    <span className="text-blue-500 font-bold">Meta:</span>{" "}
-                    {n(itemSelecionado.kml_meta).toFixed(2)}
+                    <span className="text-blue-500 font-bold">Meta:</span> {n(itemSelecionado.kml_meta).toFixed(2)}
                   </div>
                   <div>
                     <span className="text-blue-500 font-bold">Desperdício:</span>{" "}
                     {n(itemSelecionado.perda_litros).toFixed(0)} L
                   </div>
                   <div>
-                    <span className="text-blue-500 font-bold">Status:</span>{" "}
-                    {humanStatus(normalizeStatus(itemSelecionado.status))}
+                    <span className="text-blue-500 font-bold">Status:</span> {normalizeStatus(itemSelecionado.status)}
                   </div>
                 </div>
               </div>
 
-              <h4 className="font-bold text-slate-700 text-sm mb-3 border-b pb-1">
-                Linha do tempo (Eventos desta Ordem)
-              </h4>
-
-              {loadingHist ? (
-                <div className="text-center py-4">
-                  <FaSync className="animate-spin inline" /> Carregando...
-                </div>
-              ) : eventos.length === 0 ? (
-                <div className="text-center py-4 text-gray-400 text-sm">
-                  Nenhum evento registrado ainda.
-                </div>
-              ) : (
-                <div className="space-y-2 mb-8">
-                  {eventos.map((ev) => (
-                    <div key={ev.id} className="p-3 border rounded-lg text-sm">
-                      <div className="flex justify-between">
-                        <div className="font-bold text-slate-700">{ev.tipo}</div>
-                        <div className="text-xs text-slate-400">
-                          {ev.created_at ? new Date(ev.created_at).toLocaleString() : "-"}
-                        </div>
-                      </div>
-                      {ev.observacoes && <div className="text-xs text-slate-600 mt-1">{ev.observacoes}</div>}
-                      {ev.extra?.action === "LANÇAR_MONITORAMENTO" && (
-                        <div className="text-[11px] text-slate-500 mt-2">
-                          <b>Viagem teste:</b> {ev.extra?.viagem_teste?.hora_inicio || "-"}{" "}
-                          {ev.extra?.viagem_teste?.km_inicio != null ? `| KM ini ${ev.extra.viagem_teste.km_inicio}` : ""}
-                          {ev.extra?.viagem_teste?.media_teste_kml != null ? ` | Média ${ev.extra.viagem_teste.media_teste_kml}` : ""}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <h4 className="font-bold text-slate-700 text-sm mb-3 border-b pb-1">
-                Acompanhamentos Anteriores
-              </h4>
+              <h4 className="font-bold text-slate-700 text-sm mb-3 border-b pb-1">Acompanhamentos Anteriores</h4>
 
               {loadingHist ? (
                 <div className="text-center py-4">
                   <FaSync className="animate-spin inline" /> Carregando...
                 </div>
               ) : historico.length === 0 ? (
-                <div className="text-center py-4 text-gray-400 text-sm">
-                  Nenhum histórico anterior encontrado.
-                </div>
+                <div className="text-center py-4 text-gray-400 text-sm">Nenhum histórico anterior encontrado.</div>
               ) : (
                 <div className="space-y-3">
                   {historico.map((h) => {
@@ -632,11 +558,9 @@ export default function DesempenhoDieselAcompanhamento() {
                                 : "bg-gray-100 text-gray-600"
                             }`}
                           >
-                            {humanStatus(st)}
+                            {st}
                           </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            Nível {h.nivel ?? "-"}
-                          </div>
+                          <div className="text-xs text-gray-400 mt-1">Nível {h.nivel ?? "-"}</div>
                         </div>
                       </div>
                     );
@@ -734,9 +658,7 @@ export default function DesempenhoDieselAcompanhamento() {
                     <label
                       key={chk.id}
                       className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                        form.checklist[chk.id]
-                          ? "bg-emerald-50 border-emerald-300"
-                          : "hover:bg-gray-50"
+                        form.checklist[chk.id] ? "bg-emerald-50 border-emerald-300" : "hover:bg-gray-50"
                       }`}
                     >
                       <input
@@ -761,9 +683,7 @@ export default function DesempenhoDieselAcompanhamento() {
                       key={lvl}
                       onClick={() => setForm({ ...form, nivel: lvl })}
                       className={`p-3 rounded-lg border text-center transition ${
-                        form.nivel === lvl
-                          ? "ring-2 ring-offset-1 ring-slate-400 bg-white"
-                          : NIVEIS[lvl].color
+                        form.nivel === lvl ? "ring-2 ring-offset-1 ring-slate-400 bg-white" : NIVEIS[lvl].color
                       }`}
                       type="button"
                     >
