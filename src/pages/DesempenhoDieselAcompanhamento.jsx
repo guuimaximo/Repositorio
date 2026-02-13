@@ -4,7 +4,7 @@ import {
   FaCheckCircle, FaTimesCircle, FaClock, FaHistory,
   FaClipboardList, FaRoad, FaSave, FaTimes, FaPlay
 } from "react-icons/fa";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabase";
 
 // =============================================================================
 // CONFIGURAÇÕES & HELPERS
