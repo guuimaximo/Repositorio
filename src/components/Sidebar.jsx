@@ -216,11 +216,12 @@ export default function Sidebar() {
         label: "Desempenho Diesel",
         icon: <FaGasPump />,
         tabs: [
-          { path: DIESEL_ROUTES.lancamento, label: "Lançamento", icon: <FaPenSquare /> },
+          // ✅ ORDEM AJUSTADA + RENOME "Lançamento" -> "Lançamento Manual"
           { path: DIESEL_ROUTES.resumo, label: "Resumo", icon: <FaChartBar /> },
+          { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
+          { path: DIESEL_ROUTES.lancamento, label: "Lançamento Manual", icon: <FaPenSquare /> },
           { path: DIESEL_ROUTES.acompanhamento, label: "Acompanhamento", icon: <FaSearch /> },
           { path: DIESEL_ROUTES.tratativas, label: "Tratativas", icon: <FaTratativasIcon /> },
-          { path: DIESEL_ROUTES.agente, label: "Agente Diesel", icon: <FaRobot /> },
         ],
       },
 
