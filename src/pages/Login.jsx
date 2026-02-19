@@ -11,9 +11,15 @@ import {
 
 const NIVEIS_PORTAL = new Set(["Gestor", "Administrador"]);
 const SETORES = [
-  "Manutenção", "Recursos humanos", "Departamento Pessoal",
-  "SESMT", "Operação", "Ouvidoria"
+  "Manutenção",
+  "Recursos humanos",
+  "Departamento Pessoal",
+  "SESMT",
+  "Operação",
+  "Ouvidoria",
+  "Financeiro",
 ];
+
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
