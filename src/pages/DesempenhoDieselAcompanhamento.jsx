@@ -12,13 +12,13 @@ import {
   FaTimes,
   FaPlay,
   FaCheck,
-  FaChartLine, // <- Adicionado para o botão de Análise
+  FaChartLine, 
   FaTimes as FaX,
   FaQuestionCircle,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 import ResumoLancamentoInstrutor from "../components/desempenho/ResumoLancamentoInstrutor";
-import ResumoAnalise from "../components/desempenho/ResumoAnalise"; // <- Adicionado o componente de Análise
+import ResumoAnalise from "../components/desempenho/ResumoAnalise"; 
 
 // =============================================================================
 // HELPERS
@@ -32,11 +32,10 @@ function normalizeStatus(s) {
   const st = String(s || "").toUpperCase().trim();
   if (!st) return "AGUARDANDO_INSTRUTOR";
 
-  // migração/legado (se aparecer)
   if (st === "AGUARDANDO INSTRUTOR") return "AGUARDANDO_INSTRUTOR";
   if (st === "CONCLUIDO") return "AGUARDANDO_INSTRUTOR";
   if (st === "AG_ACOMPANHAMENTO") return "AGUARDANDO_INSTRUTOR";
-  if (st === "TRATATIVA") return "ATAS"; // <- Atualizado para manter o padrão novo
+  if (st === "TRATATIVA") return "ATAS"; 
 
   return st;
 }
@@ -77,7 +76,6 @@ function daysBetweenUTC(a, b) {
   return Math.floor((two - one) / (1000 * 60 * 60 * 24));
 }
 
-// Data "YYYY-MM-DD" no fuso America/Sao_Paulo (date-only)
 function spDateISO(d = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -87,15 +85,13 @@ function spDateISO(d = new Date()) {
   }).format(d);
 }
 
-// Soma dias em cima de um ISO date (YYYY-MM-DD) sem depender de timezone local
 function addDaysISO(isoYMD, days) {
   const [y, m, d] = isoYMD.split("-").map(Number);
-  const base = new Date(Date.UTC(y, m - 1, d)); // date-only neutro
+  const base = new Date(Date.UTC(y, m - 1, d)); 
   base.setUTCDate(base.getUTCDate() + days);
   return base.toISOString().slice(0, 10);
 }
 
-// ✅ CORREÇÃO DEFINITIVA DO "Dia NaN"
 function calcDiaXdeY(item) {
   const status = normalizeStatus(item?.status);
   if (status !== "EM_MONITORAMENTO") return null;
@@ -108,15 +104,12 @@ function calcDiaXdeY(item) {
     let str = String(dtIni).trim();
     let ano, mes, dia;
 
-    // Converte a string para números ignorando o interpretador do navegador
     if (str.includes("/")) {
-      // Ex: 19/02/2026
       const p = str.split(" ")[0].split("/");
       dia = Number(p[0]);
-      mes = Number(p[1]) - 1; // Mês em JS começa no 0
+      mes = Number(p[1]) - 1; 
       ano = Number(p[2]);
     } else if (str.includes("-")) {
-      // Ex: 2026-02-19
       const p = str.split("T")[0].split("-");
       ano = Number(p[0]);
       mes = Number(p[1]) - 1;
@@ -131,10 +124,8 @@ function calcDiaXdeY(item) {
     const hoje = new Date();
     const utcHoje = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
 
-    // +1 para o dia do início contar como Dia 1
     const diffDays = Math.floor((utcHoje - utcIni) / (1000 * 60 * 60 * 24)) + 1;
     
-    // Proteção extra
     if (isNaN(diffDays)) return null;
 
     const diaCorrente = Math.min(Math.max(diffDays, 1), dias);
@@ -147,60 +138,20 @@ function calcDiaXdeY(item) {
 // =============================================================================
 // CHECKLIST (MODELO PDF)
 // =============================================================================
-// Checklist de Condução (SIM / NÃO)
 const CHECKLIST_CONDUCAO = [
-  {
-    id: "mecanica",
-    titulo: "MECÂNICA",
-    desc: "Evita batida de transmissão, uso indevido de embreagem e trancos?",
-  },
-  {
-    id: "eficiencia_rpm",
-    titulo: "EFICIÊNCIA (RPM)",
-    desc: "Conduz na faixa verde e utiliza corretamente o conta-giros?",
-  },
-  {
-    id: "inerciaparada",
-    titulo: "INÉRCIA/PARADA",
-    desc: "Aproveita o movimento, sem utilizar 'banguela'?",
-  },
-  {
-    id: "suavidade",
-    titulo: "SUAVIDADE",
-    desc: "Evita acelerações/frenagens bruscas e antecipa obstáculos/pontos?",
-  },
-  {
-    id: "seguranca",
-    titulo: "SEGURANÇA",
-    desc: "Respeita velocidade, sinalização e utiliza o cinto de segurança?",
-  },
-  {
-    id: "postura",
-    titulo: "POSTURA",
-    desc: "Uniformizado, mãos corretas no volante e cortês com passageiros?",
-  },
-  {
-    id: "documentacao",
-    titulo: "DOCUMENTAÇÃO",
-    desc: "Porta CNH dentro do prazo de validade?",
-  },
+  { id: "mecanica", titulo: "MECÂNICA", desc: "Evita batida de transmissão, uso indevido de embreagem e trancos?" },
+  { id: "eficiencia_rpm", titulo: "EFICIÊNCIA (RPM)", desc: "Conduz na faixa verde e utiliza corretamente o conta-giros?" },
+  { id: "inerciaparada", titulo: "INÉRCIA/PARADA", desc: "Aproveita o movimento, sem utilizar 'banguela'?" },
+  { id: "suavidade", titulo: "SUAVIDADE", desc: "Evita acelerações/frenagens bruscas e antecipa obstáculos/pontos?" },
+  { id: "seguranca", titulo: "SEGURANÇA", desc: "Respeita velocidade, sinalização e utiliza o cinto de segurança?" },
+  { id: "postura", titulo: "POSTURA", desc: "Uniformizado, mãos corretas no volante e cortês com passageiros?" },
+  { id: "documentacao", titulo: "DOCUMENTAÇÃO", desc: "Porta CNH dentro do prazo de validade?" },
 ];
 
-// Avaliação Técnica (Sistemas): SIM / NÃO / DÚVIDAS
 const AVALIACAO_TECNICA = [
-  {
-    id: "freio_motor",
-    pergunta: "O motorista demonstra saber utilizar o Freio Motor corretamente?",
-  },
-  {
-    id: "regeneracao_dpf",
-    pergunta: "O motorista conhece o procedimento para a Regeneração (DPF)?",
-  },
-  {
-    id: "acelerador_cenarios",
-    pergunta:
-      "O motorista sabe utilizar o acelerador em cada cenário (plano, aclive e declive)?",
-  },
+  { id: "freio_motor", pergunta: "O motorista demonstra saber utilizar o Freio Motor corretamente?" },
+  { id: "regeneracao_dpf", pergunta: "O motorista conhece o procedimento para a Regeneração (DPF)?" },
+  { id: "acelerador_cenarios", pergunta: "O motorista sabe utilizar o acelerador em cada cenário (plano, aclive e declive)?" },
 ];
 
 const TEC_OPCOES = [
@@ -209,9 +160,6 @@ const TEC_OPCOES = [
   { value: "DUVIDAS", label: "Dúvidas", icon: FaQuestionCircle, cls: "bg-amber-50 border-amber-200 text-amber-700" },
 ];
 
-// =============================================================================
-// CONSTANTES UI
-// =============================================================================
 const NIVEIS = {
   1: { label: "Nível 1 (Leve)", dias: 5, color: "bg-blue-50 border-blue-200 text-blue-700" },
   2: { label: "Nível 2 (Médio)", dias: 10, color: "bg-amber-50 border-amber-200 text-amber-700" },
@@ -219,14 +167,10 @@ const NIVEIS = {
 };
 
 function emptyChecklist() {
-  // SIM/NAO -> boolean | null
   const conducao = {};
   CHECKLIST_CONDUCAO.forEach((i) => (conducao[i.id] = null));
-
-  // SIM/NAO/DUVIDAS -> "SIM" | "NAO" | "DUVIDAS" | ""
   const tecnica = {};
   AVALIACAO_TECNICA.forEach((i) => (tecnica[i.id] = ""));
-
   return { conducao, tecnica };
 }
 
@@ -239,13 +183,13 @@ export default function DesempenhoDieselAcompanhamento() {
 
   // Filtros & Abas
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState("ANTES"); // ✅ Estado para controlar a aba
+  const [abaAtiva, setAbaAtiva] = useState("ANTES"); 
 
   // Modais
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
   const [modalDetalhesOpen, setModalDetalhesOpen] = useState(false);
-  const [modalAnaliseOpen, setModalAnaliseOpen] = useState(false); // ✅ Novo Modal de Análise
+  const [modalAnaliseOpen, setModalAnaliseOpen] = useState(false); 
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
   // Histórico
@@ -261,8 +205,6 @@ export default function DesempenhoDieselAcompanhamento() {
     mediaTeste: "",
     nivel: 2,
     obs: "",
-
-    // ✅ novo modelo (PDF)
     checklistConducao: emptyChecklist().conducao,
     avaliacaoTecnica: emptyChecklist().tecnica,
   });
@@ -300,7 +242,7 @@ export default function DesempenhoDieselAcompanhamento() {
   const countConcluido = lista.filter(i => ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))).length;
 
   // ---------------------------------------------------------------------------
-  // AÇÃO: CONSULTAR (Histórico)
+  // AÇÕES
   // ---------------------------------------------------------------------------
   const handleConsultar = async (item) => {
     setItemSelecionado(item);
@@ -325,64 +267,33 @@ export default function DesempenhoDieselAcompanhamento() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // AÇÃO: DETALHES (Resumo do lançamento)
-  // ---------------------------------------------------------------------------
   const handleDetalhes = (item) => {
     setItemSelecionado(item);
     setModalDetalhesOpen(true);
   };
 
-  // ---------------------------------------------------------------------------
-  // AÇÃO: LANÇAR
-  // ---------------------------------------------------------------------------
   const handleLancar = (item) => {
     setItemSelecionado(item);
-
     const base = emptyChecklist();
-
     setForm({
-      horaInicio: "",
-      horaFim: "",
-      kmInicio: "",
-      kmFim: "",
-      mediaTeste: "",
-      nivel: 2,
-      obs: "",
-
-      checklistConducao: base.conducao,
-      avaliacaoTecnica: base.tecnica,
+      horaInicio: "", horaFim: "", kmInicio: "", kmFim: "", mediaTeste: "", nivel: 2, obs: "",
+      checklistConducao: base.conducao, avaliacaoTecnica: base.tecnica,
     });
-
     setModalLancarOpen(true);
   };
 
-  const setConducao = (id, val) => {
-    setForm((prev) => ({
-      ...prev,
-      checklistConducao: { ...prev.checklistConducao, [id]: val },
-    }));
-  };
-
-  const setTecnica = (id, val) => {
-    setForm((prev) => ({
-      ...prev,
-      avaliacaoTecnica: { ...prev.avaliacaoTecnica, [id]: val },
-    }));
-  };
+  const setConducao = (id, val) => setForm((prev) => ({ ...prev, checklistConducao: { ...prev.checklistConducao, [id]: val } }));
+  const setTecnica = (id, val) => setForm((prev) => ({ ...prev, avaliacaoTecnica: { ...prev.avaliacaoTecnica, [id]: val } }));
 
   const salvarIntervencao = async () => {
     if (!itemSelecionado?.id) return;
-
     if (!form.horaInicio || !form.kmInicio || !form.mediaTeste) {
       alert("Preencha: Hora Início, KM Início e Média do Teste.");
       return;
     }
 
     const dias = NIVEIS[form.nivel]?.dias || 10;
-
-    // início e fim previstos baseados no momento do lançamento (data SP)
-    const inicioISO = spDateISO(new Date()); // YYYY-MM-DD (SP)
+    const inicioISO = spDateISO(new Date()); 
     const fimISO = addDaysISO(inicioISO, dias - 1);
 
     try {
@@ -390,7 +301,6 @@ export default function DesempenhoDieselAcompanhamento() {
       const instrutorLogin = sess?.session?.user?.email || null;
       const instrutorNome = sess?.session?.user?.user_metadata?.full_name || null;
 
-      // ✅ salva tudo dentro de intervencao_checklist (JSON)
       const intervencaoChecklist = {
         versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v1",
         conducao: form.checklistConducao || {},
@@ -399,36 +309,23 @@ export default function DesempenhoDieselAcompanhamento() {
 
       const payload = {
         status: "EM_MONITORAMENTO",
-
-        // contrato / monitoramento
         nivel: form.nivel,
         dias_monitoramento: dias,
         dt_inicio_monitoramento: inicioISO,
         dt_fim_previsao: fimISO,
-
-        // auditoria instrutor
         instrutor_login: instrutorLogin,
         instrutor_nome: instrutorNome,
-
-        // dados da prova
         intervencao_hora_inicio: form.horaInicio,
         intervencao_hora_fim: form.horaFim || null,
         intervencao_km_inicio: n(form.kmInicio),
         intervencao_km_fim: form.kmFim ? n(form.kmFim) : null,
         intervencao_media_teste: n(form.mediaTeste),
-
-        // ✅ novo checklist / avaliação técnica
         intervencao_checklist: intervencaoChecklist,
         intervencao_obs: form.obs || null,
-
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from("diesel_acompanhamentos")
-        .update(payload)
-        .eq("id", itemSelecionado.id);
-
+      const { error } = await supabase.from("diesel_acompanhamentos").update(payload).eq("id", itemSelecionado.id);
       if (error) throw error;
 
       setModalLancarOpen(false);
@@ -449,10 +346,8 @@ export default function DesempenhoDieselAcompanhamento() {
       const nome = String(item.motorista_nome || "").toLowerCase();
       const chapa = String(item.motorista_chapa || "");
       const matchTexto = !q || nome.includes(q) || chapa.includes(q);
-
       const st = normalizeStatus(item.status);
 
-      // Lógica de divisão por abas
       if (abaAtiva === "ANTES") {
         return matchTexto && st === "AGUARDANDO_INSTRUTOR";
       }
@@ -522,11 +417,11 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      {/* ✅ CONTROLE DE ABAS (TABS) */}
+      {/* CONTROLE DE ABAS (TABS) */}
       <div className="flex bg-slate-200/50 p-1 rounded-lg w-fit">
         <button
           onClick={() => setAbaAtiva("ANTES")}
-          className={`px-6 py-2.5 rounded-md text-sm font-bold transition-all ${
+          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
             abaAtiva === "ANTES" ? "bg-white shadow-sm text-blue-700" : "text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -534,7 +429,7 @@ export default function DesempenhoDieselAcompanhamento() {
         </button>
         <button
           onClick={() => setAbaAtiva("POS")}
-          className={`px-6 py-2.5 rounded-md text-sm font-bold transition-all ${
+          className={`px-6 py-2.5 rounded-md text-base font-bold transition-all ${
             abaAtiva === "POS" ? "bg-white shadow-sm text-emerald-700" : "text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -551,19 +446,20 @@ export default function DesempenhoDieselAcompanhamento() {
             placeholder="Buscar Motorista (nome ou chapa)..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2.5 border rounded-lg w-full text-sm outline-none focus:border-blue-500 font-medium"
+            className="pl-9 p-2.5 border rounded-lg w-full text-base outline-none focus:border-blue-500 font-medium"
           />
         </div>
 
-        <div className="ml-auto text-sm text-gray-500 font-medium">
+        <div className="ml-auto text-base text-gray-500 font-medium">
           Mostrando <b>{listaFiltrada.length}</b> registros
         </div>
       </div>
 
-      {/* TABELA - ✅ Ajustada para ficar com letras maiores e melhor visualização */}
+      {/* TABELA - ✅ Ajustada para ficar com letras AINDA MAIORES */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-xs uppercase tracking-wider">
+          {/* ✅ Cabeçalho com text-sm (era xs) */}
+          <thead className="bg-slate-50 text-slate-600 font-extrabold border-b text-sm uppercase tracking-wider">
             <tr>
               <th className="px-6 py-5">Data Geração</th>
               <th className="px-6 py-5">Motorista</th>
@@ -579,55 +475,57 @@ export default function DesempenhoDieselAcompanhamento() {
               const showLancar = status === "AGUARDANDO_INSTRUTOR" && abaAtiva === "ANTES";
               const foco = getFoco(item);
               const diaXY = calcDiaXdeY(item);
-
-              const showDetalhes = hasLancamento(item); // pós-lançamento
+              const showDetalhes = hasLancamento(item); 
 
               return (
                 <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-6 py-5 text-gray-500 font-mono text-sm">
+                  {/* ✅ Data com text-base (era sm) */}
+                  <td className="px-6 py-5 text-gray-500 font-mono text-base">
                     {item.created_at ? new Date(item.created_at).toLocaleDateString() : "-"}
                   </td>
 
                   <td className="px-6 py-5">
-                    {/* ✅ Letra maior para o nome */}
-                    <div className="font-black text-slate-900 text-base">{item.motorista_nome || "-"}</div>
-                    <div className="text-sm text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
+                    {/* ✅ Nome com text-lg (era base) e chapa com text-base (era sm) */}
+                    <div className="font-black text-slate-900 text-lg">{item.motorista_nome || "-"}</div>
+                    <div className="text-base text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded w-fit mt-1 border border-slate-200">
                       {item.motorista_chapa || "-"}
                     </div>
 
                     {n(item.perda_litros) >= 80 && (
-                      <div className="mt-2 inline-flex items-center text-[10px] font-extrabold px-2 py-1 rounded border bg-rose-50 border-rose-200 text-rose-700">
+                      <div className="mt-2 inline-flex items-center text-xs font-extrabold px-2 py-1 rounded border bg-rose-50 border-rose-200 text-rose-700">
                         PRIORIDADE ALTA
                       </div>
                     )}
                   </td>
 
                   <td className="px-6 py-5 text-center">
-                    <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-bold border">
+                    {/* ✅ Foco com text-sm (era xs) */}
+                    <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-bold border">
                       {foco}
                     </span>
                   </td>
 
                   <td className="px-6 py-5 text-center">
+                    {/* ✅ Status com text-sm (era xs) */}
                     {status === "AGUARDANDO_INSTRUTOR" ? (
-                      <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5">
+                      <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-amber-200 inline-flex items-center justify-center gap-1.5">
                         <FaClock /> AGUARDANDO
                       </span>
                     ) : status === "EM_MONITORAMENTO" ? (
                       <div className="flex flex-col items-center">
-                        <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-200">
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-200">
                           EM MONITORAMENTO
                         </span>
                         {diaXY ? (
-                          <span className="text-[10px] font-bold text-gray-500 mt-1.5 bg-gray-100 px-2 py-0.5 rounded">
+                          <span className="text-xs font-bold text-gray-500 mt-1.5 bg-gray-100 px-2 py-0.5 rounded">
                             Dia {diaXY.dia} de {diaXY.dias}
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold text-gray-500 mt-1.5">Monitoramento ativo</span>
+                          <span className="text-xs font-bold text-gray-500 mt-1.5">Monitoramento ativo</span>
                         )}
                       </div>
                     ) : (
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 ${
+                      <span className={`px-3 py-1.5 rounded-lg text-sm font-bold border inline-flex items-center gap-1.5 ${
                         status === "ATAS" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
                       }`}>
                         {status === "ATAS" ? <FaX /> : <FaCheck />} {status}
@@ -636,11 +534,11 @@ export default function DesempenhoDieselAcompanhamento() {
                   </td>
 
                   <td className="px-6 py-5">
-                    {/* ✅ Botões modernos, maiores e com texto escrito ao lado do ícone */}
+                    {/* ✅ Botões com text-sm (era xs) */}
                     <div className="flex flex-wrap justify-center gap-2 items-center">
                       <button
                         onClick={() => abrirPDF(item)}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50 hover:border-rose-300 font-bold text-xs shadow-sm transition-all"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-50 hover:border-rose-300 font-bold text-sm shadow-sm transition-all"
                         title="Abrir Prontuário PDF"
                       >
                         <FaFilePdf size={14} /> PDF
@@ -648,7 +546,7 @@ export default function DesempenhoDieselAcompanhamento() {
 
                       <button
                         onClick={() => handleConsultar(item)}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 hover:border-blue-300 font-bold text-xs shadow-sm transition-all"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 hover:border-blue-300 font-bold text-sm shadow-sm transition-all"
                         title="Consultar Histórico"
                       >
                         <FaHistory size={14} /> Histórico
@@ -657,7 +555,7 @@ export default function DesempenhoDieselAcompanhamento() {
                       {showDetalhes && (
                         <button
                           onClick={() => handleDetalhes(item)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold text-xs shadow-sm transition-all"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold text-sm shadow-sm transition-all"
                           title="Ver Detalhes do Lançamento do Instrutor"
                         >
                           <FaClipboardList size={14} /> Detalhes
@@ -667,16 +565,16 @@ export default function DesempenhoDieselAcompanhamento() {
                       {showLancar && (
                         <button
                           onClick={() => handleLancar(item)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-black text-xs shadow-sm transition-all transform hover:scale-105"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-black text-sm shadow-sm transition-all transform hover:scale-105"
                         >
                           <FaPlay size={12} /> LANÇAR
                         </button>
                       )}
 
-                      {/* ✅ Botão de Análise (Aparece na aba Pós) */}
+                      {/* Botão de Análise */}
                       {abaAtiva === "POS" && status === "EM_MONITORAMENTO" && (
                         <span 
-                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg font-bold text-xs shadow-sm cursor-help"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg font-bold text-sm shadow-sm cursor-help"
                           title="Aguardando fechamento automático"
                         >
                           <FaClock size={12} /> Em andamento
@@ -689,7 +587,7 @@ export default function DesempenhoDieselAcompanhamento() {
                             setItemSelecionado(item);
                             setModalAnaliseOpen(true);
                           }}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-black text-xs shadow-sm transition-all transform hover:scale-105"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-black text-sm shadow-sm transition-all transform hover:scale-105"
                           title="Ver Análise Final"
                         >
                           <FaChartLine size={14} /> VER ANÁLISE
@@ -704,8 +602,8 @@ export default function DesempenhoDieselAcompanhamento() {
             {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                  <div className="text-base font-bold">Nenhum registro encontrado.</div>
-                  <div className="text-sm mt-1">Verifique os filtros ou troque de aba.</div>
+                  <div className="text-lg font-bold">Nenhum registro encontrado.</div>
+                  <div className="text-base mt-1">Verifique os filtros ou troque de aba.</div>
                 </td>
               </tr>
             )}
