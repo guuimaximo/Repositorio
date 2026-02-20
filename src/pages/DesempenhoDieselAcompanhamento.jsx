@@ -12,11 +12,13 @@ import {
   FaTimes,
   FaPlay,
   FaCheck,
+  FaChartLine, // ✅ Adicionado
   FaTimes as FaX,
   FaQuestionCircle,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
 import ResumoLancamentoInstrutor from "../components/desempenho/ResumoLancamentoInstrutor";
+import ResumoAnalise from "../components/desempenho/ResumoAnalise"; // ✅ Adicionado
 
 // =============================================================================
 // HELPERS
@@ -34,6 +36,8 @@ function normalizeStatus(s) {
   if (st === "AGUARDANDO INSTRUTOR") return "AGUARDANDO_INSTRUTOR";
   if (st === "CONCLUIDO") return "AGUARDANDO_INSTRUTOR";
   if (st === "AG_ACOMPANHAMENTO") return "AGUARDANDO_INSTRUTOR";
+  
+  if (st === "TRATATIVA") return "ATAS";
 
   return st;
 }
@@ -201,14 +205,15 @@ export default function DesempenhoDieselAcompanhamento() {
   const [loading, setLoading] = useState(false);
   const [lista, setLista] = useState([]);
 
-  // Filtros
+  // Filtros & Abas
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("ATIVOS");
+  const [abaAtiva, setAbaAtiva] = useState("ANTES"); // ✅ "ANTES" ou "POS"
 
   // Modais
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
   const [modalDetalhesOpen, setModalDetalhesOpen] = useState(false);
+  const [modalAnaliseOpen, setModalAnaliseOpen] = useState(false); // ✅ Modal de Análise
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
   // Histórico
@@ -225,7 +230,7 @@ export default function DesempenhoDieselAcompanhamento() {
     nivel: 2,
     obs: "",
 
-    // ✅ novo modelo (PDF)
+    // novo modelo (PDF)
     checklistConducao: emptyChecklist().conducao,
     avaliacaoTecnica: emptyChecklist().tecnica,
   });
@@ -353,7 +358,7 @@ export default function DesempenhoDieselAcompanhamento() {
       const instrutorLogin = sess?.session?.user?.email || null;
       const instrutorNome = sess?.session?.user?.user_metadata?.full_name || null;
 
-      // ✅ salva tudo dentro de intervencao_checklist (JSON)
+      // salva tudo dentro de intervencao_checklist (JSON)
       const intervencaoChecklist = {
         versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v1",
         conducao: form.checklistConducao || {},
@@ -380,7 +385,7 @@ export default function DesempenhoDieselAcompanhamento() {
         intervencao_km_fim: form.kmFim ? n(form.kmFim) : null,
         intervencao_media_teste: n(form.mediaTeste),
 
-        // ✅ novo checklist / avaliação técnica
+        // novo checklist / avaliação técnica
         intervencao_checklist: intervencaoChecklist,
         intervencao_obs: form.obs || null,
 
@@ -403,7 +408,7 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   // ---------------------------------------------------------------------------
-  // FILTROS
+  // FILTROS & ABAS
   // ---------------------------------------------------------------------------
   const listaFiltrada = useMemo(() => {
     const q = busca.toLowerCase().trim();
@@ -415,15 +420,16 @@ export default function DesempenhoDieselAcompanhamento() {
 
       const st = normalizeStatus(item.status);
 
-      if (filtroStatus === "ATIVOS") {
-        return matchTexto && ["AGUARDANDO_INSTRUTOR", "EM_MONITORAMENTO"].includes(st);
+      // ✅ Nova lógica de Abas
+      if (abaAtiva === "ANTES") {
+        return matchTexto && st === "AGUARDANDO_INSTRUTOR";
       }
-      if (filtroStatus === "ENCERRADOS") {
-        return matchTexto && ["OK", "ENCERRADO", "ATAS", "REJEITADA", "CANCELADO"].includes(st);
+      if (abaAtiva === "POS") {
+        return matchTexto && ["EM_MONITORAMENTO", "OK", "ENCERRADO", "ATAS"].includes(st);
       }
       return matchTexto;
     });
-  }, [lista, busca, filtroStatus]);
+  }, [lista, busca, abaAtiva]);
 
   const abrirPDF = (item) => {
     const url = getPdfUrl(item);
@@ -484,28 +490,38 @@ export default function DesempenhoDieselAcompanhamento() {
         </div>
       </div>
 
-      {/* FILTROS */}
+      {/* ✅ CONTROLE DE ABAS (TABS) */}
+      <div className="flex bg-slate-200/50 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setAbaAtiva("ANTES")}
+          className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${
+            abaAtiva === "ANTES" ? "bg-white shadow-sm text-blue-700" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          📋 Antes do Acompanhamento
+        </button>
+        <button
+          onClick={() => setAbaAtiva("POS")}
+          className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${
+            abaAtiva === "POS" ? "bg-white shadow-sm text-emerald-700" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          📊 Pós Acompanhamento (Análise)
+        </button>
+      </div>
+
+      {/* FILTROS DE BUSCA */}
       <div className="flex gap-4 mb-2 items-center bg-white p-3 rounded-lg border shadow-sm">
-        <div className="relative">
+        <div className="relative flex-1 max-w-md">
           <FaSearch className="absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
             placeholder="Buscar Motorista (nome ou chapa)..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="pl-9 p-2 border rounded w-72 text-sm outline-none focus:border-blue-500"
+            className="pl-9 p-2 border rounded w-full text-sm outline-none focus:border-blue-500"
           />
         </div>
-
-        <select
-          value={filtroStatus}
-          onChange={(e) => setFiltroStatus(e.target.value)}
-          className="p-2 border rounded text-sm bg-white outline-none focus:border-blue-500"
-        >
-          <option value="ATIVOS">⚡ Aguardando / Monitorando</option>
-          <option value="ENCERRADOS">🏁 Encerrados / Atas</option>
-          <option value="TODOS">Todos</option>
-        </select>
 
         <div className="ml-auto text-xs text-gray-500 font-medium">
           Mostrando <b>{listaFiltrada.length}</b> registros
@@ -528,11 +544,11 @@ export default function DesempenhoDieselAcompanhamento() {
           <tbody className="divide-y">
             {listaFiltrada.map((item) => {
               const status = normalizeStatus(item.status);
-              const showLancar = status === "AGUARDANDO_INSTRUTOR";
+              const showLancar = status === "AGUARDANDO_INSTRUTOR" && abaAtiva === "ANTES";
               const foco = getFoco(item);
               const diaXY = calcDiaXdeY(item);
 
-              const showDetalhes = hasLancamento(item) && !showLancar; // pós-lançamento
+              const showDetalhes = hasLancamento(item); 
 
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition">
@@ -560,7 +576,7 @@ export default function DesempenhoDieselAcompanhamento() {
                   </td>
 
                   <td className="px-6 py-4 text-center">
-                    {showLancar ? (
+                    {status === "AGUARDANDO_INSTRUTOR" ? (
                       <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-[10px] font-bold border border-amber-200 inline-flex items-center justify-center gap-1">
                         <FaClock /> AGUARDANDO INSTRUTOR
                       </span>
@@ -578,46 +594,63 @@ export default function DesempenhoDieselAcompanhamento() {
                         )}
                       </div>
                     ) : (
-                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold">
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                        status === "ATAS" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}>
                         {status}
                       </span>
                     )}
                   </td>
 
                   <td className="px-6 py-4">
-                    <div className="flex justify-center gap-2">
+                    {/* ✅ BOTÕES MODERNIZADOS */}
+                    <div className="flex justify-center gap-2 items-center">
                       <button
                         onClick={() => abrirPDF(item)}
-                        className="p-2 text-rose-600 bg-white border border-rose-200 rounded hover:bg-rose-50 transition shadow-sm"
+                        className="p-2.5 text-rose-600 bg-white border border-slate-200 rounded-full hover:bg-rose-50 hover:border-rose-300 hover:shadow-md transition-all outline-none"
                         title="Abrir Prontuário PDF"
                       >
-                        <FaFilePdf />
+                        <FaFilePdf size={14} />
                       </button>
 
                       <button
                         onClick={() => handleConsultar(item)}
-                        className="p-2 text-blue-600 bg-white border border-blue-200 rounded hover:bg-blue-50 transition shadow-sm"
+                        className="p-2.5 text-blue-600 bg-white border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 hover:shadow-md transition-all outline-none"
                         title="Consultar Histórico"
                       >
-                        <FaHistory />
+                        <FaHistory size={14} />
                       </button>
 
                       {showDetalhes && (
                         <button
                           onClick={() => handleDetalhes(item)}
-                          className="p-2 text-white bg-blue-600 border border-blue-700 rounded hover:bg-blue-700 transition shadow-sm"
+                          className="p-2.5 text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm hover:shadow-md hover:scale-105 transition-all outline-none"
                           title="Ver Detalhes do Lançamento do Instrutor"
                         >
-                          <FaClipboardList />
+                          <FaClipboardList size={14} />
                         </button>
                       )}
 
                       {showLancar && (
                         <button
                           onClick={() => handleLancar(item)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold flex items-center gap-2 shadow-sm transition"
+                          className="ml-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full text-xs font-black tracking-wide flex items-center gap-2 shadow-sm hover:shadow-md transform hover:scale-105 transition-all outline-none"
                         >
                           <FaPlay size={10} /> LANÇAR
+                        </button>
+                      )}
+
+                      {/* ✅ BOTÃO ANÁLISE (Só aparece na aba Pós para ordens encerradas/atas) */}
+                      {abaAtiva === "POS" && ["ENCERRADO", "ATAS", "OK"].includes(status) && (
+                        <button
+                          onClick={() => {
+                            setItemSelecionado(item);
+                            setModalAnaliseOpen(true);
+                          }}
+                          className="ml-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-full text-xs font-black tracking-wide flex items-center gap-2 shadow-sm hover:shadow-md transform hover:scale-105 transition-all outline-none"
+                          title="Ver Análise Pós-Monitoramento"
+                        >
+                          <FaChartLine size={12} /> ANÁLISE
                         </button>
                       )}
                     </div>
@@ -629,10 +662,7 @@ export default function DesempenhoDieselAcompanhamento() {
             {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
-                  Nenhum registro encontrado com os filtros atuais.
-                  <div className="text-xs mt-2">
-                    Dica: ordens novas chegam como <b>AGUARDANDO INSTRUTOR</b>.
-                  </div>
+                  Nenhum registro encontrado para esta aba com os filtros atuais.
                 </td>
               </tr>
             )}
@@ -776,6 +806,30 @@ export default function DesempenhoDieselAcompanhamento() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ NOVO MODAL: ANÁLISE FINAL */}
+      {modalAnaliseOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="flex justify-between items-center p-5 border-b bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <FaChartLine className="text-indigo-600" /> Análise Final do Monitoramento
+              </h3>
+              <button onClick={() => setModalAnaliseOpen(false)}>
+                <FaTimes className="text-gray-400 hover:text-red-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-4 text-sm bg-slate-100 p-3 rounded-lg border">
+                <span className="font-bold text-slate-700">Motorista:</span>{" "}
+                {itemSelecionado.motorista_nome || "-"} <span className="text-slate-500 font-mono">({itemSelecionado.motorista_chapa || "-"})</span>
+              </div>
+              <ResumoAnalise item={itemSelecionado} />
             </div>
           </div>
         </div>
