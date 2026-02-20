@@ -1,10 +1,22 @@
 import React, { useMemo, useState, useEffect } from "react";
 import {
-  FaBolt, FaSearch, FaFilePdf, FaSync,
-  FaClock, FaHistory,
-  FaClipboardList, FaRoad, FaSave, FaTimes, FaPlay
+  FaBolt,
+  FaSearch,
+  FaFilePdf,
+  FaSync,
+  FaClock,
+  FaHistory,
+  FaClipboardList,
+  FaRoad,
+  FaSave,
+  FaTimes,
+  FaPlay,
+  FaCheck,
+  FaTimes as FaX,
+  FaQuestionCircle,
 } from "react-icons/fa";
 import { supabase } from "../supabase";
+import ResumoLancamentoInstrutor from "../components/desempenho/ResumoLancamentoInstrutor";
 
 // =============================================================================
 // HELPERS
@@ -26,15 +38,24 @@ function normalizeStatus(s) {
   return st;
 }
 
+function hasLancamento(item) {
+  if (!item) return false;
+  return Boolean(
+    item?.intervencao_hora_inicio ||
+      item?.dt_inicio_monitoramento ||
+      item?.instrutor_login ||
+      item?.instrutor_nome ||
+      item?.intervencao_checklist ||
+      (item?.intervencao_media_teste != null && String(item?.intervencao_media_teste) !== "")
+  );
+}
+
 function getFoco(item) {
-  // Python grava motivo = foco
   if (item?.motivo) return item.motivo;
 
-  // fallback: metadata.foco
   const m = item?.metadata;
   if (m?.foco) return m.foco;
 
-  // fallback: metadata.cluster/linha
   const cl = m?.cluster_foco;
   const ln = m?.linha_foco;
   if (cl && ln) return `${cl} - Linha ${ln}`;
@@ -44,7 +65,6 @@ function getFoco(item) {
 }
 
 function getPdfUrl(item) {
-  // Python grava arquivo_pdf_url
   return item?.arquivo_pdf_url || item?.arquivo_pdf_path || null;
 }
 
@@ -54,38 +74,125 @@ function daysBetweenUTC(a, b) {
   return Math.floor((two - one) / (1000 * 60 * 60 * 24));
 }
 
+// Data "YYYY-MM-DD" no fuso America/Sao_Paulo (date-only)
+function spDateISO(d = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+// Soma dias em cima de um ISO date (YYYY-MM-DD) sem depender de timezone local
+function addDaysISO(isoYMD, days) {
+  const [y, m, d] = isoYMD.split("-").map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d)); // date-only neutro
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
 function calcDiaXdeY(item) {
   const status = normalizeStatus(item?.status);
   if (status !== "EM_MONITORAMENTO") return null;
 
-  // Python cria dt_inicio (date) e dias_monitoramento
-  const dtIni = item?.dt_inicio;
+  const dtIni = item?.dt_inicio_monitoramento;
   const dias = n(item?.dias_monitoramento) || null;
   if (!dtIni || !dias) return null;
 
-  const ini = new Date(dtIni);
-  const hoje = new Date();
+  const ini = new Date(dtIni + "T00:00:00Z");
+  const hojeISO = spDateISO(new Date());
+  const hoje = new Date(hojeISO + "T00:00:00Z");
+
   const dia = Math.min(Math.max(daysBetweenUTC(ini, hoje) + 1, 1), dias);
   return { dia, dias };
 }
 
 // =============================================================================
-// CONSTANTES UI
+// CHECKLIST (MODELO PDF)
 // =============================================================================
-const CHECKLIST_ITENS = [
-  { id: "faixa_verde", label: "Operação na Faixa Verde (RPM)" },
-  { id: "antecipacao", label: "Antecipação de Parada/Trânsito" },
-  { id: "troca_marcha", label: "Troca de Marchas no Tempo Correto" },
-  { id: "uso_retarder", label: "Uso Correto do Freio Motor/Retarder" },
-  { id: "marcha_lenta", label: "Evitou Marcha Lenta Excessiva" },
-  { id: "topografia", label: "Aproveitamento de Inércia (Topografia)" },
+// Checklist de Condução (SIM / NÃO)
+const CHECKLIST_CONDUCAO = [
+  {
+    id: "mecanica",
+    titulo: "MECÂNICA",
+    desc: "Evita batida de transmissão, uso indevido de embreagem e trancos?",
+  },
+  {
+    id: "eficiencia_rpm",
+    titulo: "EFICIÊNCIA (RPM)",
+    desc: "Conduz na faixa verde e utiliza corretamente o conta-giros?",
+  },
+  {
+    id: "inerciaparada",
+    titulo: "INÉRCIA/PARADA",
+    desc: "Aproveita o movimento, sem utilizar 'banguela'?",
+  },
+  {
+    id: "suavidade",
+    titulo: "SUAVIDADE",
+    desc: "Evita acelerações/frenagens bruscas e antecipa obstáculos/pontos?",
+  },
+  {
+    id: "seguranca",
+    titulo: "SEGURANÇA",
+    desc: "Respeita velocidade, sinalização e utiliza o cinto de segurança?",
+  },
+  {
+    id: "postura",
+    titulo: "POSTURA",
+    desc: "Uniformizado, mãos corretas no volante e cortês com passageiros?",
+  },
+  {
+    id: "documentacao",
+    titulo: "DOCUMENTAÇÃO",
+    desc: "Porta CNH dentro do prazo de validade?",
+  },
 ];
 
+// Avaliação Técnica (Sistemas): SIM / NÃO / DÚVIDAS
+const AVALIACAO_TECNICA = [
+  {
+    id: "freio_motor",
+    pergunta: "O motorista demonstra saber utilizar o Freio Motor corretamente?",
+  },
+  {
+    id: "regeneracao_dpf",
+    pergunta: "O motorista conhece o procedimento para a Regeneração (DPF)?",
+  },
+  {
+    id: "acelerador_cenarios",
+    pergunta:
+      "O motorista sabe utilizar o acelerador em cada cenário (plano, aclive e declive)?",
+  },
+];
+
+const TEC_OPCOES = [
+  { value: "SIM", label: "Sim", icon: FaCheck, cls: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+  { value: "NAO", label: "Não", icon: FaX, cls: "bg-rose-50 border-rose-200 text-rose-700" },
+  { value: "DUVIDAS", label: "Dúvidas", icon: FaQuestionCircle, cls: "bg-amber-50 border-amber-200 text-amber-700" },
+];
+
+// =============================================================================
+// CONSTANTES UI
+// =============================================================================
 const NIVEIS = {
   1: { label: "Nível 1 (Leve)", dias: 5, color: "bg-blue-50 border-blue-200 text-blue-700" },
   2: { label: "Nível 2 (Médio)", dias: 10, color: "bg-amber-50 border-amber-200 text-amber-700" },
   3: { label: "Nível 3 (Crítico)", dias: 15, color: "bg-rose-50 border-rose-200 text-rose-700" },
 };
+
+function emptyChecklist() {
+  // SIM/NAO -> boolean | null
+  const conducao = {};
+  CHECKLIST_CONDUCAO.forEach((i) => (conducao[i.id] = null));
+
+  // SIM/NAO/DUVIDAS -> "SIM" | "NAO" | "DUVIDAS" | ""
+  const tecnica = {};
+  AVALIACAO_TECNICA.forEach((i) => (tecnica[i.id] = ""));
+
+  return { conducao, tecnica };
+}
 
 // =============================================================================
 // COMPONENTE PRINCIPAL
@@ -101,6 +208,7 @@ export default function DesempenhoDieselAcompanhamento() {
   // Modais
   const [modalLancarOpen, setModalLancarOpen] = useState(false);
   const [modalConsultaOpen, setModalConsultaOpen] = useState(false);
+  const [modalDetalhesOpen, setModalDetalhesOpen] = useState(false);
   const [itemSelecionado, setItemSelecionado] = useState(null);
 
   // Histórico
@@ -116,7 +224,10 @@ export default function DesempenhoDieselAcompanhamento() {
     mediaTeste: "",
     nivel: 2,
     obs: "",
-    checklist: {},
+
+    // ✅ novo modelo (PDF)
+    checklistConducao: emptyChecklist().conducao,
+    avaliacaoTecnica: emptyChecklist().tecnica,
   });
 
   // ---------------------------------------------------------------------------
@@ -145,7 +256,7 @@ export default function DesempenhoDieselAcompanhamento() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // AÇÃO: CONSULTAR (Resumo + Histórico)
+  // AÇÃO: CONSULTAR (Histórico)
   // ---------------------------------------------------------------------------
   const handleConsultar = async (item) => {
     setItemSelecionado(item);
@@ -171,10 +282,21 @@ export default function DesempenhoDieselAcompanhamento() {
   };
 
   // ---------------------------------------------------------------------------
+  // AÇÃO: DETALHES (Resumo do lançamento)
+  // ---------------------------------------------------------------------------
+  const handleDetalhes = (item) => {
+    setItemSelecionado(item);
+    setModalDetalhesOpen(true);
+  };
+
+  // ---------------------------------------------------------------------------
   // AÇÃO: LANÇAR
   // ---------------------------------------------------------------------------
   const handleLancar = (item) => {
     setItemSelecionado(item);
+
+    const base = emptyChecklist();
+
     setForm({
       horaInicio: "",
       horaFim: "",
@@ -183,15 +305,25 @@ export default function DesempenhoDieselAcompanhamento() {
       mediaTeste: "",
       nivel: 2,
       obs: "",
-      checklist: {},
+
+      checklistConducao: base.conducao,
+      avaliacaoTecnica: base.tecnica,
     });
+
     setModalLancarOpen(true);
   };
 
-  const toggleCheck = (id) => {
+  const setConducao = (id, val) => {
     setForm((prev) => ({
       ...prev,
-      checklist: { ...prev.checklist, [id]: !prev.checklist[id] },
+      checklistConducao: { ...prev.checklistConducao, [id]: val },
+    }));
+  };
+
+  const setTecnica = (id, val) => {
+    setForm((prev) => ({
+      ...prev,
+      avaliacaoTecnica: { ...prev.avaliacaoTecnica, [id]: val },
     }));
   };
 
@@ -205,28 +337,30 @@ export default function DesempenhoDieselAcompanhamento() {
 
     const dias = NIVEIS[form.nivel]?.dias || 10;
 
-    // Python trabalha com dt_inicio/dt_fim_planejado (DATE)
-    const hoje = new Date();
-    const dtInicio = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
-    const dtFim = new Date(dtInicio);
-    dtFim.setUTCDate(dtFim.getUTCDate() + (dias - 1));
-
-    const dtInicioISO = dtInicio.toISOString().slice(0, 10); // YYYY-MM-DD
-    const dtFimISO = dtFim.toISOString().slice(0, 10);
+    // início e fim previstos baseados no momento do lançamento (data SP)
+    const inicioISO = spDateISO(new Date()); // YYYY-MM-DD (SP)
+    const fimISO = addDaysISO(inicioISO, dias - 1);
 
     try {
       const { data: sess } = await supabase.auth.getSession();
       const instrutorLogin = sess?.session?.user?.email || null;
       const instrutorNome = sess?.session?.user?.user_metadata?.full_name || null;
 
+      // ✅ salva tudo dentro de intervencao_checklist (JSON)
+      const intervencaoChecklist = {
+        versao: "FORM_ACOMPANHAMENTO_TELEMETRIA_v1",
+        conducao: form.checklistConducao || {},
+        tecnica: form.avaliacaoTecnica || {},
+      };
+
       const payload = {
         status: "EM_MONITORAMENTO",
 
-        // contrato / monitoramento (ALINHADO AO PYTHON)
+        // contrato / monitoramento
         nivel: form.nivel,
         dias_monitoramento: dias,
-        dt_inicio: dtInicioISO,
-        dt_fim_planejado: dtFimISO,
+        dt_inicio_monitoramento: inicioISO,
+        dt_fim_previsao: fimISO,
 
         // auditoria instrutor
         instrutor_login: instrutorLogin,
@@ -239,8 +373,8 @@ export default function DesempenhoDieselAcompanhamento() {
         intervencao_km_fim: form.kmFim ? n(form.kmFim) : null,
         intervencao_media_teste: n(form.mediaTeste),
 
-        // checklist / obs
-        intervencao_checklist: form.checklist || {},
+        // ✅ novo checklist / avaliação técnica
+        intervencao_checklist: intervencaoChecklist,
         intervencao_obs: form.obs || null,
 
         updated_at: new Date().toISOString(),
@@ -364,6 +498,8 @@ export default function DesempenhoDieselAcompanhamento() {
               const foco = getFoco(item);
               const diaXY = calcDiaXdeY(item);
 
+              const showDetalhes = hasLancamento(item) && !showLancar; // pós-lançamento
+
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition">
                   <td className="px-6 py-4 text-gray-500 font-mono text-xs">
@@ -432,6 +568,16 @@ export default function DesempenhoDieselAcompanhamento() {
                         <FaHistory />
                       </button>
 
+                      {showDetalhes && (
+                        <button
+                          onClick={() => handleDetalhes(item)}
+                          className="p-2 text-slate-800 bg-white border border-slate-200 rounded hover:bg-slate-50 transition shadow-sm"
+                          title="Ver Detalhes do Lançamento do Instrutor"
+                        >
+                          <FaClipboardList />
+                        </button>
+                      )}
+
                       {showLancar && (
                         <button
                           onClick={() => handleLancar(item)}
@@ -460,7 +606,40 @@ export default function DesempenhoDieselAcompanhamento() {
         </table>
       </div>
 
-      {/* MODAL CONSULTA */}
+      {/* MODAL DETALHES (Resumo do lançamento) */}
+      {modalDetalhesOpen && itemSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="flex justify-between items-center p-5 border-b bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <FaClipboardList /> Detalhes do Lançamento
+              </h3>
+              <button onClick={() => setModalDetalhesOpen(false)}>
+                <FaTimes className="text-gray-400 hover:text-red-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-lg border bg-slate-50">
+                <div className="text-sm">
+                  <span className="font-bold text-slate-700">Motorista:</span>{" "}
+                  {itemSelecionado.motorista_nome || "-"}{" "}
+                  <span className="text-slate-400 font-mono">
+                    ({itemSelecionado.motorista_chapa || "-"})
+                  </span>
+                </div>
+                <div className="text-sm">
+                  <span className="font-bold text-slate-700">Foco:</span> {getFoco(itemSelecionado)}
+                </div>
+              </div>
+
+              <ResumoLancamentoInstrutor item={itemSelecionado} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONSULTA (Histórico) */}
       {modalConsultaOpen && itemSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
@@ -483,8 +662,7 @@ export default function DesempenhoDieselAcompanhamento() {
                     {itemSelecionado.motorista_nome || "-"} ({itemSelecionado.motorista_chapa || "-"})
                   </div>
                   <div>
-                    <span className="text-blue-500 font-bold">Foco:</span>{" "}
-                    {getFoco(itemSelecionado)}
+                    <span className="text-blue-500 font-bold">Foco:</span> {getFoco(itemSelecionado)}
                   </div>
                   <div>
                     <span className="text-blue-500 font-bold">KM/L Inicial:</span>{" "}
@@ -501,6 +679,15 @@ export default function DesempenhoDieselAcompanhamento() {
                   <div>
                     <span className="text-blue-500 font-bold">Dias:</span>{" "}
                     {itemSelecionado.dias_monitoramento ?? "-"}
+                  </div>
+
+                  <div>
+                    <span className="text-blue-500 font-bold">Início Monit.:</span>{" "}
+                    {itemSelecionado.dt_inicio_monitoramento || "-"}
+                  </div>
+                  <div>
+                    <span className="text-blue-500 font-bold">Fim Previsto:</span>{" "}
+                    {itemSelecionado.dt_fim_previsao || "-"}
                   </div>
                 </div>
               </div>
@@ -531,6 +718,11 @@ export default function DesempenhoDieselAcompanhamento() {
                             {h.created_at ? new Date(h.created_at).toLocaleDateString() : "-"}
                           </div>
                           <div className="text-xs text-gray-500">{getFoco(h)}</div>
+                          {h.dt_inicio_monitoramento && (
+                            <div className="text-[11px] text-gray-400 mt-1 font-mono">
+                              Monit.: {h.dt_inicio_monitoramento} → {h.dt_fim_previsao || "-"}
+                            </div>
+                          )}
                         </div>
 
                         <div className="text-right">
@@ -543,9 +735,7 @@ export default function DesempenhoDieselAcompanhamento() {
                           >
                             {st}
                           </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            Nível {h.nivel ?? "-"}
-                          </div>
+                          <div className="text-xs text-gray-400 mt-1">Nível {h.nivel ?? "-"}</div>
                         </div>
                       </div>
                     );
@@ -632,35 +822,105 @@ export default function DesempenhoDieselAcompanhamento() {
                 </div>
               </div>
 
-              {/* 2) CHECKLIST */}
+              {/* 2) CHECKLIST DE CONDUÇÃO (SIM/NÃO) */}
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
-                  <FaClipboardList /> Checklist Técnico (o que foi corrigido?)
+                  <FaClipboardList /> Checklist de Condução (Resumo Operacional)
                 </h4>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {CHECKLIST_ITENS.map((chk) => (
-                    <label
-                      key={chk.id}
-                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                        form.checklist[chk.id]
-                          ? "bg-emerald-50 border-emerald-300"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!!form.checklist[chk.id]}
-                        onChange={() => toggleCheck(chk.id)}
-                        className="w-4 h-4 text-emerald-600 rounded"
-                      />
-                      <span className="text-sm text-gray-700">{chk.label}</span>
-                    </label>
-                  ))}
+                <div className="space-y-3">
+                  {CHECKLIST_CONDUCAO.map((it) => {
+                    const val = form.checklistConducao?.[it.id]; // true/false/null
+                    return (
+                      <div key={it.id} className="p-3 border rounded-lg bg-white">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs font-extrabold text-slate-700">{it.titulo}</div>
+                            <div className="text-sm text-slate-600">{it.desc}</div>
+                          </div>
+
+                          <div className="flex gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setConducao(it.id, true)}
+                              className={`px-3 py-2 rounded border text-xs font-bold transition ${
+                                val === true
+                                  ? "bg-emerald-600 text-white border-emerald-700"
+                                  : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                              }`}
+                            >
+                              SIM
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setConducao(it.id, false)}
+                              className={`px-3 py-2 rounded border text-xs font-bold transition ${
+                                val === false
+                                  ? "bg-rose-600 text-white border-rose-700"
+                                  : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
+                              }`}
+                            >
+                              NÃO
+                            </button>
+                          </div>
+                        </div>
+
+                        {val === null && (
+                          <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
+                            Selecione SIM ou NÃO
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* 3) NÍVEL */}
+              {/* 3) AVALIAÇÃO TÉCNICA (SISTEMAS) */}
+              <div>
+                <h4 className="font-bold text-slate-700 text-sm mb-3">Avaliação Técnica (Sistemas)</h4>
+
+                <div className="space-y-3">
+                  {AVALIACAO_TECNICA.map((q) => {
+                    const v = form.avaliacaoTecnica?.[q.id] || "";
+                    return (
+                      <div key={q.id} className="p-3 border rounded-lg bg-gray-50">
+                        <div className="text-sm text-slate-700 font-semibold mb-2">{q.pergunta}</div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {TEC_OPCOES.map((op) => {
+                            const Icon = op.icon;
+                            const active = v === op.value;
+                            return (
+                              <button
+                                key={op.value}
+                                type="button"
+                                onClick={() => setTecnica(q.id, op.value)}
+                                className={`px-3 py-2 rounded border text-xs font-bold transition inline-flex items-center gap-2 ${
+                                  active
+                                    ? "bg-slate-900 text-white border-slate-900"
+                                    : `${op.cls} hover:brightness-95`
+                                }`}
+                              >
+                                <Icon /> {op.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {!v && (
+                          <div className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
+                            Selecione uma opção
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4) NÍVEL */}
               <div>
                 <h4 className="font-bold text-slate-700 text-sm mb-3">Definir Nível (Contrato)</h4>
 
@@ -670,9 +930,7 @@ export default function DesempenhoDieselAcompanhamento() {
                       key={lvl}
                       onClick={() => setForm({ ...form, nivel: lvl })}
                       className={`p-3 rounded-lg border text-center transition ${
-                        form.nivel === lvl
-                          ? "ring-2 ring-offset-1 ring-slate-400 bg-white"
-                          : NIVEIS[lvl].color
+                        form.nivel === lvl ? "ring-2 ring-offset-1 ring-slate-400 bg-white" : NIVEIS[lvl].color
                       }`}
                       type="button"
                     >
