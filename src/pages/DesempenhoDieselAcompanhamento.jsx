@@ -256,6 +256,13 @@ export default function DesempenhoDieselAcompanhamento() {
   }, []);
 
   // ---------------------------------------------------------------------------
+  // CONTADORES PARA OS CARDS
+  // ---------------------------------------------------------------------------
+  const countAguardando = lista.filter(i => normalizeStatus(i.status) === "AGUARDANDO_INSTRUTOR").length;
+  const countMonitoramento = lista.filter(i => normalizeStatus(i.status) === "EM_MONITORAMENTO").length;
+  const countConcluido = lista.filter(i => ["OK", "ENCERRADO", "ATAS"].includes(normalizeStatus(i.status))).length;
+
+  // ---------------------------------------------------------------------------
   // AÇÃO: CONSULTAR (Histórico)
   // ---------------------------------------------------------------------------
   const handleConsultar = async (item) => {
@@ -412,7 +419,7 @@ export default function DesempenhoDieselAcompanhamento() {
         return matchTexto && ["AGUARDANDO_INSTRUTOR", "EM_MONITORAMENTO"].includes(st);
       }
       if (filtroStatus === "ENCERRADOS") {
-        return matchTexto && ["OK", "ENCERRADO", "TRATATIVA", "REJEITADA", "CANCELADO"].includes(st);
+        return matchTexto && ["OK", "ENCERRADO", "ATAS", "REJEITADA", "CANCELADO"].includes(st);
       }
       return matchTexto;
     });
@@ -450,6 +457,33 @@ export default function DesempenhoDieselAcompanhamento() {
         </button>
       </div>
 
+      {/* CARDS DE RESUMO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
+          <div>
+            <p className="text-sm text-gray-500 font-bold">Aguardando Instrutor</p>
+            <p className="text-2xl font-black text-slate-800">{countAguardando}</p>
+          </div>
+          <FaClock className="text-4xl text-amber-50" />
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
+          <div>
+            <p className="text-sm text-gray-500 font-bold">Em Monitoramento</p>
+            <p className="text-2xl font-black text-slate-800">{countMonitoramento}</p>
+          </div>
+          <FaRoad className="text-4xl text-blue-50" />
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between border-l-4 border-l-emerald-500">
+          <div>
+            <p className="text-sm text-gray-500 font-bold">Concluídos / Atas</p>
+            <p className="text-2xl font-black text-slate-800">{countConcluido}</p>
+          </div>
+          <FaCheck className="text-4xl text-emerald-50" />
+        </div>
+      </div>
+
       {/* FILTROS */}
       <div className="flex gap-4 mb-2 items-center bg-white p-3 rounded-lg border shadow-sm">
         <div className="relative">
@@ -469,7 +503,7 @@ export default function DesempenhoDieselAcompanhamento() {
           className="p-2 border rounded text-sm bg-white outline-none focus:border-blue-500"
         >
           <option value="ATIVOS">⚡ Aguardando / Monitorando</option>
-          <option value="ENCERRADOS">🏁 Encerrados</option>
+          <option value="ENCERRADOS">🏁 Encerrados / Atas</option>
           <option value="TODOS">Todos</option>
         </select>
 
@@ -571,7 +605,7 @@ export default function DesempenhoDieselAcompanhamento() {
                       {showDetalhes && (
                         <button
                           onClick={() => handleDetalhes(item)}
-                          className="p-2 text-slate-800 bg-white border border-slate-200 rounded hover:bg-slate-50 transition shadow-sm"
+                          className="p-2 text-white bg-blue-600 border border-blue-700 rounded hover:bg-blue-700 transition shadow-sm"
                           title="Ver Detalhes do Lançamento do Instrutor"
                         >
                           <FaClipboardList />
