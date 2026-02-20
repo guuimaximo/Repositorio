@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { supabase } from "../supabase";
 import {
   BarChart,
   Bar,
@@ -10,9 +11,10 @@ import {
   CartesianGrid,
   LabelList,
 } from "recharts";
+import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// ✅ PALETA DE CORES PADRONIZADA
+// ✅ PALETA PADRÃO (layout claro)
 const COLORS = {
   SOS: "#DC2626", // Vermelho
   RECOLHEU: "#EAB308", // Amarelo
@@ -47,7 +49,25 @@ function todayYMD_SP() {
   return `${y}-${m}-${d}`;
 }
 
-function normalizeTipo(oc: string) {
+function monthRange(ym) {
+  if (!ym) return { start: "", end: "" };
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return { start: "", end: "" };
+
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const last = new Date(Date.UTC(y, m, 0));
+
+  const toYMD = (d) => {
+    const yy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  };
+
+  return { start: toYMD(first), end: toYMD(last) };
+}
+
+function normalizeTipo(oc) {
   const o = String(oc || "").toUpperCase().trim();
   if (!o) return "";
 
@@ -63,110 +83,102 @@ function normalizeTipo(oc: string) {
   return o;
 }
 
-function labelOcorrenciaTabela(oc: string) {
+function labelOcorrenciaTabela(oc) {
   const n = normalizeTipo(oc);
   return n ? n : "FECHAR ETIQUETA";
 }
 
-// Mock data generator
-function generateMockData() {
-  const today = todayYMD_SP();
-  const seriesData: any[] = [];
+function isOcorrenciaValidaParaMKBF(oc) {
+  const tipo = normalizeTipo(oc);
+  if (!tipo) return false;
+  if (tipo === "SEGUIU VIAGEM") return false;
+  return true;
+}
 
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split("T")[0];
+async function fetchAllPeriodo({ dataInicio, dataFim }) {
+  const PAGE = 1000;
+  let from = 0;
+  let all = [];
 
-    seriesData.push({
-      day: dateStr,
-      RECOLHEU: Math.floor(Math.random() * 5) + 1,
-      SOS: Math.floor(Math.random() * 4) + 1,
-      AVARIA: Math.floor(Math.random() * 3) + 1,
-      TROCA: Math.floor(Math.random() * 4) + 1,
-      IMPROCEDENTE: Math.floor(Math.random() * 2),
-    });
+  while (true) {
+    const { data, error } = await supabase
+      .from("sos_acionamentos")
+      .select("*")
+      .gte("data_sos", dataInicio)
+      .lte("data_sos", dataFim)
+      .order("data_sos", { ascending: true })
+      .order("hora_sos", { ascending: true })
+      .range(from, from + PAGE - 1);
+
+    if (error) throw error;
+
+    const rows = data || [];
+    all = all.concat(rows);
+
+    if (rows.length < PAGE) break;
+    from += PAGE;
   }
 
-  const doDiaData = [
-    {
-      id: 1,
-      numero_sos: "SOS-001",
-      data_sos: today,
-      hora_sos: "08:30:45",
-      veiculo: "VEI-1234",
-      motorista_nome: "João Silva",
-      linha: "Linha 101",
-      reclamacao_motorista: "Problema com ar condicionado",
-      ocorrencia: "TROCA",
-      status: "Resolvido",
-    },
-    {
-      id: 2,
-      numero_sos: "SOS-002",
-      data_sos: today,
-      hora_sos: "09:15:30",
-      veiculo: "VEI-5678",
-      motorista_nome: "Maria Santos",
-      linha: "Linha 202",
-      reclamacao_motorista: "Pneu furado",
-      ocorrencia: "RECOLHEU",
-      status: "Resolvido",
-    },
-    {
-      id: 3,
-      numero_sos: "SOS-003",
-      data_sos: today,
-      hora_sos: "10:45:12",
-      veiculo: "VEI-9012",
-      motorista_nome: "Pedro Costa",
-      linha: "Linha 303",
-      reclamacao_motorista: "Avaria no motor",
-      ocorrencia: "AVARIA",
-      status: "Pendente",
-    },
-    {
-      id: 4,
-      numero_sos: "SOS-004",
-      data_sos: today,
-      hora_sos: "11:20:00",
-      veiculo: "VEI-3456",
-      motorista_nome: "Ana Oliveira",
-      linha: "Linha 404",
-      reclamacao_motorista: "Batida leve",
-      ocorrencia: "SOS",
-      status: "Resolvido",
-    },
-  ];
+  return all;
+}
 
-  return {
-    series: seriesData,
-    doDia: doDiaData,
-    porTipo: {
-      RECOLHEU: 12,
-      SOS: 8,
-      AVARIA: 5,
-      TROCA: 10,
-      IMPROCEDENTE: 2,
-      "SEGUIU VIAGEM": 0,
-    },
-    kmPeriodo: 2450,
-    ocorrenciasValidasPeriodo: 37,
-    mkbfPeriodo: 66.22,
-  };
+async function enterFullscreen(el) {
+  try {
+    const target = el || document.documentElement;
+    if (document.fullscreenElement) return;
+
+    if (target.requestFullscreen) return await target.requestFullscreen();
+    if (target.webkitRequestFullscreen) return target.webkitRequestFullscreen();
+  } catch (e) {
+    console.warn("Fullscreen bloqueado:", e);
+  }
+}
+
+async function exitFullscreen() {
+  try {
+    if (!document.fullscreenElement) return;
+
+    if (document.exitFullscreen) return await document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+  } catch (e) {
+    console.warn("Exit fullscreen bloqueado:", e);
+  }
 }
 
 export default function SOSDashboard() {
-  const fsRef = useRef<HTMLDivElement>(null);
-  const [modoExibicao, setModoExibicao] = useState(false);
+  const fsRef = useRef(null);
+
+  const [mesRef, setMesRef] = useState(() => todayYMD_SP().slice(0, 7));
+  const { start: defaultIni, end: defaultFim } = useMemo(
+    () => monthRange(mesRef),
+    [mesRef]
+  );
+  const [dataInicio, setDataInicio] = useState(defaultIni);
+  const [dataFim, setDataFim] = useState(defaultFim);
+
   const [loading, setLoading] = useState(false);
-  const [mockData, setMockData] = useState(generateMockData());
-  const [refreshCount, setRefreshCount] = useState(0);
+  const [erro, setErro] = useState("");
+
+  const [series, setSeries] = useState([]);
+  const [cards, setCards] = useState({ totalPeriodo: 0, porTipo: {} });
+  const [doDia, setDoDia] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(null);
+
+  const [kmPeriodo, setKmPeriodo] = useState(0);
+  const [ocorrenciasValidasPeriodo, setOcorrenciasValidasPeriodo] = useState(0);
+  const [mkbfPeriodo, setMkbfPeriodo] = useState(0);
+
+  const [modoExibicao, setModoExibicao] = useState(false);
+  const [realtimeOn, setRealtimeOn] = useState(false);
+
+  const debounceRef = useRef(null);
+  const channelRef = useRef(null);
+  const modoRef = useRef(false);
 
   const hoje = useMemo(() => todayYMD_SP(), []);
-  const acumuladoDia = mockData.doDia.length;
+  const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
 
-  // ✅ PATCH 1: print + compactação
+  // ✅ Print compacto
   const PRINT_CSS = `
     @media print {
       .print-tight { padding: 8px !important; }
@@ -177,16 +189,225 @@ export default function SOSDashboard() {
     }
   `;
 
-  // Auto-refresh em tempo real a cada 5 segundos
   useEffect(() => {
-    const interval = setInterval(() => {
-      setMockData(generateMockData());
-      setRefreshCount((prev) => prev + 1);
-    }, 5000);
+    const { start, end } = monthRange(mesRef);
+    setDataInicio(start);
+    setDataFim(end);
+  }, [mesRef]);
 
-    return () => clearInterval(interval);
+  const fetchDashboard = useCallback(async () => {
+    if (!dataInicio || !dataFim) return;
+
+    setLoading(true);
+    setErro("");
+
+    try {
+      // 1) Período (somente o necessário para montar série + cards)
+      const { data: periodoData, error: periodoErr } = await supabase
+        .from("sos_acionamentos")
+        .select("id, data_sos, ocorrencia")
+        .gte("data_sos", dataInicio)
+        .lte("data_sos", dataFim);
+
+      if (periodoErr) throw periodoErr;
+
+      // 2) KM do período (igual ao seu antigo)
+      const { data: kmData, error: kmErr } = await supabase
+        .from("km_rodado_diario")
+        .select("km_total, data")
+        .gte("data", dataInicio)
+        .lte("data", dataFim);
+
+      if (kmErr) throw kmErr;
+
+      const kmSum = (kmData || []).reduce(
+        (acc, r) => acc + (Number(r.km_total) || 0),
+        0
+      );
+
+      const ocorrValidas = (periodoData || []).reduce((acc, r) => {
+        return acc + (isOcorrenciaValidaParaMKBF(r.ocorrencia) ? 1 : 0);
+      }, 0);
+
+      setKmPeriodo(kmSum);
+      setOcorrenciasValidasPeriodo(ocorrValidas);
+      setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
+
+      // 3) DO DIA (tabela)
+      const { data: diaData, error: diaErr } = await supabase
+        .from("sos_acionamentos")
+        .select(
+          "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, reclamacao_motorista, ocorrencia, status"
+        )
+        .eq("data_sos", hoje)
+        .order("hora_sos", { ascending: true });
+
+      if (diaErr) throw diaErr;
+
+      // 4) Série por dia
+      const byDay = new Map();
+      (periodoData || []).forEach((r) => {
+        const day = r.data_sos;
+        if (!day) return;
+
+        const tipo = normalizeTipo(r.ocorrencia);
+        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
+
+        if (!byDay.has(day)) {
+          const base = { day };
+          TIPOS_GRAFICO.forEach((t) => (base[t] = 0));
+          byDay.set(day, base);
+        }
+
+        byDay.get(day)[tipo] = (byDay.get(day)[tipo] || 0) + 1;
+      });
+
+      const chart = Array.from(byDay.values())
+        .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
+        .sort((a, b) => String(a.day).localeCompare(String(b.day)));
+
+      // 5) Cards por tipo + total
+      const porTipo = {};
+      TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
+
+      (periodoData || []).forEach((r) => {
+        const tipo = normalizeTipo(r.ocorrencia);
+        if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
+        porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+      });
+
+      const totalPeriodo = Object.values(porTipo).reduce(
+        (acc, v) => acc + (v || 0),
+        0
+      );
+
+      setSeries(chart);
+      setCards({ totalPeriodo, porTipo });
+      setDoDia(diaData || []);
+      setLastUpdate(new Date());
+    } catch (e) {
+      setErro(e?.message || "Erro ao carregar dashboard.");
+      setSeries([]);
+      setCards({ totalPeriodo: 0, porTipo: {} });
+      setDoDia([]);
+      setKmPeriodo(0);
+      setOcorrenciasValidasPeriodo(0);
+      setMkbfPeriodo(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [dataInicio, dataFim, hoje]);
+
+  function scheduleReload() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchDashboard(), 600);
+  }
+
+  function setupRealtime() {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    if (!realtimeOn) return;
+
+    channelRef.current = supabase
+      .channel("realtime-sos_acionamentos-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sos_acionamentos" },
+        () => scheduleReload()
+      )
+      .subscribe();
+  }
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  useEffect(() => {
+    setupRealtime();
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeOn]);
+
+  useEffect(() => {
+    modoRef.current = modoExibicao;
+  }, [modoExibicao]);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      const isFs = !!document.fullscreenElement;
+      if (!isFs && modoRef.current) setModoExibicao(false);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
+  const toggleModoExibicao = useCallback(async () => {
+    const el = fsRef.current;
+    if (!modoRef.current) {
+      setModoExibicao(true);
+      setTimeout(() => enterFullscreen(el), 50);
+    } else {
+      await exitFullscreen();
+      setModoExibicao(false);
+    }
+  }, []);
+
+  async function exportExcelPeriodo() {
+    if (!dataInicio || !dataFim) return;
+    setLoading(true);
+    setErro("");
+    try {
+      const rowsPeriodo = await fetchAllPeriodo({ dataInicio, dataFim });
+      const wb = XLSX.utils.book_new();
+
+      const wsPeriodo = XLSX.utils.json_to_sheet(
+        (rowsPeriodo || []).map((r) => ({
+          ...r,
+          ocorrencia_exibida: labelOcorrenciaTabela(r.ocorrencia),
+        }))
+      );
+      XLSX.utils.book_append_sheet(wb, wsPeriodo, "Intervencoes_periodo");
+
+      const wsSerie = XLSX.utils.json_to_sheet(series || []);
+      XLSX.utils.book_append_sheet(wb, wsSerie, "Grafico_por_dia");
+
+      const resumo = [
+        { chave: "Periodo_inicio", valor: dataInicio },
+        { chave: "Periodo_fim", valor: dataFim },
+        { chave: "Total_periodo", valor: cards.totalPeriodo || 0 },
+        ...Object.entries(cards.porTipo || {}).map(([k, v]) => ({
+          chave: k,
+          valor: v,
+        })),
+        { chave: "KM_rodado_periodo", valor: Number(kmPeriodo || 0) },
+        {
+          chave: "Ocorrencias_validas_MKBF",
+          valor: Number(ocorrenciasValidasPeriodo || 0),
+        },
+        { chave: "MKBF_periodo", valor: Number(mkbfPeriodo || 0) },
+      ];
+      const wsResumo = XLSX.utils.json_to_sheet(resumo);
+      XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+      const stamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-");
+      XLSX.writeFile(wb, `Intervencoes_${dataInicio}_a_${dataFim}_${stamp}.xlsx`);
+    } catch (e) {
+      setErro(e?.message || "Erro ao gerar Excel do período.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totalKPI = cards.totalPeriodo || 0;
+
+  // ✅ Layout NOVO (claro)
   const shell =
     "w-full h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 text-slate-900 overflow-hidden flex flex-col";
   const panel =
@@ -194,54 +415,9 @@ export default function SOSDashboard() {
   const titleText = "text-sm font-semibold text-slate-800 uppercase tracking-wide";
   const smallText = "text-xs text-slate-600";
 
-  async function enterFullscreen(el: HTMLElement | null) {
-    try {
-      const target = el || document.documentElement;
-      if (document.fullscreenElement) return;
-
-      if (target.requestFullscreen) return await target.requestFullscreen();
-      if ((target as any).webkitRequestFullscreen)
-        return (target as any).webkitRequestFullscreen();
-    } catch (e) {
-      console.warn("Fullscreen bloqueado:", e);
-    }
-  }
-
-  async function exitFullscreen() {
-    try {
-      if (!document.fullscreenElement) return;
-
-      if (document.exitFullscreen) return await document.exitFullscreen();
-      if ((document as any).webkitExitFullscreen)
-        return (document as any).webkitExitFullscreen();
-    } catch (e) {
-      console.warn("Exit fullscreen bloqueado:", e);
-    }
-  }
-
-  const toggleModoExibicao = useCallback(async () => {
-    const el = fsRef.current;
-    if (!modoExibicao) {
-      setModoExibicao(true);
-      setTimeout(() => enterFullscreen(el), 50);
-    } else {
-      await exitFullscreen();
-      setModoExibicao(false);
-    }
-  }, [modoExibicao]);
-
-  useEffect(() => {
-    const onFsChange = () => {
-      const isFs = !!document.fullscreenElement;
-      if (!isFs && modoExibicao) {
-        setModoExibicao(false);
-      }
-    };
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, [modoExibicao]);
-
-  // Layout Exibição (Fullscreen)
+  // =========================
+  // MODO EXIBIÇÃO (Fullscreen) - NOVO
+  // =========================
   const ExibicaoLayout = (
     <div className="w-full h-full flex flex-col gap-3 p-4 overflow-hidden print-gap">
       <div className="flex items-center justify-between shrink-0">
@@ -255,20 +431,14 @@ export default function SOSDashboard() {
         </button>
       </div>
 
-      <div
-        className="grid grid-cols-12 gap-3 min-h-0"
-        style={{ minHeight: 0, height: "30%" }}
-      >
-        {/* COLUNA ESQUERDA - MÉTRICAS */}
+      {/* Topo: sidebar + gráfico */}
+      <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0, height: "30%" }}>
+        {/* Sidebar métricas */}
         <div className="col-span-3 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-2`}>
             <div className="flex items-center justify-between mb-1">
-              <div className="text-xs font-semibold text-slate-700 uppercase">
-                OCORRÊNCIA
-              </div>
-              <div className="text-xs font-semibold text-slate-700 uppercase text-right">
-                TOTAL
-              </div>
+              <div className="text-xs font-semibold text-slate-700 uppercase">OCORRÊNCIA</div>
+              <div className="text-xs font-semibold text-slate-700 uppercase text-right">TOTAL</div>
             </div>
 
             <div className="min-h-0 overflow-auto pr-1 space-y-1">
@@ -285,11 +455,9 @@ export default function SOSDashboard() {
                     <span className="text-xs text-slate-800">{t}</span>
                     <span
                       className="text-xs font-bold"
-                      style={{
-                        color: COLORS[t as keyof typeof COLORS] || "#1e293b",
-                      }}
+                      style={{ color: COLORS[t] || "#1e293b" }}
                     >
-                      {mockData.porTipo[t as keyof typeof mockData.porTipo] || 0}
+                      {cards.porTipo?.[t] || 0}
                     </span>
                   </div>
                 ))}
@@ -297,20 +465,16 @@ export default function SOSDashboard() {
 
               <div className="mt-2 grid grid-cols-2 gap-1.5">
                 <div className={`${panel} p-2`}>
-                  <div className="text-xs text-slate-600 font-semibold">
-                    OCORRÊNCIAS
-                  </div>
+                  <div className="text-xs text-slate-600 font-semibold">OCORRÊNCIAS</div>
                   <div className="text-lg font-extrabold text-slate-900">
-                    {mockData.ocorrenciasValidasPeriodo}
+                    {ocorrenciasValidasPeriodo || 0}
                   </div>
                 </div>
 
                 <div className={`${panel} p-2`}>
-                  <div className="text-xs text-slate-600 font-semibold">
-                    KM TOTAL
-                  </div>
+                  <div className="text-xs text-slate-600 font-semibold">KM TOTAL</div>
                   <div className="text-lg font-extrabold text-slate-900">
-                    {Number(mockData.kmPeriodo || 0).toLocaleString("pt-BR", {
+                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 0,
                     })}
                   </div>
@@ -321,27 +485,39 @@ export default function SOSDashboard() {
                 <div className={`${panel} p-2`}>
                   <div className="text-xs text-slate-600 font-semibold">MKBF</div>
                   <div className="text-xl font-extrabold text-slate-900">
-                    {Number(mockData.mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 2,
                     })}
                   </div>
                   <div className="text-xs text-slate-600 mt-0.5">
                     Ocorr:{" "}
                     <span className="font-semibold text-slate-900">
-                      {mockData.ocorrenciasValidasPeriodo || 0}
+                      {ocorrenciasValidasPeriodo || 0}
                     </span>
                   </div>
+
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={realtimeOn}
+                      onChange={(e) => setRealtimeOn(e.target.checked)}
+                    />
+                    Tempo real
+                  </label>
                 </div>
               </div>
 
               <div className="text-[10px] text-slate-500">
-                refresh: {refreshCount}
+                {lastUpdate
+                  ? `Atualizado: ${lastUpdate.toLocaleTimeString("pt-BR")}`
+                  : "—"}
               </div>
             </div>
           </div>
         </div>
 
-        {/* COLUNA CENTRAL - GRÁFICO */}
+        {/* Gráfico */}
         <div className="col-span-9 min-h-0">
           <div className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}>
             <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
@@ -350,21 +526,43 @@ export default function SOSDashboard() {
                   Intervenções por dia
                 </div>
                 <div className="text-xs text-slate-600">
-                  Acumulado:{" "}
+                  Acumulado do dia:{" "}
                   <span className="font-bold text-slate-900">{acumuladoDia}</span>
                 </div>
               </div>
-              <div className="text-xs text-slate-600">
-                {new Date().toLocaleTimeString("pt-BR")}
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={mesRef}
+                  onChange={(e) => setMesRef(e.target.value)}
+                  className="bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 outline-none"
+                >
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() - i);
+                    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+                      2,
+                      "0"
+                    )}`;
+                    return (
+                      <option key={ym} value={ym}>
+                        {ym}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                <div className="text-xs text-slate-600">
+                  {new Date().toLocaleTimeString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                  })}
+                </div>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 w-full mt-1">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={mockData.series}
-                  margin={{ top: 10, right: 5, left: -25, bottom: 5 }}
-                >
+                <BarChart data={series} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke="rgba(0,0,0,0.1)"
@@ -415,13 +613,13 @@ export default function SOSDashboard() {
                       key={t}
                       dataKey={t}
                       stackId="a"
-                      fill={COLORS[t as keyof typeof COLORS]}
+                      fill={COLORS[t]}
                       maxBarSize={60}
                     >
                       <LabelList
                         dataKey={t}
                         position="center"
-                        formatter={(v: number) => (v > 0 ? v : "")}
+                        formatter={(v) => (v > 0 ? v : "")}
                         fill="#ffffff"
                         fontSize={9}
                         fontWeight="bold"
@@ -435,17 +633,12 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {/* TABELA INFERIOR */}
-      <div
-        className={`${panel} w-full flex flex-col min-h-0 overflow-hidden`}
-        style={{ height: "65%" }}
-      >
+      {/* Tabela inferior */}
+      <div className={`${panel} w-full flex flex-col min-h-0 overflow-hidden`} style={{ height: "65%" }}>
         <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-          <div className="font-semibold text-slate-800 text-sm">
-            Intervenções do dia
-          </div>
+          <div className="font-semibold text-slate-800 text-sm">Intervenções do dia</div>
           <div className="px-2 py-0.5 rounded bg-slate-200 text-xs font-bold text-slate-700">
-            Total hoje: {mockData.doDia.length}
+            Total hoje: {doDia.length}
           </div>
         </div>
 
@@ -462,53 +655,57 @@ export default function SOSDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {mockData.doDia.map((r) => (
-                <tr
-                  key={r.id}
-                  className="hover:opacity-80 transition-colors"
-                  style={{
-                    backgroundColor:
-                      r.status !== "Resolvido" ? "#FEF3C7" : "transparent",
-                  }}
-                >
-                  <td className="py-2.5 px-4 font-mono text-slate-800">
-                    {r.numero_sos || "-"}
-                  </td>
-                  <td className="py-2.5 px-4 text-slate-700">
-                    {r.veiculo || "-"}
-                  </td>
-                  <td className="py-2.5 px-4 text-slate-600">
-                    {r.data_sos || "-"}
-                  </td>
-                  <td className="py-2.5 px-4 text-slate-600">
-                    {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}
-                  </td>
-                  <td
-                    className="py-2.5 px-4 text-slate-800 truncate max-w-[350px]"
-                    title={r.reclamacao_motorista}
-                  >
-                    {r.reclamacao_motorista || "-"}
-                  </td>
-                  <td className="py-2.5 px-4 text-right">
-                    <span
-                      className="font-bold text-xs uppercase tracking-wide px-2 py-1 rounded border-2"
-                      style={{
-                        color:
-                          COLORS[normalizeTipo(r.ocorrencia) as keyof typeof COLORS] ||
-                          "#1e293b",
-                        borderColor:
-                          COLORS[normalizeTipo(r.ocorrencia) as keyof typeof COLORS] ||
-                          "#cbd5e1",
-                        backgroundColor:
-                          (COLORS[normalizeTipo(r.ocorrencia) as keyof typeof COLORS] ||
-                            "#cbd5e1") + "15",
-                      }}
-                    >
-                      {labelOcorrenciaTabela(r.ocorrencia)}
-                    </span>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-500">
+                    Carregando...
                   </td>
                 </tr>
-              ))}
+              ) : doDia.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-500">
+                    Nenhuma intervenção hoje.
+                  </td>
+                </tr>
+              ) : (
+                doDia.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="hover:opacity-80 transition-colors"
+                    style={{
+                      backgroundColor: r.status !== "Resolvido" ? "#FEF3C7" : "transparent",
+                    }}
+                  >
+                    <td className="py-2.5 px-4 font-mono text-slate-800">
+                      {r.numero_sos || "-"}
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-700">{r.veiculo || "-"}</td>
+                    <td className="py-2.5 px-4 text-slate-600">{r.data_sos || "-"}</td>
+                    <td className="py-2.5 px-4 text-slate-600">
+                      {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}
+                    </td>
+                    <td
+                      className="py-2.5 px-4 text-slate-800 truncate max-w-[350px]"
+                      title={r.reclamacao_motorista}
+                    >
+                      {r.reclamacao_motorista || "-"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right">
+                      <span
+                        className="font-bold text-xs uppercase tracking-wide px-2 py-1 rounded border-2"
+                        style={{
+                          color: COLORS[normalizeTipo(r.ocorrencia)] || "#1e293b",
+                          borderColor: COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1",
+                          backgroundColor:
+                            (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") + "15",
+                        }}
+                      >
+                        {labelOcorrenciaTabela(r.ocorrencia)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -516,21 +713,45 @@ export default function SOSDashboard() {
     </div>
   );
 
-  // Layout Normal
+  // =========================
+  // LAYOUT NORMAL - NOVO
+  // =========================
   const NormalLayout = (
     <div
-      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_1fr_1fr] gap-3 print-gap"
+      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_auto_1fr_1fr] gap-3 print-gap"
       style={{ minHeight: 0 }}
     >
+      {/* Top bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={smallText}>Período: 2024-02-14 - 2024-02-20</div>
+          <select
+            value={mesRef}
+            onChange={(e) => setMesRef(e.target.value)}
+            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+          >
+            {Array.from({ length: 12 }).map((_, i) => {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const ym = `${y}-${m}`;
+              return (
+                <option key={ym} value={ym}>
+                  {ym}
+                </option>
+              );
+            })}
+          </select>
+
+          <div className={smallText}>
+            Período: <span className="font-semibold text-slate-900">{dataInicio}</span>{" "}
+            até <span className="font-semibold text-slate-900">{dataFim}</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* ✅ PATCH 2: botões com estilo coerente no fundo claro */}
           <button
-            onClick={() => setLoading(!loading)}
+            onClick={fetchDashboard}
             className="bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
@@ -539,7 +760,7 @@ export default function SOSDashboard() {
           </button>
 
           <button
-            onClick={() => alert("Exportar Excel")}
+            onClick={exportExcelPeriodo}
             className="bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
@@ -557,7 +778,15 @@ export default function SOSDashboard() {
         </div>
       </div>
 
+      {erro && (
+        <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {erro}
+        </div>
+      )}
+
+      {/* Grid topo */}
       <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
+        {/* Cards/Lateral */}
         <div className="col-span-4 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-center justify-between mb-2">
@@ -577,11 +806,8 @@ export default function SOSDashboard() {
                     }}
                   >
                     <span className="text-xs text-slate-800">{t}</span>
-                    <span
-                      className="text-xs font-bold"
-                      style={{ color: COLORS[t as keyof typeof COLORS] || "#1e293b" }}
-                    >
-                      {mockData.porTipo[t as keyof typeof mockData.porTipo] || 0}
+                    <span className="text-xs font-bold" style={{ color: COLORS[t] }}>
+                      {cards.porTipo?.[t] || 0}
                     </span>
                   </div>
                 ))}
@@ -589,18 +815,14 @@ export default function SOSDashboard() {
 
               <div className="mt-2 grid grid-cols-2 gap-1.5">
                 <div className={`${panel} p-2`}>
-                  <div className="text-xs text-slate-600 font-semibold">
-                    OCORRÊNCIAS
-                  </div>
-                  <div className="text-lg font-extrabold text-slate-900">
-                    {mockData.ocorrenciasValidasPeriodo}
-                  </div>
+                  <div className="text-xs text-slate-600 font-semibold">TOTAL</div>
+                  <div className="text-lg font-extrabold text-slate-900">{totalKPI}</div>
                 </div>
 
                 <div className={`${panel} p-2`}>
                   <div className="text-xs text-slate-600 font-semibold">KM TOTAL</div>
                   <div className="text-lg font-extrabold text-slate-900">
-                    {Number(mockData.kmPeriodo || 0).toLocaleString("pt-BR", {
+                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 0,
                     })}
                   </div>
@@ -611,27 +833,41 @@ export default function SOSDashboard() {
                 <div className={`${panel} p-2`}>
                   <div className="text-xs text-slate-600 font-semibold">MKBF</div>
                   <div className="text-xl font-extrabold text-slate-900">
-                    {Number(mockData.mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 2,
                     })}
                   </div>
                   <div className="text-xs text-slate-600 mt-0.5">
                     Ocorr:{" "}
                     <span className="font-semibold text-slate-900">
-                      {mockData.ocorrenciasValidasPeriodo || 0}
+                      {ocorrenciasValidasPeriodo || 0}
                     </span>
+                  </div>
+
+                  <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={realtimeOn}
+                      onChange={(e) => setRealtimeOn(e.target.checked)}
+                    />
+                    Tempo real
+                  </label>
+
+                  <div className="text-[11px] text-slate-500 mt-2">
+                    {lastUpdate
+                      ? `Atualizado: ${lastUpdate.toLocaleString("pt-BR", {
+                          timeZone: "America/Sao_Paulo",
+                        })}`
+                      : "—"}
                   </div>
                 </div>
               </div>
-
-              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" className="h-4 w-4" />
-                Tempo real
-              </label>
             </div>
           </div>
         </div>
 
+        {/* Gráfico */}
         <div className="col-span-8 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-start justify-between">
@@ -643,11 +879,15 @@ export default function SOSDashboard() {
                 </div>
               </div>
               <div className={smallText}>
-                {new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                {lastUpdate
+                  ? lastUpdate.toLocaleTimeString("pt-BR", {
+                      timeZone: "America/Sao_Paulo",
+                    })
+                  : "—"}
               </div>
             </div>
 
-            {/* ✅ PATCH 3: altura responsiva + print mais baixo */}
+            {/* ✅ Altura responsiva + print mais baixo */}
             <div
               className="print-chart-wrap"
               style={{
@@ -657,7 +897,7 @@ export default function SOSDashboard() {
               }}
             >
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockData.series}>
+                <BarChart data={series}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.10)" />
                   <XAxis
                     dataKey="day"
@@ -683,16 +923,11 @@ export default function SOSDashboard() {
                   />
                   <Legend verticalAlign="bottom" height={28} />
                   {TIPOS_GRAFICO.map((t) => (
-                    <Bar
-                      key={t}
-                      dataKey={t}
-                      stackId="a"
-                      fill={COLORS[t as keyof typeof COLORS]}
-                    >
+                    <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]}>
                       <LabelList
                         dataKey={t}
                         position="center"
-                        formatter={(v: number) => (v > 0 ? v : "")}
+                        formatter={(v) => (v > 0 ? v : "")}
                         fill="#ffffff"
                         fontSize={12}
                         fontWeight="bold"
@@ -703,7 +938,7 @@ export default function SOSDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {!loading && mockData.series.length === 0 && (
+            {!loading && series.length === 0 && (
               <div className="mt-2 text-sm text-slate-600">
                 Nenhum registro válido para o gráfico neste período.
               </div>
@@ -712,13 +947,14 @@ export default function SOSDashboard() {
         </div>
       </div>
 
+      {/* Tabela (normal) */}
       <div className="min-h-0">
         <div className={`${panel} h-full min-h-0 overflow-hidden`}>
           <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div className={titleText}>Intervenções do dia</div>
             <div className={smallText}>
               Total hoje:{" "}
-              <span className="font-semibold text-slate-900">{mockData.doDia.length}</span>
+              <span className="font-semibold text-slate-900">{doDia.length}</span>
             </div>
           </div>
 
@@ -735,18 +971,44 @@ export default function SOSDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {mockData.doDia.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-200">
-                    <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
-                    <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
-                    <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
-                    <td className="py-2 px-3">
-                      {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="text-center py-6 text-slate-500">
+                      Carregando...
                     </td>
-                    <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
-                    <td className="py-2 px-3">{labelOcorrenciaTabela(r.ocorrencia)}</td>
                   </tr>
-                ))}
+                ) : doDia.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="text-center py-6 text-slate-500">
+                      Nenhuma intervenção encontrada para hoje.
+                    </td>
+                  </tr>
+                ) : (
+                  doDia.map((r) => (
+                    <tr key={r.id} className="border-t border-slate-200">
+                      <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
+                      <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
+                      <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
+                      <td className="py-2 px-3">
+                        {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
+                      </td>
+                      <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
+                      <td className="py-2 px-3">
+                        <span
+                          className="font-bold text-xs uppercase tracking-wide px-2 py-1 rounded border"
+                          style={{
+                            color: COLORS[normalizeTipo(r.ocorrencia)] || "#0f172a",
+                            borderColor: COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1",
+                            backgroundColor:
+                              (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") + "15",
+                          }}
+                        >
+                          {labelOcorrenciaTabela(r.ocorrencia)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
