@@ -17,11 +17,11 @@ import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
 // ✅ CORES VIVAS (alerta) – bem contrastado no fundo escuro
 const COLORS = {
-  RECOLHEU: "#EF4444",
-  SOS: "#F59E0B",
-  AVARIA: "#22C55E",
-  TROCA: "#3B82F6",
-  IMPROCEDENTE: "#E5E7EB",
+  RECOLHEU: "#EF4444", // vermelho vivo
+  SOS: "#F59E0B", // amarelo/âmbar vivo
+  AVARIA: "#22C55E", // verde vivo
+  TROCA: "#3B82F6", // azul vivo
+  IMPROCEDENTE: "#E5E7EB", // cinza claro
 };
 
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
@@ -172,23 +172,13 @@ export default function SOSDashboard() {
 
   const debounceRef = useRef(null);
   const channelRef = useRef(null);
-  const modoRef = useRef(false);
+  const modoRef = useRef(false); // Para controlar FS vs State
 
   const hoje = useMemo(() => todayYMD_SP(), []);
   const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
 
   // ✅ No Modo Exibição: realtime é SEMPRE ligado
   const realtimeEfetivo = modoExibicao ? true : realtimeOn;
-
-  // ✅ Etiquetas em aberto (modo exibição): apenas número da etiqueta
-  const etiquetasAbertas = useMemo(() => {
-    const isResolvido = (s) =>
-      String(s || "").trim().toUpperCase() === "RESOLVIDO";
-    return (doDia || [])
-      .filter((r) => !isResolvido(r.status))
-      .map((r) => String(r.numero_sos || "").trim())
-      .filter(Boolean);
-  }, [doDia]);
 
   useEffect(() => {
     const { start, end } = monthRange(mesRef);
@@ -232,6 +222,7 @@ export default function SOSDashboard() {
       setOcorrenciasValidasPeriodo(ocorrValidas);
       setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
+      // DO DIA
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
         .select(
@@ -242,6 +233,7 @@ export default function SOSDashboard() {
 
       if (diaErr) throw diaErr;
 
+      // Série por dia
       const byDay = new Map();
       (periodoData || []).forEach((r) => {
         const day = r.data_sos;
@@ -265,6 +257,7 @@ export default function SOSDashboard() {
 
       const porTipo = {};
       TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
+
       (periodoData || []).forEach((r) => {
         const tipo = normalizeTipo(r.ocorrencia);
         if (!tipo || !TIPOS_GRAFICO.includes(tipo)) return;
@@ -295,8 +288,13 @@ export default function SOSDashboard() {
 
   function scheduleReload() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    // ✅ No Modo Exibição: atualiza mais rápido
     const wait = modoExibicao ? 120 : 600;
-    debounceRef.current = setTimeout(() => fetchDashboard(), wait);
+
+    debounceRef.current = setTimeout(() => {
+      fetchDashboard();
+    }, wait);
   }
 
   function setupRealtime() {
@@ -304,15 +302,20 @@ export default function SOSDashboard() {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+
     if (!realtimeEfetivo) return;
 
     channelRef.current = supabase
       .channel("realtime-dashboard-sos-km")
+
+      // ✅ Mudanças nas intervenções
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sos_acionamentos" },
         () => scheduleReload()
       )
+
+      // ✅ Mudanças no KM diário (KM/MKBF também atualiza)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "km_rodado_diario" },
@@ -325,6 +328,7 @@ export default function SOSDashboard() {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  // ✅ Realtime agora segue "realtimeEfetivo" (modo exibição força ON)
   useEffect(() => {
     setupRealtime();
     return () => {
@@ -340,7 +344,9 @@ export default function SOSDashboard() {
   useEffect(() => {
     const onFsChange = () => {
       const isFs = !!document.fullscreenElement;
-      if (!isFs && modoRef.current) setModoExibicao(false);
+      if (!isFs && modoRef.current) {
+        setModoExibicao(false);
+      }
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -351,7 +357,11 @@ export default function SOSDashboard() {
     if (!modoRef.current) {
       setModoExibicao(true);
       setTimeout(() => enterFullscreen(el), 50);
-      setTimeout(() => fetchDashboard(), 80);
+
+      // ✅ entra com dados frescos
+      setTimeout(() => {
+        fetchDashboard();
+      }, 80);
     } else {
       await exitFullscreen();
       setModoExibicao(false);
@@ -386,13 +396,19 @@ export default function SOSDashboard() {
           valor: v,
         })),
         { chave: "KM_rodado_periodo", valor: Number(kmPeriodo || 0) },
-        { chave: "Ocorrencias_validas_MKBF", valor: Number(ocorrenciasValidasPeriodo || 0) },
+        {
+          chave: "Ocorrencias_validas_MKBF",
+          valor: Number(ocorrenciasValidasPeriodo || 0),
+        },
         { chave: "MKBF_periodo", valor: Number(mkbfPeriodo || 0) },
       ];
       const wsResumo = XLSX.utils.json_to_sheet(resumo);
       XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
 
-      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const stamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-");
       XLSX.writeFile(wb, `Intervencoes_${dataInicio}_a_${dataFim}_${stamp}.xlsx`);
     } catch (e) {
       setErro(e?.message || "Erro ao gerar Excel do período.");
@@ -403,6 +419,7 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
+  // Estilos Comuns
   const shell = modoExibicao
     ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
     : "min-h-screen bg-[#0b0f14] text-white p-3 overflow-y-scroll";
@@ -411,15 +428,25 @@ export default function SOSDashboard() {
   const smallText = "text-xs text-white/60 font-medium uppercase tracking-wider";
   const titleText = "text-sm font-bold text-white tracking-wide";
 
+  // ✅ NOVO: Etiquetas em aberto (apenas numero_sos) — baseado no "doDia"
+  const etiquetasAbertas = useMemo(() => {
+    const isResolvido = (s) => String(s || "").trim().toUpperCase() === "RESOLVIDO";
+    return (doDia || [])
+      .filter((r) => !isResolvido(r.status))
+      .map((r) => String(r.numero_sos || "").trim())
+      .filter(Boolean);
+  }, [doDia]);
+
   // =================================================================
-  // ✅ MODO EXIBIÇÃO (AJUSTADO):
-  // - TABELA com a mesma altura do gráfico (50/50)
-  // - Coluna esquerda na parte de baixo: "Etiquetas em aberto" (só número)
+  // ✅ MODO EXIBIÇÃO: mantém o seu layout, só ajusta a parte de baixo:
+  // - Embaixo: esquerda "Etiquetas em aberto" (só número)
+  // - Embaixo: direita tabela do dia com altura igual ao gráfico (metade inferior)
   // =================================================================
   const ExibicaoLayout = (
     <div className="h-full w-full p-4 grid grid-cols-12 gap-4">
       {/* --- COLUNA ESQUERDA (SIDEBAR) --- */}
       <div className="col-span-3 flex flex-col gap-4 h-full min-h-0">
+        {/* Lista de Ocorrências */}
         <div className={`${panel} flex-1 flex flex-col min-h-0 p-4`}>
           <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
             <span className={titleText}>OCORRÊNCIA</span>
@@ -443,6 +470,7 @@ export default function SOSDashboard() {
           </div>
         </div>
 
+        {/* KPIs (Total e KM) */}
         <div className="grid grid-cols-2 gap-3 shrink-0">
           <div className={`${panel} p-4 flex flex-col justify-center`}>
             <div className={smallText}>TOTAL</div>
@@ -451,15 +479,20 @@ export default function SOSDashboard() {
           <div className={`${panel} p-4 flex flex-col justify-center`}>
             <div className={smallText}>KM TOTAL</div>
             <div className="text-xl font-extrabold text-white mt-1">
-              {Number(kmPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
+              {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                maximumFractionDigits: 0,
+              })}
             </div>
           </div>
         </div>
 
+        {/* MKBF + Checkbox Tempo Real */}
         <div className={`${panel} p-4 shrink-0`}>
           <div className={smallText}>MKBF</div>
           <div className="text-4xl font-extrabold text-white my-2">
-            {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+            {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+              maximumFractionDigits: 2,
+            })}
           </div>
           <div className="text-xs text-gray-400">
             Ocorrências:{" "}
@@ -467,15 +500,16 @@ export default function SOSDashboard() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-300">
+            {/* ✅ no modo exibição o realtime é sempre ON; checkbox fica travado ON */}
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
               <input
                 type="checkbox"
                 checked={realtimeEfetivo}
                 disabled={modoExibicao}
                 onChange={(e) => setRealtimeOn(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 disabled:opacity-60"
+                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900 disabled:opacity-60"
               />
-              Tempo real (sempre ligado)
+              Tempo real {modoExibicao ? "(sempre ligado)" : ""}
             </label>
 
             <button
@@ -488,15 +522,17 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {/* --- COLUNA DIREITA --- */}
+      {/* --- COLUNA DIREITA (CONTEÚDO) --- */}
+      {/* ✅ Aqui é a mudança principal: agora é 2 linhas iguais (50/50) */}
       <div className="col-span-9 grid grid-rows-2 gap-4 h-full min-h-0">
-        {/* ✅ GRÁFICO (50% altura) */}
+        {/* GRÁFICO */}
         <div className={`${panel} w-full h-full p-4 flex flex-col min-h-0`}>
           <div className="flex items-center justify-between mb-2 shrink-0">
             <div>
               <div className="flex items-center gap-3">
                 <span className={titleText}>Intervenções por dia</span>
 
+                {/* Select Discreto para Mês */}
                 <select
                   value={mesRef}
                   onChange={(e) => setMesRef(e.target.value)}
@@ -505,7 +541,10 @@ export default function SOSDashboard() {
                   {Array.from({ length: 12 }).map((_, i) => {
                     const d = new Date();
                     d.setMonth(d.getMonth() - i);
-                    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+                      2,
+                      "0"
+                    )}`;
                     return (
                       <option key={ym} value={ym}>
                         {ym}
@@ -528,7 +567,10 @@ export default function SOSDashboard() {
 
           <div className="flex-1 min-h-0 w-full mt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+              <BarChart
+                data={series}
+                margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
+              >
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="rgba(255,255,255,0.05)"
@@ -555,7 +597,11 @@ export default function SOSDashboard() {
                     borderRadius: "8px",
                     boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
                   }}
-                  labelStyle={{ color: "#9ca3af", marginBottom: "0.5rem", fontSize: "12px" }}
+                  labelStyle={{
+                    color: "#9ca3af",
+                    marginBottom: "0.5rem",
+                    fontSize: "12px",
+                  }}
                 />
                 <Legend
                   verticalAlign="top"
@@ -582,12 +628,9 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* ✅ PARTE DE BAIXO (50% altura):
-            - Esquerda: Etiquetas em aberto (apenas número)
-            - Direita: Ocorrências do dia (mais curta, do tamanho do gráfico)
-        */}
+        {/* ✅ PARTE DE BAIXO: esquerda etiquetas em aberto + direita tabela do dia */}
         <div className="grid grid-cols-12 gap-4 h-full min-h-0">
-          {/* Etiquetas em aberto */}
+          {/* Etiquetas em aberto (apenas número) */}
           <div className="col-span-3 min-h-0">
             <div className={`${panel} h-full min-h-0 flex flex-col overflow-hidden`}>
               <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02] shrink-0">
@@ -622,7 +665,7 @@ export default function SOSDashboard() {
             </div>
           </div>
 
-          {/* Ocorrências do dia (reduzida) */}
+          {/* Tabela do dia (altura = metade inferior, do tamanho do gráfico) */}
           <div className="col-span-9 min-h-0">
             <div className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}>
               <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">
@@ -695,7 +738,7 @@ export default function SOSDashboard() {
     </div>
   );
 
-  // Layout Normal (sem mudanças aqui)
+  // Layout Normal (Mantido conforme solicitado, apenas consumindo cores globais)
   const NormalLayout = (
     <div
       className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_1fr_1fr] gap-3"
@@ -762,13 +805,12 @@ export default function SOSDashboard() {
         </div>
       )}
 
-      {/* restante do NormalLayout mantido igual ao seu código anterior */}
       <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
         <div className="col-span-4 min-h-0">
-          <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm h-full min-h-0 overflow-hidden p-3`}>
+          <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-bold text-white tracking-wide">OCORRÊNCIA</div>
-              <div className="text-sm font-bold text-white tracking-wide text-right">TOTAL</div>
+              <div className={titleText}>OCORRÊNCIA</div>
+              <div className={`${titleText} text-right`}>TOTAL</div>
             </div>
 
             <div className="min-h-0 overflow-auto pr-1">
@@ -789,28 +831,34 @@ export default function SOSDashboard() {
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm p-3`}>
-                  <div className="text-xs text-white/60 font-medium uppercase tracking-wider">TOTAL</div>
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>TOTAL</div>
                   <div className="text-2xl font-extrabold">{totalKPI}</div>
                 </div>
 
-                <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm p-3`}>
-                  <div className="text-xs text-white/60 font-medium uppercase tracking-wider">KM TOTAL</div>
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>KM TOTAL</div>
                   <div className="text-2xl font-extrabold">
-                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
+                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 0,
+                    })}
                   </div>
                 </div>
               </div>
 
               <div className="mt-2">
-                <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm p-3`}>
-                  <div className="text-xs text-white/60 font-medium uppercase tracking-wider">MKBF</div>
+                <div className={`${panel} p-3`}>
+                  <div className={smallText}>MKBF</div>
                   <div className="text-3xl font-extrabold">
-                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 2,
+                    })}
                   </div>
-                  <div className="text-xs text-white/60 font-medium uppercase tracking-wider mt-1">
+                  <div className={`${smallText} mt-1`}>
                     Ocorrências:{" "}
-                    <span className="font-semibold text-white">{ocorrenciasValidasPeriodo || 0}</span>
+                    <span className="font-semibold text-white">
+                      {ocorrenciasValidasPeriodo || 0}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -829,18 +877,20 @@ export default function SOSDashboard() {
         </div>
 
         <div className="col-span-8 min-h-0">
-          <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm h-full min-h-0 overflow-hidden p-3`}>
+          <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-sm font-bold text-white tracking-wide">Intervenções por dia</div>
-                <div className="text-xs text-white/60 font-medium uppercase tracking-wider">
+                <div className={titleText}>Intervenções por dia</div>
+                <div className={smallText}>
                   Acumulado do dia ({hoje}):{" "}
                   <span className="font-semibold text-white">{acumuladoDia}</span>
                 </div>
               </div>
-              <div className="text-xs text-white/60 font-medium uppercase tracking-wider">
+              <div className={smallText}>
                 {lastUpdate
-                  ? lastUpdate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
+                  ? lastUpdate.toLocaleString("pt-BR", {
+                      timeZone: "America/Sao_Paulo",
+                    })
                   : "—"}
               </div>
             </div>
@@ -897,17 +947,21 @@ export default function SOSDashboard() {
       </div>
 
       <div className="min-h-0">
-        <div className={`border border-white/10 rounded-xl bg-[#15191e] shadow-sm h-full min-h-0 overflow-hidden`}>
+        <div className={`${panel} h-full min-h-0 overflow-hidden`}>
           <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
-            <div className="text-sm font-bold text-white tracking-wide">Intervenções do dia</div>
-            <div className="text-xs text-white/60 font-medium uppercase tracking-wider">
-              Total hoje: <span className="font-semibold text-white">{doDia.length}</span>
+            <div className={titleText}>Intervenções do dia</div>
+            <div className={smallText}>
+              Total hoje:{" "}
+              <span className="font-semibold text-white">{doDia.length}</span>
             </div>
           </div>
 
           <div className="min-h-0 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
             <table className="min-w-full text-sm">
-              <thead className="sticky top-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+              <thead
+                className="sticky top-0"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              >
                 <tr className="text-white/80">
                   <th className="py-2 px-3 text-left">ETIQUETA</th>
                   <th className="py-2 px-3 text-left">CARRO</th>
@@ -932,11 +986,17 @@ export default function SOSDashboard() {
                   </tr>
                 ) : (
                   doDia.map((r) => (
-                    <tr key={r.id} className="border-t" style={{ borderColor: "rgba(255,255,255,0.10)" }}>
+                    <tr
+                      key={r.id}
+                      className="border-t"
+                      style={{ borderColor: "rgba(255,255,255,0.10)" }}
+                    >
                       <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
                       <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
                       <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
-                      <td className="py-2 px-3">{r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}</td>
+                      <td className="py-2 px-3">
+                        {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
+                      </td>
                       <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
                       <td className="py-2 px-3">{labelOcorrenciaTabela(r.ocorrencia)}</td>
                     </tr>
@@ -950,5 +1010,9 @@ export default function SOSDashboard() {
     </div>
   );
 
-  return <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>{modoExibicao ? ExibicaoLayout : NormalLayout}</div>;
+  return (
+    <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>
+      {modoExibicao ? ExibicaoLayout : NormalLayout}
+    </div>
+  );
 }
