@@ -95,22 +95,51 @@ function addDaysISO(isoYMD, days) {
   return base.toISOString().slice(0, 10);
 }
 
+// ✅ CORREÇÃO DEFINITIVA DO "Dia NaN"
 function calcDiaXdeY(item) {
   const status = normalizeStatus(item?.status);
   if (status !== "EM_MONITORAMENTO") return null;
 
   const dtIni = item?.dt_inicio_monitoramento;
-  const dias = n(item?.dias_monitoramento) || null;
-  if (!dtIni || !dias) return null;
+  const dias = n(item?.dias_monitoramento) || 10;
+  if (!dtIni) return null;
 
   try {
-    const ini = new Date(dtIni + "T00:00:00Z");
-    const hojeISO = spDateISO(new Date());
-    const hoje = new Date(hojeISO + "T00:00:00Z");
+    let str = String(dtIni).trim();
+    let ano, mes, dia;
 
-    const dia = Math.min(Math.max(daysBetweenUTC(ini, hoje) + 1, 1), dias);
-    return { dia, dias };
-  } catch {
+    // Converte a string para números ignorando o interpretador do navegador
+    if (str.includes("/")) {
+      // Ex: 19/02/2026
+      const p = str.split(" ")[0].split("/");
+      dia = Number(p[0]);
+      mes = Number(p[1]) - 1; // Mês em JS começa no 0
+      ano = Number(p[2]);
+    } else if (str.includes("-")) {
+      // Ex: 2026-02-19
+      const p = str.split("T")[0].split("-");
+      ano = Number(p[0]);
+      mes = Number(p[1]) - 1;
+      dia = Number(p[2]);
+    } else {
+      return null;
+    }
+
+    if (isNaN(ano) || isNaN(mes) || isNaN(dia)) return null;
+
+    const utcIni = Date.UTC(ano, mes, dia);
+    const hoje = new Date();
+    const utcHoje = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+
+    // +1 para o dia do início contar como Dia 1
+    const diffDays = Math.floor((utcHoje - utcIni) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Proteção extra
+    if (isNaN(diffDays)) return null;
+
+    const diaCorrente = Math.min(Math.max(diffDays, 1), dias);
+    return { dia: diaCorrente, dias };
+  } catch (e) {
     return null;
   }
 }
