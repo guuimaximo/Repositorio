@@ -14,22 +14,23 @@ import {
 import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// ✅ CORES VIVAS (alerta) – bem contrastado no fundo escuro
+// ✅ PALETA PADRÃO (layout claro)
 const COLORS = {
-  RECOLHEU: "#EF4444", // vermelho vivo
-  SOS: "#F59E0B", // amarelo/âmbar vivo
-  AVARIA: "#22C55E", // verde vivo
-  TROCA: "#3B82F6", // azul vivo
-  IMPROCEDENTE: "#E5E7EB", // cinza claro
+  SOS: "#DC2626", // Vermelho
+  RECOLHEU: "#EAB308", // Amarelo
+  AVARIA: "#2563EB", // Azul
+  TROCA: "#EA580C", // Laranja
+  IMPROCEDENTE: "#9333EA", // Roxo
+  "SEGUIU VIAGEM": "#16A34A", // Verde
 };
 
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
 
 const TIPOS_TABELA = [
-  "TROCA",
   "SOS",
   "RECOLHEU",
   "AVARIA",
+  "TROCA",
   "IMPROCEDENTE",
   "SEGUIU VIAGEM",
 ];
@@ -71,12 +72,13 @@ function normalizeTipo(oc) {
   if (!o) return "";
 
   if (o === "RA" || o === "R.A" || o === "R.A.") return "RECOLHEU";
-  if (TIPOS_TABELA.includes(o)) return o;
-
   if (o.includes("RECOLH")) return "RECOLHEU";
   if (o.includes("IMPRO")) return "IMPROCEDENTE";
   if (o.includes("TROC")) return "TROCA";
   if (o === "S.O.S") return "SOS";
+  if (o.includes("AVARI")) return "AVARIA";
+  if (o.includes("SEGUIU")) return "SEGUIU VIAGEM";
+  if (TIPOS_TABELA.includes(o)) return o;
 
   return o;
 }
@@ -171,10 +173,21 @@ export default function SOSDashboard() {
 
   const debounceRef = useRef(null);
   const channelRef = useRef(null);
-  const modoRef = useRef(false); // Para controlar FS vs State
+  const modoRef = useRef(false);
 
   const hoje = useMemo(() => todayYMD_SP(), []);
   const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
+
+  // ✅ Print compacto
+  const PRINT_CSS = `
+    @media print {
+      .print-tight { padding: 8px !important; }
+      .print-tight .print-gap { gap: 8px !important; }
+      .print-tight .print-chart-wrap { height: 220px !important; }
+      .print-tight table { font-size: 11px !important; }
+      .print-tight th, .print-tight td { padding-top: 6px !important; padding-bottom: 6px !important; }
+    }
+  `;
 
   useEffect(() => {
     const { start, end } = monthRange(mesRef);
@@ -189,6 +202,7 @@ export default function SOSDashboard() {
     setErro("");
 
     try {
+      // 1) Período (somente o necessário para montar série + cards)
       const { data: periodoData, error: periodoErr } = await supabase
         .from("sos_acionamentos")
         .select("id, data_sos, ocorrencia")
@@ -197,6 +211,7 @@ export default function SOSDashboard() {
 
       if (periodoErr) throw periodoErr;
 
+      // 2) KM do período
       const { data: kmData, error: kmErr } = await supabase
         .from("km_rodado_diario")
         .select("km_total, data")
@@ -218,7 +233,7 @@ export default function SOSDashboard() {
       setOcorrenciasValidasPeriodo(ocorrValidas);
       setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
-      // DO DIA
+      // 3) DO DIA (tabela)
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
         .select(
@@ -229,7 +244,7 @@ export default function SOSDashboard() {
 
       if (diaErr) throw diaErr;
 
-      // Série por dia
+      // 4) Série por dia
       const byDay = new Map();
       (periodoData || []).forEach((r) => {
         const day = r.data_sos;
@@ -249,8 +264,9 @@ export default function SOSDashboard() {
 
       const chart = Array.from(byDay.values())
         .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
-        .sort((a, b) => a.day.localeCompare(b.day));
+        .sort((a, b) => String(a.day).localeCompare(String(b.day)));
 
+      // 5) Cards por tipo + total
       const porTipo = {};
       TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
@@ -323,9 +339,7 @@ export default function SOSDashboard() {
   useEffect(() => {
     const onFsChange = () => {
       const isFs = !!document.fullscreenElement;
-      if (!isFs && modoRef.current) {
-        setModoExibicao(false);
-      }
+      if (!isFs && modoRef.current) setModoExibicao(false);
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -393,124 +407,152 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
-  // Estilos Comuns
-  const shell = modoExibicao
-    ? "h-screen w-screen bg-[#0b0f14] text-white overflow-hidden"
-    : "min-h-screen bg-[#0b0f14] text-white p-3 overflow-y-scroll";
+  // ✅ Layout NOVO (claro)
+  const shell =
+    "w-full h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 text-slate-900 overflow-hidden flex flex-col";
+  const panel =
+    "rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 backdrop-blur-sm";
+  const titleText = "text-sm font-semibold text-slate-800 uppercase tracking-wide";
+  const smallText = "text-xs text-slate-600";
 
-  const panel = "border border-white/10 rounded-xl bg-[#15191e] shadow-sm";
-  const smallText = "text-xs text-white/60 font-medium uppercase tracking-wider";
-  const titleText = "text-sm font-bold text-white tracking-wide";
-
-  // =================================================================
-  // ✅ MODO EXIBIÇÃO: GRID COM SIDEBAR ESQUERDA + GRÁFICO + TABELA
-  // =================================================================
+  // =========================
+  // MODO EXIBIÇÃO (Fullscreen) - NOVO
+  // =========================
   const ExibicaoLayout = (
-    <div className="h-full w-full p-4 grid grid-cols-12 gap-4">
-      {/* --- COLUNA ESQUERDA (SIDEBAR) --- */}
-      <div className="col-span-3 flex flex-col gap-4 h-full min-h-0">
-        {/* Lista de Ocorrências (AJUSTADO: cabe mais sem aumentar o campo) */}
-        <div className={`${panel} flex-1 flex flex-col min-h-0 p-3`}>
-          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
-            <span className={titleText}>OCORRÊNCIA</span>
-            <span className={titleText}>TOTAL</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
-            {TIPOS_GRAFICO.map((t) => (
-              <div
-                key={t}
-                className="flex items-center justify-between px-3 py-2 rounded-lg"
-                style={{
-                  background: "rgba(255,255,255,0.03)",
-                  borderLeft: `4px solid ${COLORS[t]}`,
-                }}
-              >
-                <span className="text-xs font-semibold text-gray-200 leading-none">
-                  {t}
-                </span>
-                <span className="text-base font-extrabold leading-none">
-                  {cards.porTipo?.[t] || 0}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* KPIs (Total e KM) */}
-        <div className="grid grid-cols-2 gap-3 shrink-0">
-          <div className={`${panel} p-4 flex flex-col justify-center`}>
-            <div className={smallText}>TOTAL</div>
-            <div className="text-3xl font-extrabold text-white mt-1">
-              {totalKPI}
-            </div>
-          </div>
-          <div className={`${panel} p-4 flex flex-col justify-center`}>
-            <div className={smallText}>KM TOTAL</div>
-            <div className="text-xl font-extrabold text-white mt-1">
-              {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
-                maximumFractionDigits: 0,
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* MKBF + Checkbox Tempo Real */}
-        <div className={`${panel} p-4 shrink-0`}>
-          <div className={smallText}>MKBF</div>
-          <div className="text-4xl font-extrabold text-white my-2">
-            {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
-              maximumFractionDigits: 2,
-            })}
-          </div>
-          <div className="text-xs text-gray-400">
-            Ocorrências:{" "}
-            <span className="text-white font-bold">
-              {ocorrenciasValidasPeriodo || 0}
-            </span>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
-              <input
-                type="checkbox"
-                checked={realtimeOn}
-                onChange={(e) => setRealtimeOn(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
-              />
-              Tempo real
-            </label>
-
-            <button
-              onClick={toggleModoExibicao}
-              className="text-xs text-white/30 hover:text-white hover:underline"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
+    <div className="w-full h-full flex flex-col gap-3 p-4 overflow-hidden print-gap">
+      <div className="flex items-center justify-between shrink-0">
+        <div className={titleText}>Dashboard SOS - Modo Exibição</div>
+        <button
+          onClick={toggleModoExibicao}
+          className="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded text-xs font-semibold text-white"
+          type="button"
+        >
+          Sair
+        </button>
       </div>
 
-      {/* --- COLUNA DIREITA (CONTEÚDO) --- */}
-      <div className="col-span-9 grid grid-rows-[55%_1fr] gap-4 h-full min-h-0">
-        {/* GRÁFICO */}
-        <div className={`${panel} w-full h-full p-4 flex flex-col min-h-0`}>
-          <div className="flex items-center justify-between mb-2 shrink-0">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className={titleText}>Intervenções por dia</span>
-                {/* Select Discreto para Mês */}
+      {/* Topo: sidebar + gráfico */}
+      <div
+        className="grid grid-cols-12 gap-3 min-h-0"
+        style={{ minHeight: 0, height: "30%" }}
+      >
+        {/* Sidebar métricas */}
+        <div className="col-span-3 min-h-0">
+          <div className={`${panel} h-full min-h-0 overflow-hidden p-2`}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs font-semibold text-slate-700 uppercase">
+                OCORRÊNCIA
+              </div>
+              <div className="text-xs font-semibold text-slate-700 uppercase text-right">
+                TOTAL
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-auto pr-1 space-y-1">
+              <div className="space-y-1">
+                {TIPOS_GRAFICO.map((t) => (
+                  <div
+                    key={t}
+                    className="flex items-center justify-between px-2 py-1.5 rounded text-xs"
+                    style={{
+                      background: "rgba(0,0,0,0.03)",
+                      border: "1px solid rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <span className="text-xs text-slate-800">{t}</span>
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: COLORS[t] || "#1e293b" }}
+                    >
+                      {cards.porTipo?.[t] || 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">
+                    OCORRÊNCIAS
+                  </div>
+                  <div className="text-lg font-extrabold text-slate-900">
+                    {ocorrenciasValidasPeriodo || 0}
+                  </div>
+                </div>
+
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">
+                    KM TOTAL
+                  </div>
+                  <div className="text-lg font-extrabold text-slate-900">
+                    {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 0,
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-1.5">
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">MKBF</div>
+                  <div className="text-xl font-extrabold text-slate-900">
+                    {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    Ocorr:{" "}
+                    <span className="font-semibold text-slate-900">
+                      {ocorrenciasValidasPeriodo || 0}
+                    </span>
+                  </div>
+
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={realtimeOn}
+                      onChange={(e) => setRealtimeOn(e.target.checked)}
+                    />
+                    Tempo real
+                  </label>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-500">
+                {lastUpdate ? `Atualizado: ${lastUpdate.toLocaleTimeString("pt-BR")}` : "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfico */}
+        <div className="col-span-9 min-h-0">
+          <div className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}>
+            <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-xs font-semibold text-slate-800 uppercase">
+                  Intervenções por dia
+                </div>
+                <div className="text-xs text-slate-600">
+                  Acumulado do dia:{" "}
+                  <span className="font-bold text-slate-900">{acumuladoDia}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <select
                   value={mesRef}
                   onChange={(e) => setMesRef(e.target.value)}
-                  className="bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-400 outline-none hover:bg-black/50 transition-colors"
+                  className="bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 outline-none"
                 >
                   {Array.from({ length: 12 }).map((_, i) => {
                     const d = new Date();
                     d.setMonth(d.getMonth() - i);
-                    const ym = `${d.getFullYear()}-${String(
-                      d.getMonth() + 1
-                    ).padStart(2, "0")}`;
+                    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+                      2,
+                      "0"
+                    )}`;
                     return (
                       <option key={ym} value={ym}>
                         {ym}
@@ -518,184 +560,180 @@ export default function SOSDashboard() {
                     );
                   })}
                 </select>
-              </div>
-              <div className={smallText + " mt-1"}>
-                Acumulado do dia ({hoje}):{" "}
-                <span className="font-bold text-white">{acumuladoDia}</span>
+
+                <div className="text-xs text-slate-600">
+                  {new Date().toLocaleTimeString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                  })}
+                </div>
               </div>
             </div>
-            <div className={smallText}>
-              {lastUpdate ? lastUpdate.toLocaleTimeString() : ""}
+
+            <div className="flex-1 min-h-0 w-full mt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={series} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(0,0,0,0.1)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 8, fill: "#64748b" }}
+                    axisLine={false}
+                    tickLine={false}
+                    dy={5}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 8, fill: "#64748b" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={25}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(0,0,0,0.05)" }}
+                    contentStyle={{
+                      background: "#f8fafc",
+                      border: "1px solid rgba(0,0,0,0.1)",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                    }}
+                    labelStyle={{
+                      color: "#1e293b",
+                      marginBottom: "0.5rem",
+                      fontSize: "12px",
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    height={20}
+                    iconType="circle"
+                    iconSize={6}
+                    wrapperStyle={{
+                      fontSize: "10px",
+                      color: "#64748b",
+                      paddingTop: "2px",
+                    }}
+                  />
+                  {TIPOS_GRAFICO.map((t) => (
+                    <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} maxBarSize={60}>
+                      <LabelList
+                        dataKey={t}
+                        position="center"
+                        formatter={(v) => (v > 0 ? v : "")}
+                        fill="#ffffff"
+                        fontSize={9}
+                        fontWeight="bold"
+                      />
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="flex-1 min-h-0 w-full mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={series}
-                margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 10, fill: "#9ca3af" }}
-                  axisLine={false}
-                  tickLine={false}
-                  dy={10}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fontSize: 10, fill: "#9ca3af" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  contentStyle={{
-                    background: "#111827",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
-                  }}
-                  labelStyle={{
-                    color: "#9ca3af",
-                    marginBottom: "0.5rem",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend
-                  verticalAlign="top"
-                  align="right"
-                  height={30}
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: "12px", color: "#9ca3af" }}
-                />
-                {TIPOS_GRAFICO.map((t) => (
-                  <Bar
-                    key={t}
-                    dataKey={t}
-                    stackId="a"
-                    fill={COLORS[t]}
-                    maxBarSize={60}
-                  >
-                    <LabelList
-                      dataKey={t}
-                      position="center"
-                      formatter={(v) => (v > 0 ? v : "")}
-                      fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
-                      fontSize={11}
-                      fontWeight="bold"
-                    />
-                  </Bar>
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Tabela inferior */}
+      <div
+        className={`${panel} w-full flex flex-col min-h-0 overflow-hidden`}
+        style={{ height: "65%" }}
+      >
+        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+          <div className="font-semibold text-slate-800 text-sm">Intervenções do dia</div>
+          <div className="px-2 py-0.5 rounded bg-slate-200 text-xs font-bold text-slate-700">
+            Total hoje: {doDia.length}
           </div>
         </div>
 
-        {/* TABELA (AJUSTADO: mesma “moldura/largura visual” do gráfico via p-4) */}
-        <div
-          className={`${panel} w-full h-full p-4 flex flex-col min-h-0 overflow-hidden`}
-        >
-          <div className="mb-3 pb-3 border-b border-white/10 flex items-center justify-between shrink-0">
-            <div className="font-semibold text-white text-sm">
-              Intervenções do dia
-            </div>
-            <div className="px-2 py-0.5 rounded bg-white/10 text-xs font-bold text-gray-300">
-              Total hoje: {doDia.length}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left text-sm text-gray-300 table-fixed">
-              <thead className="sticky top-0 bg-[#1a1f26] z-10 text-xs uppercase font-semibold text-gray-500">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-left text-sm text-slate-700">
+            <thead className="sticky top-0 bg-slate-100 z-10 text-xs uppercase font-semibold text-slate-600">
+              <tr>
+                <th className="py-3 px-4">Etiqueta</th>
+                <th className="py-3 px-4">Carro</th>
+                <th className="py-3 px-4">Data</th>
+                <th className="py-3 px-4">Hora</th>
+                <th className="py-3 px-4">Reclamação</th>
+                <th className="py-3 px-4 text-right">Tipo Ocorrência</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {loading ? (
                 <tr>
-                  <th className="py-3 pr-3 w-[90px]">Etiqueta</th>
-                  <th className="py-3 pr-3 w-[90px]">Carro</th>
-                  <th className="py-3 pr-3 w-[110px]">Data</th>
-                  <th className="py-3 pr-3 w-[90px]">Hora</th>
-                  <th className="py-3 pr-3">Reclamação</th>
-                  <th className="py-3 pl-3 w-[160px] text-right">
-                    Tipo Ocorrência
-                  </th>
+                  <td colSpan="6" className="py-8 text-center text-slate-500">
+                    Carregando...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {loading ? (
-                  <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
-                      Carregando...
+              ) : doDia.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-500">
+                    Nenhuma intervenção hoje.
+                  </td>
+                </tr>
+              ) : (
+                doDia.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="hover:opacity-80 transition-colors"
+                    style={{
+                      backgroundColor: r.status !== "Resolvido" ? "#FEF3C7" : "transparent",
+                    }}
+                  >
+                    <td className="py-2.5 px-4 font-mono text-slate-800">
+                      {r.numero_sos || "-"}
                     </td>
-                  </tr>
-                ) : doDia.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
-                      Nenhuma intervenção hoje.
+                    <td className="py-2.5 px-4 text-slate-700">{r.veiculo || "-"}</td>
+                    <td className="py-2.5 px-4 text-slate-600">{r.data_sos || "-"}</td>
+                    <td className="py-2.5 px-4 text-slate-600">
+                      {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}
                     </td>
-                  </tr>
-                ) : (
-                  doDia.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="hover:bg-white/5 transition-colors"
+                    <td
+                      className="py-2.5 px-4 text-slate-800 truncate max-w-[350px]"
+                      title={r.reclamacao_motorista}
                     >
-                      <td className="py-2.5 pr-3 font-mono text-white">
-                        {r.numero_sos || "-"}
-                      </td>
-                      <td className="py-2.5 pr-3 text-gray-300">
-                        {r.veiculo || "-"}
-                      </td>
-                      <td className="py-2.5 pr-3 text-gray-400">
-                        {r.data_sos || "-"}
-                      </td>
-                      <td className="py-2.5 pr-3 text-gray-400">
-                        {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "-"}
-                      </td>
-                      <td
-                        className="py-2.5 pr-3 text-white truncate"
-                        title={r.reclamacao_motorista}
+                      {r.reclamacao_motorista || "-"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right">
+                      <span
+                        className="font-bold text-xs uppercase tracking-wide px-2 py-1 rounded border-2"
+                        style={{
+                          color: COLORS[normalizeTipo(r.ocorrencia)] || "#1e293b",
+                          borderColor: COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1",
+                          backgroundColor:
+                            (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") + "15",
+                        }}
                       >
-                        {r.reclamacao_motorista || "-"}
-                      </td>
-                      <td className="py-2.5 pl-3 text-right">
-                        <span
-                          className="font-bold text-xs uppercase tracking-wide"
-                          style={{
-                            color:
-                              COLORS[normalizeTipo(r.ocorrencia)] || "#fff",
-                          }}
-                        >
-                          {labelOcorrenciaTabela(r.ocorrencia)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                        {labelOcorrenciaTabela(r.ocorrencia)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 
-  // Layout Normal (Mantido conforme solicitado, apenas consumindo cores globais)
+  // =========================
+  // LAYOUT NORMAL - NOVO
+  // =========================
   const NormalLayout = (
     <div
-      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_1fr_1fr] gap-3"
+      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_auto_1fr_1fr] gap-3 print-gap"
       style={{ minHeight: 0 }}
     >
+      {/* Top bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <select
             value={mesRef}
             onChange={(e) => setMesRef(e.target.value)}
-            className="bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-sm outline-none"
+            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
           >
             {Array.from({ length: 12 }).map((_, i) => {
               const d = new Date();
@@ -712,14 +750,15 @@ export default function SOSDashboard() {
           </select>
 
           <div className={smallText}>
-            {dataInicio} - {dataFim}
+            Período: <span className="font-semibold text-slate-900">{dataInicio}</span>{" "}
+            até <span className="font-semibold text-slate-900">{dataFim}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={fetchDashboard}
-            className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+            className="bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
             <FaSyncAlt />
@@ -728,7 +767,7 @@ export default function SOSDashboard() {
 
           <button
             onClick={exportExcelPeriodo}
-            className="bg-white/10 border border-white/20 hover:bg-white/15 px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+            className="bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-60"
             disabled={loading}
           >
             <FaDownload />
@@ -737,7 +776,7 @@ export default function SOSDashboard() {
 
           <button
             onClick={toggleModoExibicao}
-            className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+            className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
             type="button"
           >
             Modo Exibição
@@ -746,12 +785,14 @@ export default function SOSDashboard() {
       </div>
 
       {erro && (
-        <div className="px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-200 text-sm">
+        <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           {erro}
         </div>
       )}
 
+      {/* Grid topo */}
       <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
+        {/* Cards/Lateral */}
         <div className="col-span-4 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-center justify-between mb-2">
@@ -764,29 +805,29 @@ export default function SOSDashboard() {
                 {TIPOS_GRAFICO.map((t) => (
                   <div
                     key={t}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg"
+                    className="flex items-center justify-between px-2 py-1.5 rounded text-xs"
                     style={{
-                      background: "rgba(255,255,255,0.06)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(0,0,0,0.03)",
+                      border: "1px solid rgba(0,0,0,0.08)",
                     }}
                   >
-                    <span className="text-sm">{t}</span>
-                    <span className="text-sm font-bold">
+                    <span className="text-xs text-slate-800">{t}</span>
+                    <span className="text-xs font-bold" style={{ color: COLORS[t] }}>
                       {cards.porTipo?.[t] || 0}
                     </span>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className={`${panel} p-3`}>
-                  <div className={smallText}>TOTAL</div>
-                  <div className="text-2xl font-extrabold">{totalKPI}</div>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">TOTAL</div>
+                  <div className="text-lg font-extrabold text-slate-900">{totalKPI}</div>
                 </div>
 
-                <div className={`${panel} p-3`}>
-                  <div className={smallText}>KM TOTAL</div>
-                  <div className="text-2xl font-extrabold">
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">KM TOTAL</div>
+                  <div className="text-lg font-extrabold text-slate-900">
                     {Number(kmPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 0,
                     })}
@@ -794,36 +835,45 @@ export default function SOSDashboard() {
                 </div>
               </div>
 
-              <div className="mt-2">
-                <div className={`${panel} p-3`}>
-                  <div className={smallText}>MKBF</div>
-                  <div className="text-3xl font-extrabold">
+              <div className="mt-1.5">
+                <div className={`${panel} p-2`}>
+                  <div className="text-xs text-slate-600 font-semibold">MKBF</div>
+                  <div className="text-xl font-extrabold text-slate-900">
                     {Number(mkbfPeriodo || 0).toLocaleString("pt-BR", {
                       maximumFractionDigits: 2,
                     })}
                   </div>
-                  <div className={`${smallText} mt-1`}>
-                    Ocorrências:{" "}
-                    <span className="font-semibold text-white">
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    Ocorr:{" "}
+                    <span className="font-semibold text-slate-900">
                       {ocorrenciasValidasPeriodo || 0}
                     </span>
                   </div>
+
+                  <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={realtimeOn}
+                      onChange={(e) => setRealtimeOn(e.target.checked)}
+                    />
+                    Tempo real
+                  </label>
+
+                  <div className="text-[11px] text-slate-500 mt-2">
+                    {lastUpdate
+                      ? `Atualizado: ${lastUpdate.toLocaleString("pt-BR", {
+                          timeZone: "America/Sao_Paulo",
+                        })}`
+                      : "—"}
+                  </div>
                 </div>
               </div>
-
-              <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
-                <input
-                  type="checkbox"
-                  checked={realtimeOn}
-                  onChange={(e) => setRealtimeOn(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                Tempo real
-              </label>
             </div>
           </div>
         </div>
 
+        {/* Gráfico */}
         <div className="col-span-8 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-start justify-between">
@@ -831,45 +881,51 @@ export default function SOSDashboard() {
                 <div className={titleText}>Intervenções por dia</div>
                 <div className={smallText}>
                   Acumulado do dia ({hoje}):{" "}
-                  <span className="font-semibold text-white">{acumuladoDia}</span>
+                  <span className="font-semibold text-slate-900">{acumuladoDia}</span>
                 </div>
               </div>
               <div className={smallText}>
                 {lastUpdate
-                  ? lastUpdate.toLocaleString("pt-BR", {
+                  ? lastUpdate.toLocaleTimeString("pt-BR", {
                       timeZone: "America/Sao_Paulo",
                     })
                   : "—"}
               </div>
             </div>
 
-            <div style={{ width: "100%", height: 380, marginTop: 6 }}>
+            {/* ✅ Altura responsiva + print mais baixo */}
+            <div
+              className="print-chart-wrap"
+              style={{
+                width: "100%",
+                height: "clamp(240px, 32vh, 380px)",
+                marginTop: 6,
+              }}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={series}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.12)"
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.10)" />
                   <XAxis
                     dataKey="day"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                    tick={{ fontSize: 10, fill: "#64748b" }}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.7)" }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
+                    tick={{ fontSize: 10, fill: "#64748b" }}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <Tooltip
-                    wrapperStyle={{ outline: "none" }}
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
                     contentStyle={{
-                      background: "rgba(10,12,16,0.95)",
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      color: "white",
+                      background: "#ffffff",
+                      border: "1px solid rgba(0,0,0,0.12)",
+                      color: "#0f172a",
+                      borderRadius: "8px",
                     }}
-                    labelStyle={{ color: "rgba(255,255,255,0.85)" }}
+                    labelStyle={{ color: "#334155" }}
                   />
                   <Legend verticalAlign="bottom" height={28} />
                   {TIPOS_GRAFICO.map((t) => (
@@ -878,7 +934,7 @@ export default function SOSDashboard() {
                         dataKey={t}
                         position="center"
                         formatter={(v) => (v > 0 ? v : "")}
-                        fill={t === "IMPROCEDENTE" ? "#111827" : "#FFFFFF"}
+                        fill="#ffffff"
                         fontSize={12}
                         fontWeight="bold"
                       />
@@ -889,7 +945,7 @@ export default function SOSDashboard() {
             </div>
 
             {!loading && series.length === 0 && (
-              <div className="mt-2 text-sm text-white/70">
+              <div className="mt-2 text-sm text-slate-600">
                 Nenhum registro válido para o gráfico neste período.
               </div>
             )}
@@ -897,26 +953,21 @@ export default function SOSDashboard() {
         </div>
       </div>
 
+      {/* Tabela (normal) */}
       <div className="min-h-0">
         <div className={`${panel} h-full min-h-0 overflow-hidden`}>
-          <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
+          <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div className={titleText}>Intervenções do dia</div>
             <div className={smallText}>
               Total hoje:{" "}
-              <span className="font-semibold text-white">{doDia.length}</span>
+              <span className="font-semibold text-slate-900">{doDia.length}</span>
             </div>
           </div>
 
-          <div
-            className="min-h-0 overflow-auto"
-            style={{ height: "calc(100% - 42px)" }}
-          >
-            <table className="min-w-full text-sm">
-              <thead
-                className="sticky top-0"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              >
-                <tr className="text-white/80">
+          <div className="min-h-0 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
+            <table className="min-w-full text-sm text-slate-700">
+              <thead className="sticky top-0 bg-slate-100">
+                <tr className="text-slate-600 text-xs uppercase font-semibold">
                   <th className="py-2 px-3 text-left">ETIQUETA</th>
                   <th className="py-2 px-3 text-left">CARRO</th>
                   <th className="py-2 px-3 text-left">DATA</th>
@@ -928,34 +979,38 @@ export default function SOSDashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-6 text-white/70">
+                    <td colSpan="6" className="text-center py-6 text-slate-500">
                       Carregando...
                     </td>
                   </tr>
                 ) : doDia.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-6 text-white/70">
+                    <td colSpan="6" className="text-center py-6 text-slate-500">
                       Nenhuma intervenção encontrada para hoje.
                     </td>
                   </tr>
                 ) : (
                   doDia.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-t"
-                      style={{ borderColor: "rgba(255,255,255,0.10)" }}
-                    >
+                    <tr key={r.id} className="border-t border-slate-200">
                       <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
                       <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
                       <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
                       <td className="py-2 px-3">
                         {r.hora_sos ? String(r.hora_sos).slice(0, 8) : "—"}
                       </td>
+                      <td className="py-2 px-3">{r.reclamacao_motorista ?? "—"}</td>
                       <td className="py-2 px-3">
-                        {r.reclamacao_motorista ?? "—"}
-                      </td>
-                      <td className="py-2 px-3">
-                        {labelOcorrenciaTabela(r.ocorrencia)}
+                        <span
+                          className="font-bold text-xs uppercase tracking-wide px-2 py-1 rounded border"
+                          style={{
+                            color: COLORS[normalizeTipo(r.ocorrencia)] || "#0f172a",
+                            borderColor: COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1",
+                            backgroundColor:
+                              (COLORS[normalizeTipo(r.ocorrencia)] || "#cbd5e1") + "15",
+                          }}
+                        >
+                          {labelOcorrenciaTabela(r.ocorrencia)}
+                        </span>
                       </td>
                     </tr>
                   ))
@@ -969,8 +1024,11 @@ export default function SOSDashboard() {
   );
 
   return (
-    <div ref={fsRef} className={shell} style={{ minHeight: 0 }}>
-      {modoExibicao ? ExibicaoLayout : NormalLayout}
-    </div>
+    <>
+      <style>{PRINT_CSS}</style>
+      <div ref={fsRef} className={`${shell} print-tight`} style={{ minHeight: 0 }}>
+        {modoExibicao ? ExibicaoLayout : NormalLayout}
+      </div>
+    </>
   );
 }
