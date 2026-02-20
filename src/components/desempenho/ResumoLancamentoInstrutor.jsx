@@ -4,6 +4,7 @@ import {
   FaTimes as FaX,
   FaQuestionCircle,
   FaClock,
+  FaClipboardList,
 } from "react-icons/fa";
 
 function n(v) {
@@ -14,8 +15,15 @@ function n(v) {
 function normalizeStatus(s) {
   const st = String(s || "").toUpperCase().trim();
   if (!st) return "AGUARDANDO_INSTRUTOR";
+  
+  // migração/legado
   if (st === "AGUARDANDO INSTRUTOR") return "AGUARDANDO_INSTRUTOR";
+  if (st === "CONCLUIDO") return "AGUARDANDO_INSTRUTOR";
   if (st === "AG_ACOMPANHAMENTO") return "AGUARDANDO_INSTRUTOR";
+  
+  // padronização de nomenclatura
+  if (st === "TRATATIVA") return "ATAS";
+
   return st;
 }
 
@@ -270,7 +278,7 @@ export default function ResumoLancamentoInstrutor({ item }) {
         </div>
       </div>
 
-      {/* Checklist Condução (IGUAL AO LANÇAMENTO: título + descrição) */}
+      {/* Checklist Condução */}
       <div>
         <div className="text-xs font-extrabold text-slate-700 mb-3 flex items-center gap-2">
           <FaClipboardList /> Checklist de Condução (Resumo Operacional)
@@ -278,7 +286,7 @@ export default function ResumoLancamentoInstrutor({ item }) {
 
         <div className="space-y-3">
           {CHECKLIST_CONDUCAO.map((it) => {
-            const val = checklist.conducao?.[it.id]; // true/false/null
+            const val = checklist.conducao?.[it.id];
             const b = badgeConducao(val);
             const Icon = b.Icon;
 
@@ -310,7 +318,7 @@ export default function ResumoLancamentoInstrutor({ item }) {
         </div>
       </div>
 
-      {/* Avaliação Técnica (mantém bonitinho, já estava ok) */}
+      {/* Avaliação Técnica */}
       <div>
         <div className="text-xs font-extrabold text-slate-700 mb-3 uppercase">
           Avaliação Técnica (Sistemas)
