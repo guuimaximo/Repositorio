@@ -14,14 +14,13 @@ import {
 import * as XLSX from "xlsx";
 import { FaDownload, FaSyncAlt } from "react-icons/fa";
 
-// ✅ PALETA PADRÃO (layout claro)
 const COLORS = {
-  SOS: "#DC2626", // Vermelho
-  RECOLHEU: "#EAB308", // Amarelo
-  AVARIA: "#2563EB", // Azul
-  TROCA: "#EA580C", // Laranja
-  IMPROCEDENTE: "#9333EA", // Roxo
-  "SEGUIU VIAGEM": "#16A34A", // Verde
+  SOS: "#DC2626",
+  RECOLHEU: "#EAB308",
+  AVARIA: "#2563EB",
+  TROCA: "#EA580C",
+  IMPROCEDENTE: "#9333EA",
+  "SEGUIU VIAGEM": "#16A34A",
 };
 
 const TIPOS_GRAFICO = ["RECOLHEU", "SOS", "AVARIA", "TROCA", "IMPROCEDENTE"];
@@ -178,7 +177,6 @@ export default function SOSDashboard() {
   const hoje = useMemo(() => todayYMD_SP(), []);
   const acumuladoDia = useMemo(() => (doDia || []).length, [doDia]);
 
-  // ✅ Print compacto
   const PRINT_CSS = `
     @media print {
       .print-tight { padding: 8px !important; }
@@ -202,7 +200,6 @@ export default function SOSDashboard() {
     setErro("");
 
     try {
-      // 1) Período (somente o necessário para montar série + cards)
       const { data: periodoData, error: periodoErr } = await supabase
         .from("sos_acionamentos")
         .select("id, data_sos, ocorrencia")
@@ -211,7 +208,6 @@ export default function SOSDashboard() {
 
       if (periodoErr) throw periodoErr;
 
-      // 2) KM do período
       const { data: kmData, error: kmErr } = await supabase
         .from("km_rodado_diario")
         .select("km_total, data")
@@ -233,7 +229,6 @@ export default function SOSDashboard() {
       setOcorrenciasValidasPeriodo(ocorrValidas);
       setMkbfPeriodo(ocorrValidas > 0 ? kmSum / ocorrValidas : 0);
 
-      // 3) DO DIA (tabela)
       const { data: diaData, error: diaErr } = await supabase
         .from("sos_acionamentos")
         .select(
@@ -244,7 +239,6 @@ export default function SOSDashboard() {
 
       if (diaErr) throw diaErr;
 
-      // 4) Série por dia
       const byDay = new Map();
       (periodoData || []).forEach((r) => {
         const day = r.data_sos;
@@ -266,7 +260,6 @@ export default function SOSDashboard() {
         .filter((row) => TIPOS_GRAFICO.some((t) => (row[t] || 0) > 0))
         .sort((a, b) => String(a.day).localeCompare(String(b.day)));
 
-      // 5) Cards por tipo + total
       const porTipo = {};
       TIPOS_GRAFICO.forEach((t) => (porTipo[t] = 0));
 
@@ -349,6 +342,7 @@ export default function SOSDashboard() {
     const el = fsRef.current;
     if (!modoRef.current) {
       setModoExibicao(true);
+      setRealtimeOn(true);
       setTimeout(() => enterFullscreen(el), 50);
     } else {
       await exitFullscreen();
@@ -407,7 +401,6 @@ export default function SOSDashboard() {
 
   const totalKPI = cards.totalPeriodo || 0;
 
-  // ✅ Layout NOVO (claro)
   const shell =
     "w-full h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 text-slate-900 overflow-hidden flex flex-col";
   const panel =
@@ -416,19 +409,13 @@ export default function SOSDashboard() {
     "text-sm font-semibold text-slate-800 uppercase tracking-wide";
   const smallText = "text-xs text-slate-600";
 
-  // ✅ Etiquetas abertas (lado esquerdo embaixo, alinhado com o gráfico)
   const abertas = useMemo(() => {
     return (doDia || [])
-      .filter((r) => (r?.status || "").toLowerCase() !== "resolvido")
+      .filter((r) => (r?.status || "").toLowerCase() === "aberto" || !r?.ocorrencia)
       .map((r) => r?.numero_sos)
       .filter(Boolean);
   }, [doDia]);
 
-  // =========================
-  // MODO EXIBIÇÃO (Fullscreen) - AJUSTADO
-  // 1) OCORRÊNCIA: texto cabe sem aumentar (truncate + min-w-0)
-  // 2) Intervenções do dia: mesma largura do gráfico (col-span-9)
-  // =========================
   const ExibicaoLayout = (
     <div className="w-full h-full flex flex-col gap-3 p-4 overflow-hidden print-gap">
       <div className="flex items-center justify-between shrink-0">
@@ -442,12 +429,10 @@ export default function SOSDashboard() {
         </button>
       </div>
 
-      {/* Topo: sidebar + gráfico */}
       <div
         className="grid grid-cols-12 gap-3 min-h-0"
         style={{ minHeight: 0, height: "30%" }}
       >
-        {/* Sidebar métricas */}
         <div className="col-span-3 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-2`}>
             <div className="flex items-center justify-between mb-1">
@@ -470,12 +455,9 @@ export default function SOSDashboard() {
                       border: "1px solid rgba(0,0,0,0.08)",
                     }}
                   >
-                    {/* ✅ Ajuste 1: cabe sem aumentar (truncate) */}
                     <span className="min-w-0 flex-1 pr-2 text-[11px] text-slate-800 truncate">
                       {t}
                     </span>
-
-                    {/* total sempre visível */}
                     <span
                       className="shrink-0 tabular-nums text-[11px] font-extrabold"
                       style={{ color: COLORS[t] || "#1e293b" }}
@@ -546,7 +528,6 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* Gráfico */}
         <div className="col-span-9 min-h-0">
           <div
             className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}
@@ -668,12 +649,10 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {/* ✅ Parte de baixo em GRID (mesma coluna do gráfico) */}
       <div
         className="grid grid-cols-12 gap-3 min-h-0"
         style={{ minHeight: 0, height: "65%" }}
       >
-        {/* Esquerda: Etiquetas em aberto (col-span-3) */}
         <div className="col-span-3 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden`}>
             <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
@@ -704,7 +683,6 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* Direita: Tabela (col-span-9) => mesma largura do gráfico */}
         <div className="col-span-9 min-h-0">
           <div className={`${panel} w-full h-full flex flex-col min-h-0 overflow-hidden`}>
             <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
@@ -747,8 +725,7 @@ export default function SOSDashboard() {
                         key={r.id}
                         className="hover:opacity-80 transition-colors"
                         style={{
-                          backgroundColor:
-                            r.status !== "Resolvido" ? "#FEF3C7" : "transparent",
+                          backgroundColor: ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia) ? "#FEF3C7" : "transparent",
                         }}
                       >
                         <td className="py-2.5 px-4 font-mono text-slate-800">
@@ -796,15 +773,11 @@ export default function SOSDashboard() {
     </div>
   );
 
-  // =========================
-  // LAYOUT NORMAL - MANTIDO
-  // =========================
   const NormalLayout = (
     <div
-      className="max-w-[1400px] mx-auto p-2 grid grid-rows-[auto_auto_1fr_1fr] gap-3 print-gap"
+      className="max-w-[1400px] mx-auto p-2 flex flex-col h-full gap-3 print-gap"
       style={{ minHeight: 0 }}
     >
-      {/* Top bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <select
@@ -868,9 +841,7 @@ export default function SOSDashboard() {
         </div>
       )}
 
-      {/* Grid topo */}
       <div className="grid grid-cols-12 gap-3 min-h-0" style={{ minHeight: 0 }}>
-        {/* Cards/Lateral */}
         <div className="col-span-4 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-center justify-between mb-2">
@@ -962,7 +933,6 @@ export default function SOSDashboard() {
           </div>
         </div>
 
-        {/* Gráfico */}
         <div className="col-span-8 min-h-0">
           <div className={`${panel} h-full min-h-0 overflow-hidden p-3`}>
             <div className="flex items-start justify-between">
@@ -984,7 +954,6 @@ export default function SOSDashboard() {
               </div>
             </div>
 
-            {/* ✅ Altura responsiva + print mais baixo */}
             <div
               className="print-chart-wrap"
               style={{
@@ -1047,8 +1016,7 @@ export default function SOSDashboard() {
         </div>
       </div>
 
-      {/* Tabela (normal) */}
-      <div className="min-h-0">
+      <div className="flex-1 min-h-0">
         <div className={`${panel} h-full min-h-0 overflow-hidden`}>
           <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div className={titleText}>Intervenções do dia</div>
@@ -1090,7 +1058,13 @@ export default function SOSDashboard() {
                   </tr>
                 ) : (
                   doDia.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-200">
+                    <tr
+                      key={r.id}
+                      className="border-t border-slate-200 hover:opacity-80 transition-colors"
+                      style={{
+                        backgroundColor: ((r.status || "").toLowerCase() === "aberto" || !r.ocorrencia) ? "#FEF3C7" : "transparent",
+                      }}
+                    >
                       <td className="py-2 px-3">{r.numero_sos ?? "—"}</td>
                       <td className="py-2 px-3">{r.veiculo ?? "—"}</td>
                       <td className="py-2 px-3">{r.data_sos ?? "—"}</td>
