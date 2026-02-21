@@ -186,6 +186,7 @@ export default function DesempenhoDieselAgente() {
       if (!mountedRef.current) return;
       setUserSession(sess?.session || null);
 
+      // 1. Pega o último relatório gerencial
       const { data: rel } = await supabase
         .from("relatorios_gerados")
         .select("*")
@@ -196,9 +197,31 @@ export default function DesempenhoDieselAgente() {
       if (!mountedRef.current) return;
       setUltimoGerencial(rel || null);
 
+      // 2. Pega as sugestões
       const { data: sug } = await supabase.from("v_sugestoes_acompanhamento_30d").select("*").limit(500);
+      
+      // 3. Pega os acompanhamentos que AINDA NÃO FORAM CONCLUÍDOS
+      const { data: acompanhamentos } = await supabase
+        .from("diesel_acompanhamentos")
+        .select("motorista_chapa, status")
+        .not("status", "in", '("OK","ENCERRADO","ATAS")');
+
+      // 4. Cria um mapa de chapa -> status
+      const mapStatusAtivo = {};
+      if (acompanhamentos) {
+        acompanhamentos.forEach((a) => {
+          mapStatusAtivo[a.motorista_chapa] = a.status;
+        });
+      }
+
+      // 5. Injeta o status atual dentro do array de sugestões
+      const sugestoesComStatus = (sug || []).map((s) => ({
+        ...s,
+        status_atual: mapStatusAtivo[s.motorista_chapa] || null,
+      }));
+
       if (!mountedRef.current) return;
-      setSugestoes(sug || []);
+      setSugestoes(sugestoesComStatus);
     } catch (e) {
       if (!mountedRef.current) return;
       setErro("Erro ao carregar: " + (e?.message || String(e)));
@@ -388,19 +411,25 @@ export default function DesempenhoDieselAgente() {
   // CHECKBOX
   // ---------------------------------------------------------------------------
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
-  const allChecked = useMemo(
-    () => sugestoes.length && sugestoes.every((r) => selected[r.motorista_chapa]),
-    [sugestoes, selected]
-  );
+  
+  // Atualizado para ignorar os checkboxes bloqueados no "Selecionar Todos"
+  const allChecked = useMemo(() => {
+    const disponiveis = sugestoes.filter(r => !r.status_atual);
+    return disponiveis.length > 0 && disponiveis.every((r) => selected[r.motorista_chapa]);
+  }, [sugestoes, selected]);
+
   const toggleAll = () => {
     if (allChecked) {
       setSelected({});
     } else {
       const m = {};
-      sugestoes.forEach((r) => (m[r.motorista_chapa] = true));
+      sugestoes.forEach((r) => {
+        if (!r.status_atual) m[r.motorista_chapa] = true;
+      });
       setSelected(m);
     }
   };
+  
   const toggleOne = (chapa) => setSelected((p) => ({ ...p, [chapa]: !p[chapa] }));
 
   // ---------------------------------------------------------------------------
@@ -562,6 +591,7 @@ export default function DesempenhoDieselAgente() {
                 <th className="p-3 w-10"></th>
                 <ThSortable label="Chapa" columnKey="motorista_chapa" />
                 <ThSortable label="Nome" columnKey="motorista_nome" />
+                <ThSortable label="Status" columnKey="status_atual" />
                 <ThSortable label="Linha" columnKey="linha_mais_rodada" />
                 <ThSortable label="KM" columnKey="km_percorrido" align="right" />
                 <ThSortable label="Real" columnKey="kml_realizado" align="right" />
@@ -571,31 +601,56 @@ export default function DesempenhoDieselAgente() {
             </thead>
 
             <tbody className="divide-y">
-              {sortedSugestoes.map((r) => (
-                <tr key={r.motorista_chapa} className="hover:bg-slate-50">
-                  <td className="p-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={!!selected[r.motorista_chapa]}
-                      onChange={() => toggleOne(r.motorista_chapa)}
-                    />
-                  </td>
-                  <td className="p-3 text-center">
-                    <button onClick={() => openModal(r)} className="text-slate-400 hover:text-cyan-600" title="Ver detalhes completos">
-                      <FaInfoCircle size={18} />
-                    </button>
-                  </td>
-                  <td className="p-3 font-bold text-slate-800">{r.motorista_chapa}</td>
-                  <td className="p-3 text-slate-600 text-xs truncate max-w-[240px]" title={r.motorista_nome}>
-                    {r.motorista_nome || "-"}
-                  </td>
-                  <td className="p-3 text-slate-700">{r.linha_mais_rodada}</td>
-                  <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
-                  <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
-                  <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
-                  <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
-                </tr>
-              ))}
+              {sortedSugestoes.map((r) => {
+                const isOcupado = !!r.status_atual;
+                const statusFormatado = r.status_atual === "AGUARDANDO_INSTRUTOR" 
+                  ? "AGUARDANDO INSTRUTOR" 
+                  : r.status_atual === "EM_MONITORAMENTO" 
+                  ? "EM MONITORAMENTO" 
+                  : r.status_atual;
+
+                return (
+                  <tr key={r.motorista_chapa} className="hover:bg-slate-50">
+                    <td className="p-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={!!selected[r.motorista_chapa]}
+                        onChange={() => toggleOne(r.motorista_chapa)}
+                        disabled={isOcupado}
+                        className={isOcupado ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
+                        title={isOcupado ? "Motorista já possui um acompanhamento em andamento" : ""}
+                      />
+                    </td>
+                    <td className="p-3 text-center">
+                      <button onClick={() => openModal(r)} className="text-slate-400 hover:text-cyan-600" title="Ver detalhes completos">
+                        <FaInfoCircle size={18} />
+                      </button>
+                    </td>
+                    <td className="p-3 font-bold text-slate-800">{r.motorista_chapa}</td>
+                    <td className="p-3 text-slate-600 text-xs truncate max-w-[240px]" title={r.motorista_nome}>
+                      {r.motorista_nome || "-"}
+                    </td>
+
+                    <td className="p-3">
+                      {isOcupado ? (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                          {statusFormatado}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          LIVRE
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3 text-slate-700">{r.linha_mais_rodada}</td>
+                    <td className="p-3 text-right">{n(r.km_percorrido).toFixed(0)}</td>
+                    <td className="p-3 text-right font-bold">{n(r.kml_realizado).toFixed(2)}</td>
+                    <td className="p-3 text-right text-slate-500">{n(r.kml_meta).toFixed(2)}</td>
+                    <td className="p-3 text-right text-rose-700 font-bold">{n(r.combustivel_desperdicado).toFixed(0)} L</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
